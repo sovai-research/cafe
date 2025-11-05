@@ -578,9 +578,8 @@ import pandas as pd
 import pickle
 import shutil
 import os
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple
 from functools import lru_cache
-from contextlib import contextmanager
 
 try:
     import scipy.linalg as spla
@@ -682,43 +681,12 @@ def fourier_basis(T: int, K: int, include_bias: bool = True) -> np.ndarray:
 
 
 # ============================================================================
-# THREAD-SAFE CFG CONTEXT MANAGER
-# ============================================================================
-
-@contextmanager
-def cfg_context(overrides: dict):
-    """
-    Thread-safe context manager for CFG overrides.
-    
-    Parameters
-    ----------
-    overrides : dict
-        Dictionary of CFG overrides to apply within the context
-    """
-    old_cfg = CFG.copy()
-    try:
-        apply_cfg_overrides(CFG, overrides)
-        yield
-    finally:
-        CFG.clear()
-        CFG.update(old_cfg)
-        # Clean up caches to prevent memory leaks
-        if hasattr(IdentityCache, '_cache'):
-            IdentityCache._cache.clear()
-        if hasattr(IdentityCache, '_jitter_cache'):
-            IdentityCache._jitter_cache.clear()
-        if hasattr(MemoryPool, '_pools'):
-            MemoryPool._pools.clear()
-
-
-# ============================================================================
 # MEMORY POOL AND EINSUM OPTIMIZATIONS
 # ============================================================================
 
 class MemoryPool:
     """Memory pool for pre-allocated arrays - 10-20% speedup."""
     _pools = {}
-    _max_pools = 50  # Bound the number of pools to prevent memory leaks
     
     @classmethod
     def get_array(cls, shape, dtype=np.float64):
@@ -726,10 +694,6 @@ class MemoryPool:
         key = (shape, dtype)
         if key not in cls._pools:
             cls._pools[key] = []
-        
-        # Limit pool size to prevent memory bloat
-        if len(cls._pools[key]) > CFG.get('CACHE_SIZE', 100):
-            cls._pools[key] = cls._pools[key][-CFG.get('CACHE_SIZE', 100)//2:]
         
         if cls._pools[key]:
             return cls._pools[key].pop()
@@ -743,21 +707,8 @@ class MemoryPool:
         if key not in cls._pools:
             cls._pools[key] = []
         
-        # Limit total number of pools
-        if len(cls._pools) > cls._max_pools:
-            # Clear oldest/smallest pools
-            sorted_pools = sorted(cls._pools.items(), 
-                                key=lambda x: len(x[1]))
-            for k, v in sorted_pools[:len(sorted_pools)//4]:
-                v.clear()
-        
-        if len(cls._pools[key]) < CFG.get('CACHE_SIZE', 100):
+        if len(cls._pools[key]) < CFG['CACHE_SIZE']:
             cls._pools[key].append(arr)
-    
-    @classmethod
-    def clear_all(cls):
-        """Clear all memory pools."""
-        cls._pools.clear()
 
 
 @lru_cache(maxsize=CFG['CACHE_SIZE'])
@@ -961,7 +912,6 @@ def adaptive_lasso_alpha(X, base_alpha=0.01):
     """
     Compute adaptive Lasso alpha based on data characteristics.
     Vectorized for 5-10x speedup.
-    Fixed: Remove double sqrt scaling to prevent over-shrinking.
     """
     T, N = X.shape
     
@@ -980,10 +930,8 @@ def adaptive_lasso_alpha(X, base_alpha=0.01):
     except:
         sparsity = 0.5  # Default if correlation computation fails
     
-    # Fixed: Remove double sqrt scaling - use only base_alpha adjustment
-    # The CFG overrides already apply sqrt(log N / T) scaling in _lasso_alpha_for_nodewise
-    # So we only apply sparsity-based adjustments here
-    alpha = base_alpha
+    # Adaptive formula based on sample size and dimensions
+    alpha = base_alpha * np.sqrt(np.log(N) / max(T, N))
     
     # Adjust based on estimated sparsity
     if sparsity > 0.7:  # Very sparse - reduce regularization
@@ -1086,10 +1034,8 @@ def nodewise_skeleton_and_precision_parallel(X, alpha=0.02, k_max=None, n_jobs=-
 
 # Alias for backward compatibility
 def nodewise_skeleton_and_precision(X, alpha=0.02, k_max=None):
-    """Fixed: Pass through CFG's N_JOBS setting for actual parallelization."""
-    return nodewise_skeleton_and_precision_parallel(
-        X, alpha, k_max, n_jobs=CFG.get('N_JOBS', -1)
-    )
+    """Non-parallel version for backward compatibility."""
+    return nodewise_skeleton_and_precision_parallel(X, alpha, k_max, n_jobs=1)
 
 
 def interpolate_matrix(X, how='linear'):
@@ -1467,7 +1413,7 @@ class MissNet:
     
     def __init__(self, alpha=0.5, beta=0.1, L=10, n_cl=1, 
                  use_robust_loss=True, use_skeleton=True, use_cholesky=True,
-                 use_spectral=False, use_consistency_loss=False, random_state=None):
+                 use_spectral=False, use_consistency_loss=False):
         self.alpha = alpha
         self.beta = beta
         self.L = L
@@ -1477,10 +1423,6 @@ class MissNet:
         self.use_cholesky = use_cholesky
         self.use_spectral = use_spectral
         self.use_consistency_loss = use_consistency_loss
-        self.random_state = random_state
-        
-        # Initialize random number generator for deterministic behavior
-        self.rng = np.random.default_rng(random_state)
         
         # Seasonal components for Fourier de-seasonalization
         self.X_season = None   # T x N seasonal baseline (added back after EM)
@@ -1943,23 +1885,21 @@ class MissNet:
 
     def update_transition_matrix(self):
         """Update transition matrix with optimized Cholesky solve and einsum."""
-        # Fixed: Use correct timestep ranges for normal equations
-        # Should use sum(z_t z_{t-1}^T) and sum(z_{t-1} z_{t-1}^T)
-        ztt_past_sum = sum(self.ztt[:-1])  # sum_{t=0}^{T-2} z_t z_t^T
-        zt1t_sum = sum(self.zt1t[1:])      # sum_{t=1}^{T-1} z_t z_{t-1}^T
+        ztt_sum = sum(self.ztt)
+        zt1t_sum = sum(self.zt1t)
         
         if self.use_cholesky and CFG['USE_CHOLESKY']:
-            # Solve: ztt_past_sum.T @ B.T = zt1t_sum.T
-            # B.T = solve(ztt_past_sum.T, zt1t_sum.T)
-            # B = solve(ztt_past_sum.T, zt1t_sum.T).T
-            self.B = _chol_solve(ztt_past_sum.T, zt1t_sum.T).T
+            # Solve: ztt_sum.T @ B.T = zt1t_sum.T
+            # B.T = solve(ztt_sum.T, zt1t_sum.T)
+            # B = solve(ztt_sum.T, zt1t_sum.T).T
+            self.B = _chol_solve(ztt_sum.T, zt1t_sum.T).T
         else:
             # Use optimized matrix operations
-            if CFG['USE_EINSUM_OPT'] and ztt_past_sum.shape[0] < 50:
+            if CFG['USE_EINSUM_OPT'] and ztt_sum.shape[0] < 50:
                 # Use einsum for better cache locality on smaller matrices
-                self.B = np.einsum('ij,jk->ik', zt1t_sum, np.linalg.pinv(ztt_past_sum))
+                self.B = np.einsum('ij,jk->ik', zt1t_sum, np.linalg.pinv(ztt_sum))
             else:
-                self.B = zt1t_sum @ np.linalg.pinv(ztt_past_sum)
+                self.B = zt1t_sum @ np.linalg.pinv(ztt_sum)
 
     def update_contextual_covariance(self):
         """Update contextual covariance."""
@@ -2103,31 +2043,6 @@ class MissNet:
             if getattr(self, "_verbose", False):
                 print(f"[iter] regime {k}: graph path = {path}, n_t={len(F_k)}")
 
-    def compute_cell_variance(self) -> np.ndarray:
-        """
-        Compute posterior predictive variance for each cell X[t,i].
-        
-        Returns variance for the posterior predictive distribution of each imputed value.
-        This enables uncertainty quantification and gating mechanisms.
-        
-        Returns
-        -------
-        np.ndarray
-            Cell-wise variance matrix of shape (T, N)
-        """
-        var = np.zeros((self.T, self.N))
-        
-        for t in range(self.T):
-            k = self.F[t]  # Get regime for time t
-            U = self.U[k]  # (N, L) Loadings for regime k
-            S = self.psih[t]  # (L, L) Smoothed state covariance at time t
-            
-            # Posterior predictive variance: diag(U @ S @ U.T) + σ_X[k]
-            # Fixed: Use einsum for proper diagonal computation
-            var[t, :] = np.einsum('nl,lk,nk->n', U, S, U) + self.sgmX[k]
-            
-        return var
-
     def imputation(self):
         """Generate imputed data."""
         X_impute = np.zeros((self.T, self.N))
@@ -2193,8 +2108,7 @@ class MissNet:
 def missnet_impute(incomp_data, alpha=None, beta=None, L=None, n_cl=None, max_iteration=None, 
                    tol=5, random_init=False, verbose=True, use_robust_loss=None, 
                    use_skeleton=None, use_cholesky=None, use_spectral=None, 
-                   use_consistency_loss=None, auto_tune=True, conv_eps=5e-4, conv_window=3, 
-                   return_std=False, patience=None, random_state=None, dtype=np.float64, **kwargs):
+                   use_consistency_loss=None, auto_tune=True, conv_eps=5e-4, conv_window=3, **kwargs):
     """
     Perform imputation using the MISSNET algorithm with automatic parameter selection.
 
@@ -2262,10 +2176,8 @@ def missnet_impute(incomp_data, alpha=None, beta=None, L=None, n_cl=None, max_it
 
     Returns
     -------
-    numpy.ndarray or tuple
-        If return_std=False (default): The imputed matrix with missing values recovered.
-        If return_std=True: Tuple of (imputed_matrix, std_matrix) where std_matrix contains
-        the posterior predictive variance for each imputed value.
+    numpy.ndarray
+        The imputed matrix with missing values recovered.
     
     Examples
     --------
@@ -2279,10 +2191,6 @@ def missnet_impute(incomp_data, alpha=None, beta=None, L=None, n_cl=None, max_it
     >>> # Hybrid: auto-tune some, specify others
     >>> imputed = missnet_impute(data_with_missing, alpha=0.4, auto_tune=True)
     """
-    # Handle backwards compatibility for tol -> patience
-    if patience is None:
-        patience = tol  # Default to tol for backwards compatibility
-    
     # Handle duplicate verbose parameter
     if 'verbose' in kwargs:
         # Use the explicitly passed verbose, ignore kwargs version
@@ -2291,18 +2199,13 @@ def missnet_impute(incomp_data, alpha=None, beta=None, L=None, n_cl=None, max_it
     # Filter out any other unexpected kwargs to prevent issues
     allowed_kwargs = ['alpha', 'beta', 'L', 'n_cl', 'max_iteration', 
                      'use_robust_loss', 'use_skeleton', 'use_cholesky',
-                     'use_spectral', 'use_consistency_loss', 'auto_tune',
-                     'return_std', 'patience', 'random_state', 'dtype']
+                     'use_spectral', 'use_consistency_loss', 'auto_tune']
     filtered_kwargs = {k: v for k, v in kwargs.items() if k in allowed_kwargs}
     
     # Merge filtered kwargs with function parameters
     locals().update(filtered_kwargs)
     recov = np.copy(incomp_data)
     m_mask = np.isnan(incomp_data)
-    
-    # Apply dtype control
-    incomp_data = incomp_data.astype(dtype)
-    recov = recov.astype(dtype)
     
     # Auto-tune parameters if requested
     if auto_tune:
@@ -2374,8 +2277,7 @@ def missnet_impute(incomp_data, alpha=None, beta=None, L=None, n_cl=None, max_it
                            use_robust_loss=use_robust_loss, 
                            use_skeleton=use_skeleton, use_cholesky=use_cholesky,
                            use_spectral=use_spectral, 
-                           use_consistency_loss=use_consistency_loss,
-                           random_state=random_state)
+                           use_consistency_loss=use_consistency_loss)
     missnet_model.fit(incomp_data, random_init=random_init, max_iter=max_iteration, 
                      tol=tol, verbose=verbose, conv_eps=conv_eps, conv_window=conv_window)
     recov_data = missnet_model.imputation()
@@ -2384,473 +2286,10 @@ def missnet_impute(incomp_data, alpha=None, beta=None, L=None, n_cl=None, max_it
 
     recov[m_mask] = recov_data[m_mask]
 
-    # Return uncertainty estimates if requested
-    if return_std:
-        cell_variance = missnet_model.compute_cell_variance()
-        return recov, cell_variance
-    else:
-        return recov
+    if verbose:
+        print(f"\n> logs: imputation miss_net - Execution Time: {(end_time - start_time):.4f} seconds\n")
 
-
-# ============================
-# TIMARAImputer (sklearn-style)
-# ============================
-from typing import Any, Union, Tuple, Dict
-import numpy as np
-
-try:
-    import pandas as pd
-    _HAS_PANDAS = True
-except Exception:
-    _HAS_PANDAS = False
-    pd = None  # type: ignore
-
-try:
-    import polars as pl
-    _HAS_POLARS = True
-except Exception:
-    _HAS_POLARS = False
-    pl = None  # type: ignore
-
-# optional sklearn mixins (not required)
-try:
-    from sklearn.base import BaseEstimator, TransformerMixin
-    _HAS_SKLEARN = True
-except Exception:
-    _HAS_SKLEARN = False
-    class BaseEstimator:  # minimal shim
-        def get_params(self, deep=True): return {k:v for k,v in self.__dict__.items()
-                                                if not k.endswith('_')}
-        def set_params(self, **params):
-            for k,v in params.items(): setattr(self, k, v)
-            return self
-    class TransformerMixin:  # minimal shim
-        def fit_transform(self, X, y=None, **fit_params):
-            return self.fit(X, y, **fit_params).transform(X)
-
-_INPUT_KIND_ARRAY = "array"
-_INPUT_KIND_PANDAS = "pandas"
-_INPUT_KIND_POLARS = "polars"
-
-def _to_numpy(X: Any, time_col: Union[str, None]) -> Tuple[np.ndarray, Dict[str, Any]]:
-    """
-    Convert array/pandas/polars -> (np.ndarray, meta)
-    meta keeps enough info to reconstruct the original container.
-    """
-    meta: Dict[str, Any] = {"kind": _INPUT_KIND_ARRAY}
-    if _HAS_PANDAS and isinstance(X, pd.DataFrame):
-        meta["kind"] = _INPUT_KIND_PANDAS
-        meta["index"] = X.index
-        meta["columns"] = X.columns
-        meta["name"] = getattr(X, "name", None)
-        # optional datetime index handling
-        if isinstance(X.index, (pd.DatetimeIndex, pd.PeriodIndex)):
-            meta["time_index"] = True
-        else:
-            meta["time_index"] = False
-        # time_col explicit can override index-based time
-        meta["time_col"] = time_col
-        arr = X.to_numpy(dtype=float, copy=False)
-        return arr, meta
-
-    if _HAS_POLARS and isinstance(X, (pl.DataFrame, pl.LazyFrame)):
-        if isinstance(X, pl.LazyFrame):
-            X = X.collect()
-        meta["kind"] = _INPUT_KIND_POLARS
-        meta["columns"] = X.columns
-        meta["schema"] = X.schema
-        # If a time_col is named, record it for rolling windows later
-        meta["time_col"] = time_col
-        # pl null -> np.nan; ensure float dtype matrix
-        # if non-float, cast to Float64 when possible
-        casted = []
-        for c in X.columns:
-            s = X[c]
-            if s.dtype.is_numeric():
-                casted.append(s.cast(pl.Float64))
-            else:
-                # non-numeric becomes NaN (drop-in)
-                casted.append(pl.lit(None, dtype=pl.Float64).alias(c))
-        Xf = pl.DataFrame(casted)
-        arr = Xf.to_numpy()
-        # keep a copy of any datetime column if named
-        if time_col and time_col in X.columns and X[time_col].dtype.is_temporal():
-            meta["time_vector_polars"] = X[time_col]
-        return arr, meta
-
-    # Numpy (and everything else coercible)
-    X = np.asarray(X)
-    if X.ndim != 2:
-        raise ValueError("Input must be 2D (T x N).")
-    return X.astype(float), meta
-
-
-def _from_numpy(arr: np.ndarray, meta: Dict[str, Any], output: str = "like"):
-    """
-    Rebuild container from numpy using metadata.
-    output: 'like' | 'array' | 'pandas' | 'polars'
-    """
-    if output == "array":
-        return np.array(arr, copy=False)
-
-    if output == "pandas" or (output == "like" and meta.get("kind") == _INPUT_KIND_PANDAS):
-        if not _HAS_PANDAS:
-            raise RuntimeError("pandas not available but output='pandas' requested.")
-        idx = meta.get("index", None)
-        cols = meta.get("columns", None)
-        return pd.DataFrame(arr, index=idx, columns=cols)
-
-    if output == "polars" or (output == "like" and meta.get("kind") == _INPUT_KIND_POLARS):
-        if not _HAS_POLARS:
-            raise RuntimeError("polars not available but output='polars' requested.")
-        cols = meta.get("columns", None)
-        # Recreate DataFrame; keep column names when possible
-        df = pl.DataFrame(arr, schema=cols if cols and len(cols) == arr.shape[1] else None)
-        return df
-
-    # default: numpy
-    return np.array(arr, copy=False)
-
-
-def _parse_window_arg(window, meta, n_rows: int) -> Tuple[str, Any]:
-    """
-    Normalize window argument.
-    Returns ('rows', int_rows) OR ('time', pandas.Timedelta-like) OR ('rows', n_rows) if None.
-    """
-    if window is None:
-        return ("rows", n_rows)
-    # integer rows?
-    if isinstance(window, int):
-        if window <= 0:
-            raise ValueError("window must be positive.")
-        return ("rows", window)
-
-    # time-like string if we have a time axis (pandas index or named time col)
-    if isinstance(window, str):
-        # only useful if pandas is available OR the time_col was recorded for polars
-        has_time = bool(meta.get("time_index") or meta.get("time_col"))
-        if not has_time:
-            raise ValueError("A string window like '7D' needs a datetime index or a named time_col.")
-        if not _HAS_PANDAS:
-            raise ValueError("Time-string windows require pandas to parse offsets.")
-        try:
-            td = pd.to_timedelta(window)
-            return ("time", td)
-        except Exception as e:
-            raise ValueError(f"Could not parse window='{window}' as a pandas Timedelta.") from e
-
-    raise ValueError("window must be int (#rows) or pandas-style offset string like '7D', '30D', '1W'.")
-
-
-class TIMARAImputer(BaseEstimator, TransformerMixin):
-    """
-    A scikit-learn style wrapper around MISSNET/TIMARA.
-
-    - fit(X): auto-tunes (unless overridden) and stores chosen hyperparams
-    - transform(X): imputes X using stored hyperparams (no re-tuning)
-    - fit_transform(X): convenience = fit + transform
-    - walk_transform(X, window=..., step=...): rolling ("walk-forward") imputation
-
-    Parameters mirror missnet_impute(...) with the same semantics.
-    """
-
-    def __init__(
-        self,
-        # tuning / algorithm config
-        auto_tune: bool = True,
-        alpha: float = None,
-        beta: float = None,
-        L: int = None,
-        n_cl: int = None,
-        max_iteration: int = None,
-        tol: int = 5,
-        use_robust_loss: bool = None,
-        use_skeleton: bool = None,
-        use_cholesky: bool = None,
-        use_spectral: bool = None,
-        use_consistency_loss: bool = None,
-        conv_eps: float = 5e-4,
-        conv_window: int = 3,
-        random_init: bool = False,
-        verbose: bool = False,
-        # I/O behavior
-        time_col: str = None,     # name of datetime column if not an index
-        output: str = "like",     # 'like'|'array'|'pandas'|'polars'
-    ):
-        self.auto_tune = auto_tune
-        self.alpha = alpha
-        self.beta = beta
-        self.L = L
-        self.n_cl = n_cl
-        self.max_iteration = max_iteration
-        self.tol = tol
-        self.use_robust_loss = use_robust_loss
-        self.use_skeleton = use_skeleton
-        self.use_cholesky = use_cholesky
-        self.use_spectral = use_spectral
-        self.use_consistency_loss = use_consistency_loss
-        self.conv_eps = conv_eps
-        self.conv_window = conv_window
-        self.random_init = random_init
-        self.verbose = verbose
-        self.time_col = time_col
-        self.output = output
-
-        # learned attributes
-        self.config_ = None          # chosen hyperparams (dict)
-        self.n_features_in_ = None
-        self.feature_names_in_ = None
-        self.input_kind_ = None
-        self._meta_ = None           # container metadata from _to_numpy
-
-    # ------- internal helpers -------
-
-    def _run_missnet(self, X_np: np.ndarray, *, allow_tune: bool):
-        """Call missnet_impute with either fixed (stored) params or allow auto-tuning."""
-        kwargs_fixed = dict(
-            alpha=self.alpha, beta=self.beta, L=self.L, n_cl=self.n_cl,
-            max_iteration=self.max_iteration, tol=self.tol,
-            use_robust_loss=self.use_robust_loss,
-            use_skeleton=self.use_skeleton,
-            use_cholesky=self.use_cholesky,
-            use_spectral=self.use_spectral,
-            use_consistency_loss=self.use_consistency_loss,
-            auto_tune=allow_tune,
-            conv_eps=self.conv_eps,
-            conv_window=self.conv_window,
-            random_init=self.random_init,
-            verbose=self.verbose,
-        )
-        return missnet_impute(X_np, **kwargs_fixed)
-
-    def _store_schema(self, X: Any):
-        """Record feature names / counts (for pandas/polars)."""
-        self.n_features_in_ = None
-        self.feature_names_in_ = None
-
-        if _HAS_PANDAS and isinstance(X, pd.DataFrame):
-            self.n_features_in_ = X.shape[1]
-            self.feature_names_in_ = list(X.columns)
-        elif _HAS_POLARS and isinstance(X, (pl.DataFrame, pl.LazyFrame)):
-            if isinstance(X, pl.LazyFrame):
-                ncols = len(X.collect_schema())
-                cols = list(X.collect_schema().names())
-            else:
-                ncols = X.shape[1]
-                cols = list(X.columns)
-            self.n_features_in_ = ncols
-            self.feature_names_in_ = cols
-        else:
-            X_np = np.asarray(X)
-            if X_np.ndim != 2:
-                raise ValueError("Input must be 2D.")
-            self.n_features_in_ = X_np.shape[1]
-
-    # ------- public API -------
-
-    def fit(self, X, y=None):
-        """Auto-tune on X (unless you passed explicit hyperparams)."""
-        X_np, meta = _to_numpy(X, time_col=self.time_col)
-        self._meta_ = meta
-        self.input_kind_ = meta["kind"]
-        self._store_schema(X)
-
-        # Run once with tuning allowed to pick good hyperparams; we
-        # only keep the config; we don't need the imputed matrix here.
-        _ = self._run_missnet(X_np, allow_tune=True)
-        # Capture the actual values used after tuning; we read back
-        # from supplied (or defaulted) attributes because missnet_impute
-        # applies get_optimal_config when args are None.
-        # To make it explicit, we re-run the config chooser directly:
-        cfg = get_optimal_config(X_np, fast=True, verbose=self.verbose)
-        self.config_ = cfg
-        # Freeze chosen hyperparams into the estimator for future transform()
-        if self.alpha is None: self.alpha = cfg["alpha"]
-        if self.beta is None: self.beta = cfg["beta"]
-        if self.L is None: self.L = cfg["L"]
-        if self.n_cl is None: self.n_cl = cfg["n_cl"]
-        if self.max_iteration is None: self.max_iteration = cfg["max_iteration"]
-        if self.use_robust_loss is None: self.use_robust_loss = cfg["use_robust_loss"]
-        if self.use_skeleton is None: self.use_skeleton = cfg["use_skeleton"]
-        if self.use_cholesky is None: self.use_cholesky = cfg["use_cholesky"]
-        # For spectral/consistency we read from global CFG via get_optimal_config's overrides
-        if self.use_spectral is None: self.use_spectral = bool(cfg.get("cfg_overrides", {}).get("USE_SPECTRAL", False))
-        if self.use_consistency_loss is None: self.use_consistency_loss = bool(cfg.get("cfg_overrides", {}).get("USE_CONSISTENCY_LOSS", False))
-
-        return self
-
-    def transform(self, X):
-        """
-        Impute X with the hyperparams chosen at fit-time (no re-tuning).
-        Note: TIMARA/MISSNET is model-based; this call still runs EM on X,
-        but with *fixed* hyperparams for reproducibility and speed.
-        """
-        if self.n_features_in_ is None:
-            raise RuntimeError("Estimator is not fitted yet. Call fit(X) first.")
-        X_np, meta = _to_numpy(X, time_col=self.time_col)
-
-        # quick shape sanity
-        if X_np.shape[1] != self.n_features_in_:
-            raise ValueError(f"Expected {self.n_features_in_} features, got {X_np.shape[1]}.")
-
-        imputed = self._run_missnet(X_np, allow_tune=False)
-        return _from_numpy(imputed, meta if self.output == "like" else meta, output=self.output)
-
-    def fit_transform(self, X, y=None):
-        return self.fit(X, y).transform(X)
-
-    # --------------- walk-forward / rolling imputation ---------------
-
-    def walk_transform(
-        self,
-        X,
-        window: Union[int, str, None],
-        step: Union[int, str, None] = None,
-        tune_each_window: bool = False,
-        only_last: bool = True,
-        aggregate: str = "last",  # 'last'|'mean'|'median' when overlaps happen
-    ):
-        """
-        Rolling "walk-forward" imputation.
-
-        Parameters
-        ----------
-        X : array/pandas/polars (T x N)
-        window : int rows or time offset string ('7D', '30D', '1W', ...)
-                 If None, uses full expanding window.
-        step : int rows or same style as 'window'; default = window (or 1 if expanding)
-        tune_each_window : if True, re-tune hyperparams per window; else reuse fitted params
-        only_last : if True, each window imputes only its *last* row (typical backtest);
-                    if False, impute whole window and merge outputs (resolve overlaps via `aggregate`)
-        aggregate : when windows overlap and only_last=False, how to combine: 'last'|'mean'|'median'
-
-        Returns
-        -------
-        Same container type as input, shape = X.shape (fully imputed).
-        """
-        X_np, meta = _to_numpy(X, time_col=self.time_col)
-        T = X_np.shape[0]
-
-        kind, wval = _parse_window_arg(window, meta, n_rows=T)
-        # default step mirrors window; expanding window uses step=1
-        if step is None:
-            if window is None:
-                step_kind, step_val = ("rows", 1)
-            else:
-                step_kind, step_val = kind, wval
-        else:
-            step_kind, step_val = _parse_window_arg(step, meta, n_rows=T)
-
-        # Build window boundaries as row indices
-        win_bounds: list[Tuple[int, int]] = []
-
-        if kind == "rows":
-            w = int(wval)
-            if w > T:
-                w = T
-            start = 0 if window is None else w  # expanding starts at first full window
-            if window is None:
-                # expanding window: [0:i] stepping by step_val rows
-                i = w if w > 0 else 1
-                while i <= T:
-                    win_bounds.append((0, i))
-                    i += int(step_val)
-            else:
-                i = w
-                while i <= T:
-                    win_bounds.append((i - w, i))
-                    i += int(step_val)
-
-        else:
-            # time-based windows require pandas times
-            if not _HAS_PANDAS:
-                raise RuntimeError("Time-based rolling requires pandas.")
-            # recover a pandas DatetimeIndex
-            if meta.get("kind") == _INPUT_KIND_PANDAS and isinstance(meta.get("index"), pd.DatetimeIndex):
-                times = meta["index"]
-            else:
-                # try to read a time column by name (pandas or polars)
-                tname = meta.get("time_col")
-                if tname is None:
-                    raise ValueError("No time column/index available to compute time-based windows.")
-                if _HAS_PANDAS and isinstance(X, pd.DataFrame):
-                    times = pd.DatetimeIndex(pd.to_datetime(X[tname]))
-                elif _HAS_POLARS and isinstance(X, (pl.DataFrame, pl.LazyFrame)):
-                    df = X.collect() if isinstance(X, pl.LazyFrame) else X
-                    times = pd.DatetimeIndex(pd.to_datetime(df[tname].to_pandas()))
-                else:
-                    raise ValueError("Unsupported container for time-based windowing.")
-            td_w = wval
-            td_s = step_val if step_kind == "time" else pd.to_timedelta(step_val, unit="D")
-
-            if window is None:
-                # expanding: [0 : t_i] for each step
-                cur_end = times.min()
-                end = times.min()
-                while end <= times.max():
-                    end = min(end + td_s, times.max())
-                    idx_end = times.get_indexer_for(times[times <= end])[-1] + 1
-                    win_bounds.append((0, idx_end))
-                    if end == times.max():
-                        break
-            else:
-                # sliding fixed width
-                start_time = times.min() + td_w
-                cur_end = start_time
-                while cur_end <= times.max():
-                    cur_start = cur_end - td_w
-                    # map to row indices
-                    i1 = times.get_indexer_for(times[times >= cur_start])[0]
-                    i2 = times.get_indexer_for(times[times <= cur_end])[-1] + 1
-                    win_bounds.append((i1, i2))
-                    cur_end = cur_end + td_s
-
-        # walk windows
-        out = np.array(X_np, copy=True)
-        count = np.zeros_like(out, dtype=int)  # for mean/median aggregates
-        collect_stack = []  # for median if needed
-
-        for (a, b) in win_bounds:
-            X_win = X_np[a:b]
-            if X_win.size == 0:
-                continue
-            allow_tune = bool(tune_each_window)
-            imputed_win = self._run_missnet(X_win, allow_tune=allow_tune)
-
-            if only_last:
-                # write just the last row
-                out[b - 1, :] = imputed_win[-1, :]
-            else:
-                # write the full window (aggregate overlaps)
-                if aggregate == "last":
-                    out[a:b, :] = imputed_win
-                elif aggregate == "mean":
-                    out[a:b, :] += imputed_win
-                    count[a:b, :] += 1
-                elif aggregate == "median":
-                    collect_stack.append((a, b, imputed_win))
-                else:
-                    raise ValueError("aggregate must be one of {'last','mean','median'}.")
-
-        if not only_last and aggregate == "mean":
-            mask = count > 0
-            out[mask] = out[mask] / count[mask]
-
-        if not only_last and aggregate == "median":
-            # combine by per-cell median across collected windows
-            # (simpler implementation: accumulate to list & compute median)
-            import math
-            accum = [[[] for _ in range(out.shape[1])] for __ in range(out.shape[0])]
-            for a, b, W in collect_stack:
-                for i in range(a, b):
-                    for j in range(out.shape[1]):
-                        accum[i][j].append(W[i - a, j])
-            for i in range(out.shape[0]):
-                for j in range(out.shape[1]):
-                    if accum[i][j]:
-                        out[i, j] = np.median(np.array(accum[i][j], dtype=float))
-
-        return _from_numpy(out, meta if self.output == "like" else meta, output=self.output)
+    return recov
 
 
 if __name__ == "__main__":
@@ -2912,75 +2351,3 @@ if __name__ == "__main__":
     print(f"Seasonal MISSNET - MSE: {mse_seasonal:.6f}, MAE: {mae_seasonal:.6f}")
     print(f"Seasonal improvement: {(mse_regular - mse_seasonal)/mse_regular*100:.1f}% MSE reduction")
     print(f"All missing values imputed: {not np.any(np.isnan(imputed_seasonal[mask]))}")
-    
-    # Test sklearn-style wrapper with pandas
-    print("\n" + "="*40)
-    print("Testing TIMARAImputer sklearn-style wrapper")
-    print("="*40)
-    
-    if _HAS_PANDAS:
-        # Create pandas DataFrame with datetime index
-        dates = pd.date_range('2023-01-01', periods=n_timesteps, freq='D')
-        df = pd.DataFrame(data_with_missing, 
-                         index=dates, 
-                         columns=[f'feature_{i}' for i in range(n_features)])
-        
-        print("Testing with pandas DataFrame:")
-        print(f"DataFrame shape: {df.shape}")
-        print(f"Index type: {type(df.index).__name__}")
-        
-        # Test sklearn-style imputer
-        imputer = TIMARAImputer(verbose=True, output="pandas")
-        df_imputed = imputer.fit_transform(df)
-        print(f"Imputed DataFrame shape: {df_imputed.shape}")
-        print(f"Preserved index: {type(df_imputed.index).__name__}")
-        print(f"Preserved columns: {list(df_imputed.columns)}")
-        
-        # Test walk-forward imputation
-        print("\nTesting walk-forward imputation (7-day window):")
-        df_walk = imputer.walk_transform(df, window="7D", step="1D", only_last=True)
-        print(f"Walk-forward imputed shape: {df_walk.shape}")
-        print(f"All missing values imputed: {not df_walk.isna().any().any()}")
-    
-    if _HAS_POLARS:
-        print("\nTesting with polars DataFrame:")
-        pl_df = pl.DataFrame(data_with_missing, 
-                           schema=[f'feature_{i}' for i in range(n_features)])
-        print(f"Polars DataFrame shape: {pl_df.shape}")
-        
-        # Test with polars
-        imputer_pl = TIMARAImputer(verbose=False, output="polars")
-        pl_imputed = imputer_pl.fit_transform(pl_df)
-        print(f"Polars imputed shape: {pl_imputed.shape}")
-        print(f"Polars schema: {pl_imputed.schema}")
-        
-        # Test walk-forward with row-based window
-        pl_walk = imputer_pl.walk_transform(pl_df, window=30, step=7, only_last=True)
-        print(f"Polars walk-forward shape: {pl_walk.shape}")
-
-
-## You can still at some point move from heuristics to actual automl auto-tuning.
-
-#    Testing 20 configurations...
-#    Config                    |        MSE |        MAE |     Corr |     Time |     ΔMSE
-#    --------------------------+------------+------------+----------+----------+---------
-#    🤖 Default AUTOTUNE        |   0.289190 |   0.402329 |   0.8634 |     0.02s | baseline
-#    🎛️  Fixed Default         |   0.150430 |   0.320489 |   0.9079 |     0.01s |   +48.0%
-#    🚫 No Spectral             |   0.289190 |   0.402329 |   0.8634 |     0.02s |    +0.0%
-#    🛡️  No Robust Loss        |   0.289190 |   0.402329 |   0.8634 |     0.01s |    +0.0%
-#    🦴 No Skeleton             |   0.289190 |   0.402329 |   0.8634 |     0.02s |    +0.0%
-#    🔧 No Cholesky             |   0.289190 |   0.402329 |   0.8634 |     0.02s |    +0.0%
-#    🌊 Pure Spectral           |   0.343813 |   0.501797 |   0.6218 |     0.02s |   -18.9%
-#    🕸️  Pure Network          |   0.463306 |   0.504000 |   0.7227 |     0.02s |   -60.2%
-#    ⚖️  Alpha 0.25            |   0.282907 |   0.398163 |   0.8638 |     0.02s |    +2.2%
-#    ⚖️  Alpha 0.75            |   0.306696 |   0.413247 |   0.8617 |     0.02s |    -6.1%
-#    🎯 Beta 0.05               |   0.289160 |   0.402317 |   0.8634 |     0.02s |    +0.0%
-#    🎯 Beta 0.2                |   0.289114 |   0.402327 |   0.8634 |     0.02s |    +0.0%
-#    📏 L=5                     |   0.091404 |   0.236039 |   0.9334 |     0.18s |   +68.4%
-#    📏 L=20                    |   0.150313 |   0.320446 |   0.9078 |     0.02s |   +48.0%
-#    🏗️  n_cl=1                |   0.289190 |   0.402329 |   0.8634 |     0.02s |    +0.0%
-#    🏗️  n_cl=5                |   0.319763 |   0.419620 |   0.8517 |     0.16s |   -10.6%
-#    🔒 Huber Only              |   0.279433 |   0.396002 |   0.8640 |     0.02s |    +3.4%
-#    🔒 L1 Only                 |   0.279433 |   0.396002 |   0.8640 |     0.02s |    +3.4%
-#    🐌 Conservative            |   0.094090 |   0.238703 |   0.9292 |     0.23s |   +67.5%
-#    🚀 Aggressive              |   0.154958 |   0.324079 |   0.9088 |     0.02s |   +46.4%
