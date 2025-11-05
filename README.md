@@ -581,34 +581,6 @@ If you use TIMARA in your research, please cite:
 
 ---
 
-## Contributing
-
-Contributions welcome! Areas of interest:
-
-- New network structure learning methods
-- Alternative regime detection algorithms
-- Benchmarks on domain-specific datasets
-- Documentation improvements
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-## Contact
-
-- **Author**: [Your Name]
-- **Email**: your.email@example.com
-- **GitHub**: [github.com/yourusername/TIMARA](https://github.com/yourusername/TIMARA)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/TIMARA/issues)
-
----
-
 ## Acknowledgments
 
 - MISSNET paper by Obata et al. (KDD 2024)
