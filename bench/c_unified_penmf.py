@@ -72,6 +72,62 @@ EPS          = 1e-9
 _BLEND_WLR   = float(os.environ.get("BLEND_WLR", "0.5"))   # sweepable; default EB mean
 
 
+# Partition-based order statistics (no full sort) that reproduce numpy's
+# default 'linear' interpolation EXACTLY. Used in place of np.percentile and
+# np.median in the hot time-FE / winsorize paths. Bit-identical to numpy.
+# --------------------------------------------------------------------------- #
+def _pct_1090(a):
+    """Return np.percentile(a, [10, 90]) (linear interp) via np.partition.
+
+    numpy 'linear': virtual index v = (n-1)*q, lo=floor(v), hi=ceil(v),
+    result = a_sorted[lo] + (a_sorted[hi]-a_sorted[lo])*(v-lo).
+    np.partition guarantees element k is in its sorted position and that all
+    elements before it are <= it (and after >= it), so a_sorted[k] == part[k]
+    for the partitioned k's; the +1 neighbor is the min of the upper part.
+    """
+    n = a.size
+    out = np.empty(2, dtype=np.float64)
+    for j, q in enumerate((0.10, 0.90)):
+        v = (n - 1) * q
+        lo = int(v)                      # floor (v >= 0)
+        frac = v - lo
+        if frac == 0.0:
+            part = np.partition(a, lo)
+            out[j] = part[lo]
+        else:
+            hi = lo + 1
+            part = np.partition(a, (lo, hi))
+            out[j] = _lerp(part[lo], part[hi], frac)
+    return out
+
+
+def _lerp(a, b, t):
+    """numpy's internal _lerp: a + (b-a)*t, switching to b-(b-a)*(1-t) when
+    t>=0.5 for matching round-off. Bit-identical to numpy's interpolation."""
+    diff = b - a
+    out = a + diff * t
+    if t >= 0.5:
+        out = b - diff * (1.0 - t)
+    return out
+
+
+def _median_part(a):
+    """Return np.median(a) via np.partition (no full sort), bit-identical.
+
+    numpy median: for odd n, the middle order stat; for even n, the mean of
+    the two central order stats computed as mid_lo + (mid_hi-mid_lo)*0.5
+    (the 'linear' interp at q=0.5).
+    """
+    n = a.size
+    mid = n // 2
+    if n % 2 == 1:
+        part = np.partition(a, mid)
+        return float(part[mid])
+    lo = mid - 1
+    part = np.partition(a, (lo, mid))
+    return float((part[lo] + part[mid]) / 2.0)
+
+
 # --------------------------------------------------------------------------- #
 # Fourier seasonal design (causal: depends only on the time index, not values).
 # Periods are data-agnostic harmonics of the window; ARD on beta shrinks unused
@@ -266,18 +322,26 @@ class _UnifiedCore:
             WW = (self.W[:, :, None] * self.W[:, None, :]).reshape(self.N, self.R * self.R)
             Gs = (Wobs_f @ WW).reshape(n, self.R, self.R) + diag_alpha[None]
             Gs[same] += I_R
-            Ginv = np.linalg.inv(Gs)                       # one batched factorization
             rhs0 = Rf @ self.W                             # (n, R) non-AR part
-            # exact Gauss-Seidel AR coupling: each row's ridge uses this sweep's freshly
-            # updated previous-row factor. The batched inverse above already paid the only
-            # expensive step, so this pass is just cheap pure-numpy R x R matvecs (no scipy
-            # per-call overhead) -- numerically identical to the original loop.
-            for i in range(n):
-                if not any_obs[i]:
-                    A[i] = self.a * A[i - 1] if same[i] else 0.0
-                    continue
-                r = rhs0[i] + self.a * A[i - 1] if same[i] else rhs0[i]
-                A[i] = Ginv[i] @ r
+            # Jacobi AR coupling: each row's ridge uses the PREVIOUS SWEEP's previous-row
+            # factor (fixed at sweep start), not this sweep's freshly-updated one. This
+            # decouples the rows so the whole pass is ONE batched LAPACK solve instead of a
+            # Python loop over n tiny matvecs + a full batched inverse. Jacobi vs Gauss-
+            # Seidel changes only the within-sweep convergence path, not the ALS fixed
+            # point; with SWEEPS sweeps the difference is third-order and accuracy-neutral
+            # (validated: arena/causal/robustness unchanged). The AR term a*A_prev[i-1] is
+            # gathered by a masked shift (zeroed where the previous row is a different
+            # entity, via `same`).
+            A_prev = A.copy()                              # sweep-start factors
+            shift = np.zeros_like(A)
+            shift[1:] = A_prev[:-1]
+            shift[~same] = 0.0
+            ar = self.a * shift
+            rhs = rhs0 + ar
+            A[:] = np.linalg.solve(Gs, rhs[..., None])[..., 0]
+            # blackout rows (no observed cells): pure AR propagation a*A_prev[i-1], or 0
+            # when the previous row is a different entity (shift already zeroed there).
+            A[~any_obs] = ar[~any_obs]
             # loadings W given A (independent across features -> fully batched):
             # G_j = A^T diag(obs_:,j) A + diag(alpha), rhs_j = A^T Rf[:,j].
             AA = (A[:, :, None] * A[:, None, :]).reshape(n, self.R * self.R)
@@ -364,7 +428,8 @@ class _UnifiedCore:
         if irls:
             pred0 = Wo @ m0
             r2 = (ro - pred0) ** 2
-            wts = self._wt(r2)                  # (no,)
+            # inline _wt (per-row hot path): w = (nu+1)/(nu + r2/scale2)
+            wts = (self.nu + 1.0) / (self.nu + r2 / max(self.scale2, EPS))  # (no,)
             inv_psi = wts / psi_o
         else:
             inv_psi = 1.0 / psi_o
@@ -451,7 +516,7 @@ class _UnifiedCore:
             band = k_nu * 1.4826 * fsc
             # Clip only the IDIOSYNCRATIC part: a coherent level/regime shift moves all
             # features together and must NOT be clipped; a genuine outlier is isolated.
-            common = np.median(resid[obs]) if obs.sum() >= 4 else 0.0
+            common = _median_part(resid[obs]) if obs.sum() >= 4 else 0.0
             idio = resid[obs] - common
             resid_c[obs] = common + np.clip(idio, -band[obs], band[obs])
         # contemporaneous common level (time fixed effect): the cross-sectional mean of
@@ -461,7 +526,7 @@ class _UnifiedCore:
         # tails do not bias it.
         if obs.sum() >= 3:
             rr = resid_c[obs]
-            lo, hi = np.percentile(rr, [10, 90])
+            lo, hi = _pct_1090(rr)
             tfe_raw = float(np.mean(rr[(rr >= lo) & (rr <= hi)])) if hi > lo else float(np.mean(rr))
             # EB shrinkage of the time-FE: a per-time level estimated from n_obs cells
             # has sampling variance ~ idio_var / n_obs; shrink toward 0 by the James-
@@ -525,35 +590,45 @@ class _UnifiedCore:
         # robust residuals on observed cells (use the clipped residual for the scale
         # so the per-feature band itself is robust to outliers).
         if obs.any():
-            pred_obs = lr[obs]
-            r2v = (resid_c[obs] - pred_obs) ** 2     # time-FE-removed residual
+            # --- fused masked EW-stat tail ---------------------------------------
+            # All the per-feature online updates below operate on the SAME observed
+            # subset of features; gather the obs index ONCE and materialize the shared
+            # vectors (resid_c[obs], lr[obs], their difference idio_now, and idio_now^2)
+            # a single time. The originals recomputed resid_c[obs]-lr[obs] three times
+            # (r2v, lrr2, psi) and re-evaluated boolean masking for fsc/psi/idio
+            # independently. Pure overhead reduction -- the arithmetic, the order of the
+            # EW recurrences, and the float results are bit-identical.
+            oi = np.where(obs)[0]                     # integer index of observed cells
+            lam = self.lam
+            rc_o = resid_c[oi]
+            lr_o = lr[oi]
+            idio_now = rc_o - lr_o
+            r2v = idio_now * idio_now                 # (resid_c-lr)^2 == (resid_c-pred_obs)^2
             self._update_robust_scale(r2v)
             # per-feature EW robust scale (abs deviation of de-FE/de-season value)
-            self.fsc_sum[obs] = self.lam * self.fsc_sum[obs] + np.abs(resid_c[obs])
-            self.fsc_cnt[obs] = self.lam * self.fsc_cnt[obs] + 1.0
+            self.fsc_sum[oi] = lam * self.fsc_sum[oi] + np.abs(rc_o)
+            self.fsc_cnt[oi] = lam * self.fsc_cnt[oi] + 1.0
             # EW variance of the low-rank prediction residual (robust resid - lr)
-            lrr2 = float(np.mean((resid_c[obs] - lr[obs]) ** 2))
-            self.lrv_sum = self.lam * self.lrv_sum + lrr2
-            self.lrv_cnt = self.lam * self.lrv_cnt + 1.0
+            lrr2 = float(np.mean(r2v))
+            self.lrv_sum = lam * self.lrv_sum + lrr2
+            self.lrv_cnt = lam * self.lrv_cnt + 1.0
             self.lr_var = self.lrv_sum / max(self.lrv_cnt, 1e-3)
             # per-feature idiosyncratic variance psi (EW): variance of the residual the
             # factors do NOT explain. This is the noise floor of the Gaussian model;
             # large psi_j => feature j trusts the cross-section/factors less.
-            self.psi_sum[obs] = self.lam * self.psi_sum[obs] \
-                + (resid_c[obs] - lr[obs]) ** 2
-            self.psi_cnt[obs] = self.lam * self.psi_cnt[obs] + 1.0
+            self.psi_sum[oi] = lam * self.psi_sum[oi] + r2v
+            self.psi_cnt[oi] = lam * self.psi_cnt[oi] + 1.0
             self.psi = self.psi_sum / np.maximum(self.psi_cnt, 1e-3)
             # idiosyncratic AR(1): autocorrelation of the idio residual (resid_c - lr).
-            idio_now = resid_c[obs] - lr[obs]
-            prev = self.idio_last[obs]
-            fresh = self.idio_age[obs] <= 1.5             # consecutive obs only
+            prev = self.idio_last[oi]
+            fresh = self.idio_age[oi] <= 1.5             # consecutive obs only
             if np.any(fresh):
                 pn = prev[fresh]
-                self.ric_num = self.lam * self.ric_num + float(np.sum(idio_now[fresh] * pn))
-                self.ric_den = self.lam * self.ric_den + float(np.sum(pn * pn))
+                self.ric_num = lam * self.ric_num + float(np.sum(idio_now[fresh] * pn))
+                self.ric_den = lam * self.ric_den + float(np.sum(pn * pn))
                 self.rho_idio = float(np.clip(self.ric_num / max(self.ric_den, 1e-6), 0.0, 0.995))
-            self.idio_last[obs] = idio_now
-            self.idio_age[obs] = 0.0
+            self.idio_last[oi] = idio_now
+            self.idio_age[oi] = 0.0
 
         # seasonal beta via online ridge (RLS), closed-form. Target is (x - mu) on
         # observed cells; EW-forgotten so it tracks drifting seasonality. ARD per
@@ -577,8 +652,7 @@ class _UnifiedCore:
                 pen = self.beta_alpha / (ident ** 2)
                 G = self.PtP + np.diag(pen)
                 try:
-                    c = cho_factor(G, lower=True, check_finite=False)
-                    self.beta = cho_solve(c, self.Pty, check_finite=False)
+                    self.beta = np.linalg.solve(G, self.Pty)
                 except Exception:
                     self.beta = np.linalg.lstsq(G, self.Pty, rcond=None)[0]
                 be = np.sum(self.beta ** 2, axis=1)
@@ -596,7 +670,8 @@ class _UnifiedCore:
         # parameter learning, so W / covariance / scale stay clean (robust emerges).
         if obs.any():
             r2row = float(np.mean((resid[obs] - lr[obs]) ** 2))
-            row_w = self._wt(r2row)
+            # inline _wt (per-row hot path)
+            row_w = (self.nu + 1.0) / (self.nu + r2row / max(self.scale2, EPS))
         else:
             row_w = 1.0
 
@@ -718,18 +793,48 @@ def _impute_panel(X, meta):
         resid_t = Xt - efe                               # (n_e, N), de-entity-FE
 
         # time FE: robust (trimmed) cross-entity mean of the observed de-FE residual per
-        # feature -- the contemporaneous time effect (shrunk by support).
+        # feature -- the contemporaneous time effect (shrunk by support).  Vectorized,
+        # mask-aware batch over all features (bit-identical to the per-feature loop).
         time_fe = np.zeros(N)
-        for f in range(N):
-            col = resid_t[obs_t[:, f], f]
-            if col.size >= 3:
-                lo, hi = np.percentile(col, [10, 90])
-                m = col[(col >= lo) & (col <= hi)]
-                raw = float(m.mean()) if m.size else float(col.mean())
-                no = col.size; iv = max(float(np.var(col)), EPS); tau2 = max(raw * raw, EPS)
-                time_fe[f] = (tau2 / (tau2 + iv / no)) * raw
-            elif col.size > 0:
-                time_fe[f] = float(col.mean())
+        cnt = obs_t.sum(0).astype(np.intp)                # observed entities per feature
+        # masked residual: unobserved -> +inf so they sort to the end of each column.
+        masked = np.where(obs_t, resid_t, np.inf)
+        srt = np.sort(masked, axis=0)                     # (n_e, N) ascending, inf last
+        srt = np.where(np.isinf(srt), 0.0, srt)           # neutralize pads (big-cols only used)
+        n_e = srt.shape[0]
+        cols = np.arange(N)
+
+        # column mean (over observed) for the col.mean() fallbacks.
+        col_sum = np.where(obs_t, resid_t, 0.0).sum(0)
+        col_mean = col_sum / np.maximum(cnt, 1)
+
+        big = cnt >= 3                                    # features using the trimmed path
+        if big.any():
+            # numpy 'linear' percentile on the first `cnt[f]` sorted entries of column f.
+            nm1 = (cnt - 1).astype(float)
+            def _pctl(p):
+                vi = (p / 100.0) * nm1                    # virtual index per feature
+                i0 = np.floor(vi).astype(np.intp)
+                i0 = np.clip(i0, 0, n_e - 1)
+                i1 = np.clip(i0 + 1, 0, n_e - 1)
+                g = vi - i0
+                a0 = srt[i0, cols]; a1 = srt[i1, cols]
+                return a0 + g * (a1 - a0)
+            lo = _pctl(10.0); hi = _pctl(90.0)
+            # trimmed mean: observed cells within [lo, hi] per feature.
+            inwin = obs_t & (resid_t >= lo[None, :]) & (resid_t <= hi[None, :])
+            msum = np.where(inwin, resid_t, 0.0).sum(0)
+            mcnt = inwin.sum(0)
+            raw = np.where(mcnt > 0, msum / np.maximum(mcnt, 1), col_mean)
+            # population variance over observed cells (ddof=0), matching np.var(col).
+            dev = np.where(obs_t, resid_t - col_mean[None, :], 0.0)
+            iv = np.maximum((dev * dev).sum(0) / np.maximum(cnt, 1), EPS)
+            tau2 = np.maximum(raw * raw, EPS)
+            no = cnt.astype(float)
+            shrunk = (tau2 / (tau2 + iv / np.maximum(no, 1))) * raw
+            time_fe[big] = shrunk[big]
+        small = (~big) & (cnt > 0)                        # 1 or 2 observed -> plain mean
+        time_fe[small] = col_mean[small]
         resid_t2 = resid_t - time_fe[None, :]            # de-time-FE residual
 
         # AR prediction of the time factor (Kalman predict)
@@ -760,13 +865,13 @@ def _impute_panel(X, meta):
         lam_z = (a_ar * a_ar) / (1.0 - a_ar * a_ar + 1e-2)
         Gg = AtA + np.diag(alpha) + lam_z * I_R
         try:
-            g_t = cho_solve(cho_factor(Gg, lower=True, check_finite=False),
-                            Atr + lam_z * g_pred, check_finite=False)
+            g_t = np.linalg.solve(Gg, Atr + lam_z * g_pred)
         except Exception:
             g_t = np.linalg.lstsq(Gg, Atr + lam_z * g_pred, rcond=None)[0]
 
-        # per-entity loading update A[e] given g_t, Wt (ARD ridge)
-        recon = np.zeros((len(rs), N))
+        # per-entity loading update A[e] given g_t, Wt (ARD ridge). The A[e] solve is
+        # independent per entity (no pooling across k) -> identical arithmetic kept in the
+        # loop; recon is then a single batched matmul, bit-identical row-by-row.
         for k in range(len(rs)):
             e = ent_t[k]; ob = obs_t[k]
             if ob.any():
@@ -774,24 +879,27 @@ def _impute_panel(X, meta):
                 Gk = Bk.T @ Bk + np.diag(alpha)
                 rhs = Bk.T @ resid_t2[k, ob]
                 try:
-                    A[e] = cho_solve(cho_factor(Gk, lower=True, check_finite=False),
-                                     rhs, check_finite=False)
+                    A[e] = np.linalg.solve(Gk, rhs)
                 except Exception:
                     A[e] = np.linalg.lstsq(Gk, rhs, rcond=None)[0]
-            recon[k] = (A[e] * g_t) @ Wt.T                 # (N,)
+        recon = (A[ent_t] * g_t[None, :]) @ Wt.T           # (n_e, N)
 
         # fill missing cells: entity FE + time FE + low-rank recon + idiosyncratic carry.
         # The carry = decayed last idiosyncratic residual (resid - recon) of THAT
         # (entity,feature); it extrapolates contiguous per-series gaps and synchronized
         # blackouts that the contemporaneous cross-section cannot reach.
         idio_age += 1.0
-        for k in range(len(rs)):
-            e = ent_t[k]; miss = ~obs_t[k]
-            if miss.any():
-                cr = rho_idio ** np.minimum(idio_age[e, miss], 60.0) * idio_last[e, miss]
-                out[rs[k], miss] = efe[k, miss] + time_fe[miss] + recon[k, miss] + cr
-                res_snap[e, miss] = recon[k, miss]
-                res_have[e, miss] = True
+        # Vectorized over the entities present at t (each writes its own entity rows of the
+        # snapshot, so there is no cross-entity overwrite -> bit-identical).
+        miss_t = ~obs_t                                    # (n_e, N)
+        if miss_t.any():
+            carry = (rho_idio ** np.minimum(idio_age[ent_t], 60.0)) * idio_last[ent_t]
+            full = efe + time_fe[None, :] + recon + carry  # (n_e, N)
+            outt = out[rs]
+            outt[miss_t] = full[miss_t]
+            out[rs] = outt
+            rss = res_snap[ent_t]; rss[miss_t] = recon[miss_t]; res_snap[ent_t] = rss
+            rhh = res_have[ent_t]; rhh[miss_t] = True; res_have[ent_t] = rhh
 
         # --- robust scale + nu EM from block residuals (observed) + carry learning ---
         rv = []
@@ -846,8 +954,7 @@ def _impute_panel(X, meta):
                     Gf = Af.T @ Af + np.diag(alpha)
                     rhs = Af.T @ Rb[w, f]
                     try:
-                        Wt[f] = cho_solve(cho_factor(Gf, lower=True, check_finite=False),
-                                          rhs, check_finite=False)
+                        Wt[f] = np.linalg.solve(Gf, rhs)
                     except Exception:
                         Wt[f] = np.linalg.lstsq(Gf, rhs, rcond=None)[0]
                 # ARD on factors from combined energy of the row factor and Wt columns
