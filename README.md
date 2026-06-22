@@ -57,6 +57,16 @@ import cafe
 filled = cafe.impute(df)            # pandas / polars DataFrame, or numpy array, 1D or 2D
 ```
 
+A DataFrame may freely mix types: a `date` column, string ids and numeric sensors all
+in one frame. CAFÉ imputes **only the numeric columns**, passes everything else through
+untouched, and preserves column order — so `cafe.impute(raw_df)` just works, no manual
+column selection.
+
+> **Tutorial:** [`notebooks/cafe_tutorial.ipynb`](notebooks/cafe_tutorial.ipynb) — a
+> runnable, polars-first walkthrough on the real ETTh1 dataset (the one-liner, the
+> no-look-ahead proof, accuracy, uncertainty, factors, anomalies, decomposition,
+> dependency network and forecasting).
+
 ### Everything from one causal pass
 
 ```python
