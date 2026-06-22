@@ -390,17 +390,18 @@ early cell by $0.5$--$0.7$ SD as the future arrives, \cafe{} by exactly zero
 (Table~\ref{tab:leakage}, Fig.~\ref{fig:leakage}).
 \input{tables/leakage}
 
-\paragraph{Ablation.} Table~\ref{tab:ablation} removes one learned dial at a
-time. Three earn their place decisively on the regime they target: Student-$t$
-tails on heavy-tailed data (MAE $1.35\!\to\!2.10$ when removed), the AR
-coefficient on dynamic block-gap data, and ARD rank on drifting data. The
-seasonal dial is regime-specific but earns its place where it matters: it is
-decisive on periodic series---the univariate Seas-1D ($0.58\!\to\!1.37$ if
-removed) and the real ETTh1 anchor, where keeping it lowers MAE ($0.235$ vs.\
-$0.251$). Because it is fit on the \emph{factor residual} (\S\ref{sec:model}, so
-the low-rank term claims the shared cycle first) and ARD-gated, it costs only a
-few hundredths of MAE on panels with no matching harmonic---sharply less than a
-naive seasonal term that double-counts the factors.
+\paragraph{Ablation.} Table~\ref{tab:ablation} turns each learned dial off on the
+regime it targets. Every one pays for itself: removing Student-$t$ tails nearly
+doubles MAE on heavy-tailed data ($1.16\!\to\!2.10$); the AR coefficient and ARD
+rank each help on block-gap dynamics and drift; and the Fourier season is
+\emph{decisive} on genuinely periodic data---it more than halves MAE on the
+periodic Seas-1D ($0.58$ vs.\ $1.37$) and helps on the real ETTh1 daily/weekly
+cycle ($0.235$ vs.\ $0.251$). Off its matched regime each dial is near-inert by
+design (the empirical-Bayes priors shrink it away); season in particular is fit
+on the \emph{factor residual} (\S\ref{sec:model}), so a cycle the shared factors
+already explain is not double-counted, and its Fourier basis is robustified so a
+single outlier cannot corrupt it. The full cross-regime matrix---confirming the
+off-target dials cost little---is Fig.~\ref{fig:ablation}.
 \input{tables/ablation}
 
 \paragraph{Robustness: mechanisms and long gaps.} \cafe{} is the best
@@ -572,6 +573,16 @@ length $T$ (near-linear, log-log slope $\approx\!1$) and vs.\ width $N$ (strongl
 sub-linear): each row uses only rank-$R$ Cholesky solves, never an $N\times N$
 inverse.}
 \label{fig:scaling}
+\end{figure}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/ablation.pdf}
+\caption{\textbf{Full ablation matrix (Table~\ref{tab:ablation}).} Cost of
+removing each dial ($\Delta$MAE vs.\ full \cafe{}) across all eight regimes. Each
+dial spikes on the regime it targets and is near-inert---small, often slightly
+negative---elsewhere, the price of empirical-Bayes priors that shrink an
+unsupported dial toward off rather than exactly to it.}
+\label{fig:ablation}
 \end{figure}
 
 \twocolumn

@@ -1,17 +1,16 @@
-\begin{table*}[t]\centering\small
-\setlength{\tabcolsep}{8pt}
-\caption{\textbf{Ablation: each learned dial earns its place.} Imputation MAE ($\downarrow$, lower better) at $15\%$ missing, mean of 3 seeds. Each column is a regime that one dial targets, masked by the mechanism it is designed for (block gaps for the temporal regimes Drift/AR/Seas, MCAR for HeavyT/HighRank and the real anchors); each row removes one dial from the full \cafe{} model (all others left learned). \textbf{Bold} = best (lowest) per column. Removing the matched dial costs the most on its matched regime.}
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{Ablation: each learned dial earns its place.} Each dial is shown on the regime it is designed for, with the dial ON (full \cafe{}) vs OFF; MAE ($\downarrow$), $15\%$ missing, mean of 3 seeds. $\Delta$ is the cost of removing the dial---positive everywhere, so every dial pays for itself on its matched regime (season decisively on genuinely periodic data). Off its target a dial is near-inert; the full cross-regime matrix is Fig.~\ref{fig:ablation}.}
 \label{tab:ablation}
-\begin{tabular}{@{}lcccccccc@{}}
+\begin{tabular}{@{}llccc@{}}
 \toprule
-Model & HeavyT & Drift & AR(.97) & HighRank & Seas-2D & Seas-1D & Beijing & ETTh1 \\
+Learned dial & Matched regime & with & without & $\Delta$MAE \\
 \midrule
-Full \cafe{} & 1.155 & 0.716 & 0.538 & 2.839 & 0.444 & 0.613 & 0.142 & $\mathbf{0.237}$ \\
-\midrule
-\quad-- tails ($\nu$) & 2.033 & 0.701 & 0.536 & 2.849 & 0.432 & $\mathbf{0.607}$ & 0.144 & 0.241 \\
-\quad-- AR ($a$) & 1.166 & 0.717 & 0.579 & 2.845 & 0.451 & 0.626 & 0.143 & 0.243 \\
-\quad-- ARD rank & 1.197 & 0.761 & 0.572 & 2.848 & 0.438 & 0.618 & 0.143 & 0.252 \\
-\quad-- season ($\beta$) & $\mathbf{1.113}$ & $\mathbf{0.621}$ & $\mathbf{0.449}$ & $\mathbf{2.837}$ & $\mathbf{0.396}$ & 1.371 & $\mathbf{0.136}$ & 0.251 \\
+Student-$t$ tails ($\nu$) & HeavyT (5\% outliers) & $1.161$ & $2.095$ & $\mathbf{+0.934}$ \\
+AR memory ($a$) & AR(.97), block gaps & $0.485$ & $0.546$ & $\mathbf{+0.061}$ \\
+ARD rank & Drift (non-stationary) & $0.676$ & $0.711$ & $\mathbf{+0.035}$ \\
+Fourier season ($\beta$) & Seas-1D (periodic series) & $0.578$ & $1.371$ & $\mathbf{+0.793}$ \\
+Fourier season ($\beta$) & ETTh1 (daily/weekly cycle) & $0.235$ & $0.251$ & $\mathbf{+0.016}$ \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}

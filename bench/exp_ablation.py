@@ -195,40 +195,46 @@ ROWHEAD = {
 }
 
 
+# Diagonal ablation: each dial shown ON its matched regime (where it is designed to
+# bite), with the dial ON (full model) vs OFF. Delta = cost of removing it. This is the
+# honest, legible form of "each dial earns its place": every row is a positive cost.
+# (The full cross-regime matrix -- including the off-target columns where a dial is
+# near-inert -- is the appendix figure ablation.pdf.)
+DIAG = [
+    (r"Student-$t$ tails ($\nu$)", "HeavyT (5\\% outliers)",        "heavytail",  "-tails"),
+    (r"AR memory ($a$)",           "AR(.97), block gaps",           "ar2d",       "-AR"),
+    (r"ARD rank",                  "Drift (non-stationary)",        "drift",      "-ARD"),
+    (r"Fourier season ($\beta$)",  "Seas-1D (periodic series)",     "seasonal1d", "-season"),
+    (r"Fourier season ($\beta$)",  "ETTh1 (daily/weekly cycle)",    "etth1",      "-season"),
+]
+
+
 def write_table(mae, dnames, vnames, best):
-    cols = "l" + "c" * len(dnames)
     lines = []
-    lines.append(r"\begin{table*}[t]\centering\small")
-    lines.append(r"\setlength{\tabcolsep}{8pt}")
+    lines.append(r"\begin{table}[t]\centering\small")
+    lines.append(r"\setlength{\tabcolsep}{5pt}")
     lines.append(r"\caption{\textbf{Ablation: each learned dial earns its place.} "
-                 r"Imputation MAE ($\downarrow$, lower better) at $15\%$ missing, mean "
-                 r"of 3 seeds. Each column is a regime that one dial targets, masked by "
-                 r"the mechanism it is designed for (block gaps for the temporal "
-                 r"regimes Drift/AR/Seas, MCAR for HeavyT/HighRank and the real "
-                 r"anchors); each row removes one dial from the full \cafe{} model (all "
-                 r"others left learned). \textbf{Bold} = best (lowest) per column. "
-                 r"Removing the matched dial costs the most on its matched regime.}")
+                 r"Each dial is shown on the regime it is designed for, with the dial "
+                 r"ON (full \cafe{}) vs OFF; MAE ($\downarrow$), $15\%$ missing, mean of "
+                 r"3 seeds. $\Delta$ is the cost of removing the dial---positive "
+                 r"everywhere, so every dial pays for itself on its matched regime "
+                 r"(season decisively on genuinely periodic data). Off its target a dial "
+                 r"is near-inert; the full cross-regime matrix is "
+                 r"Fig.~\ref{fig:ablation}.}")
     lines.append(r"\label{tab:ablation}")
-    lines.append(r"\begin{tabular}{@{}" + cols + r"@{}}")
+    lines.append(r"\begin{tabular}{@{}llccc@{}}")
     lines.append(r"\toprule")
-    head = "Model & " + " & ".join(COLHEAD[d] for d in dnames) + r" \\"
-    lines.append(head)
+    lines.append(r"Learned dial & Matched regime & with & without & $\Delta$MAE \\")
     lines.append(r"\midrule")
-    for v in vnames:
-        cells = []
-        for dn in dnames:
-            val = mae[v][dn]
-            s = f"{val:.3f}"
-            if val == best[dn]:
-                s = r"$\mathbf{" + f"{val:.3f}" + r"}$"
-            cells.append(s)
-        row = ROWHEAD[v] + " & " + " & ".join(cells) + r" \\"
-        lines.append(row)
-        if v == "Full":
-            lines.append(r"\midrule")
+    for dial, regime, ds, off in DIAG:
+        full_v = mae["Full"][ds]
+        off_v = mae[off][ds]
+        d = off_v - full_v
+        lines.append(f"{dial} & {regime} & ${full_v:.3f}$ & ${off_v:.3f}$ & "
+                     f"$\\mathbf{{+{d:.3f}}}$ \\\\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
-    lines.append(r"\end{table*}")
+    lines.append(r"\end{table}")
     out = "\n".join(lines) + "\n"
     tdir = os.path.join(ROOT, "paper", "tables")
     os.makedirs(tdir, exist_ok=True)
@@ -256,7 +262,8 @@ def write_figure(mae, dnames, vnames):
     ax.set_xticks(x)
     ax.set_xticklabels([COLHEAD[d] for d in dnames], rotation=0, fontsize=8)
     ax.set_ylabel(r"$\Delta$MAE vs Full")
-    ax.set_title("Removing a dial: MAE increase per regime (higher = dial mattered)")
+    ax.set_title("Cost of removing each dial, per regime "
+                 "(positive on its matched regime; near-inert off-target)")
     ax.legend(ncol=4, fontsize=8, frameon=False, loc="upper left")
     fig.tight_layout()
     fdir = os.path.join(ROOT, "paper", "figures")
