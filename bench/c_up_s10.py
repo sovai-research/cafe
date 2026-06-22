@@ -324,7 +324,11 @@ class _UnifiedCore:
         mean = self.csum / self.cw
         cov = self.cM2 / self.cw - np.outer(mean, mean)
         o = np.where(obs)[0]; m = np.where(miss)[0]
-        ridge = 1e-2 * (np.trace(cov) / max(self.N, 1) + EPS)
+        # diag(cov) and trace(cov) from a single diagonal extraction:
+        # diag(cov)_i = cM2_ii/cw - mean_i^2; trace = sum(diag). This replaces the
+        # separate np.diag(cov) and np.trace(cov) passes over the materialized cov.
+        cdiag = np.diagonal(self.cM2) / self.cw - mean * mean
+        ridge = 1e-2 * (cdiag.sum() / max(self.N, 1) + EPS)
         Soo = cov[np.ix_(o, o)] + ridge * np.eye(o.size)
         Smo = cov[np.ix_(m, o)]
         xo = resid[o] - mean[o]
@@ -334,7 +338,7 @@ class _UnifiedCore:
             cmean = mean[m] + Smo @ sol
             # conditional variance per missing cell: diag(cov_mm) - Smo Soo^-1 Smo^T
             B = cho_solve(c, Smo.T, check_finite=False)        # (o, m)
-            cvar = np.diag(cov)[m] - np.einsum("om,om->m", Smo.T, B)
+            cvar = cdiag[m] - np.einsum("om,om->m", Smo.T, B)
             cvar = np.maximum(cvar, EPS)
             return cmean, cvar
         except Exception:

@@ -73,6 +73,63 @@ _BLEND_WLR   = float(os.environ.get("BLEND_WLR", "0.5"))   # sweepable; default 
 
 
 # --------------------------------------------------------------------------- #
+# Partition-based order statistics (no full sort) that reproduce numpy's
+# default 'linear' interpolation EXACTLY. Used in place of np.percentile and
+# np.median in the hot time-FE / winsorize paths. Bit-identical to numpy.
+# --------------------------------------------------------------------------- #
+def _pct_1090(a):
+    """Return np.percentile(a, [10, 90]) (linear interp) via np.partition.
+
+    numpy 'linear': virtual index v = (n-1)*q, lo=floor(v), hi=ceil(v),
+    result = a_sorted[lo] + (a_sorted[hi]-a_sorted[lo])*(v-lo).
+    np.partition guarantees element k is in its sorted position and that all
+    elements before it are <= it (and after >= it), so a_sorted[k] == part[k]
+    for the partitioned k's; the +1 neighbor is the min of the upper part.
+    """
+    n = a.size
+    out = np.empty(2, dtype=np.float64)
+    for j, q in enumerate((0.10, 0.90)):
+        v = (n - 1) * q
+        lo = int(v)                      # floor (v >= 0)
+        frac = v - lo
+        if frac == 0.0:
+            part = np.partition(a, lo)
+            out[j] = part[lo]
+        else:
+            hi = lo + 1
+            part = np.partition(a, (lo, hi))
+            out[j] = _lerp(part[lo], part[hi], frac)
+    return out
+
+
+def _lerp(a, b, t):
+    """numpy's internal _lerp: a + (b-a)*t, switching to b-(b-a)*(1-t) when
+    t>=0.5 for matching round-off. Bit-identical to numpy's interpolation."""
+    diff = b - a
+    out = a + diff * t
+    if t >= 0.5:
+        out = b - diff * (1.0 - t)
+    return out
+
+
+def _median_part(a):
+    """Return np.median(a) via np.partition (no full sort), bit-identical.
+
+    numpy median: for odd n, the middle order stat; for even n, the mean of
+    the two central order stats computed as mid_lo + (mid_hi-mid_lo)*0.5
+    (the 'linear' interp at q=0.5).
+    """
+    n = a.size
+    mid = n // 2
+    if n % 2 == 1:
+        part = np.partition(a, mid)
+        return float(part[mid])
+    lo = mid - 1
+    part = np.partition(a, (lo, mid))
+    return float(_lerp(part[lo], part[mid], 0.5))
+
+
+# --------------------------------------------------------------------------- #
 # Fourier seasonal design (causal: depends only on the time index, not values).
 # Periods are data-agnostic harmonics of the window; ARD on beta shrinks unused
 # ones to ~0 so "no seasonality" is the learned special case.
@@ -451,7 +508,7 @@ class _UnifiedCore:
             band = k_nu * 1.4826 * fsc
             # Clip only the IDIOSYNCRATIC part: a coherent level/regime shift moves all
             # features together and must NOT be clipped; a genuine outlier is isolated.
-            common = np.median(resid[obs]) if obs.sum() >= 4 else 0.0
+            common = _median_part(resid[obs]) if obs.sum() >= 4 else 0.0
             idio = resid[obs] - common
             resid_c[obs] = common + np.clip(idio, -band[obs], band[obs])
         # contemporaneous common level (time fixed effect): the cross-sectional mean of
@@ -461,7 +518,7 @@ class _UnifiedCore:
         # tails do not bias it.
         if obs.sum() >= 3:
             rr = resid_c[obs]
-            lo, hi = np.percentile(rr, [10, 90])
+            lo, hi = _pct_1090(rr)
             tfe_raw = float(np.mean(rr[(rr >= lo) & (rr <= hi)])) if hi > lo else float(np.mean(rr))
             # EB shrinkage of the time-FE: a per-time level estimated from n_obs cells
             # has sampling variance ~ idio_var / n_obs; shrink toward 0 by the James-
@@ -723,7 +780,7 @@ def _impute_panel(X, meta):
         for f in range(N):
             col = resid_t[obs_t[:, f], f]
             if col.size >= 3:
-                lo, hi = np.percentile(col, [10, 90])
+                lo, hi = _pct_1090(col)
                 m = col[(col >= lo) & (col <= hi)]
                 raw = float(m.mean()) if m.size else float(col.mean())
                 no = col.size; iv = max(float(np.var(col)), EPS); tau2 = max(raw * raw, EPS)

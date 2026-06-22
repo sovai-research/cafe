@@ -718,18 +718,48 @@ def _impute_panel(X, meta):
         resid_t = Xt - efe                               # (n_e, N), de-entity-FE
 
         # time FE: robust (trimmed) cross-entity mean of the observed de-FE residual per
-        # feature -- the contemporaneous time effect (shrunk by support).
+        # feature -- the contemporaneous time effect (shrunk by support).  Vectorized,
+        # mask-aware batch over all features (bit-identical to the per-feature loop).
         time_fe = np.zeros(N)
-        for f in range(N):
-            col = resid_t[obs_t[:, f], f]
-            if col.size >= 3:
-                lo, hi = np.percentile(col, [10, 90])
-                m = col[(col >= lo) & (col <= hi)]
-                raw = float(m.mean()) if m.size else float(col.mean())
-                no = col.size; iv = max(float(np.var(col)), EPS); tau2 = max(raw * raw, EPS)
-                time_fe[f] = (tau2 / (tau2 + iv / no)) * raw
-            elif col.size > 0:
-                time_fe[f] = float(col.mean())
+        cnt = obs_t.sum(0).astype(np.intp)                # observed entities per feature
+        # masked residual: unobserved -> +inf so they sort to the end of each column.
+        masked = np.where(obs_t, resid_t, np.inf)
+        srt = np.sort(masked, axis=0)                     # (n_e, N) ascending, inf last
+        srt = np.where(np.isinf(srt), 0.0, srt)           # neutralize pads (big-cols only used)
+        n_e = srt.shape[0]
+        cols = np.arange(N)
+
+        # column mean (over observed) for the col.mean() fallbacks.
+        col_sum = np.where(obs_t, resid_t, 0.0).sum(0)
+        col_mean = col_sum / np.maximum(cnt, 1)
+
+        big = cnt >= 3                                    # features using the trimmed path
+        if big.any():
+            # numpy 'linear' percentile on the first `cnt[f]` sorted entries of column f.
+            nm1 = (cnt - 1).astype(float)
+            def _pctl(p):
+                vi = (p / 100.0) * nm1                    # virtual index per feature
+                i0 = np.floor(vi).astype(np.intp)
+                i0 = np.clip(i0, 0, n_e - 1)
+                i1 = np.clip(i0 + 1, 0, n_e - 1)
+                g = vi - i0
+                a0 = srt[i0, cols]; a1 = srt[i1, cols]
+                return a0 + g * (a1 - a0)
+            lo = _pctl(10.0); hi = _pctl(90.0)
+            # trimmed mean: observed cells within [lo, hi] per feature.
+            inwin = obs_t & (resid_t >= lo[None, :]) & (resid_t <= hi[None, :])
+            msum = np.where(inwin, resid_t, 0.0).sum(0)
+            mcnt = inwin.sum(0)
+            raw = np.where(mcnt > 0, msum / np.maximum(mcnt, 1), col_mean)
+            # population variance over observed cells (ddof=0), matching np.var(col).
+            dev = np.where(obs_t, resid_t - col_mean[None, :], 0.0)
+            iv = np.maximum((dev * dev).sum(0) / np.maximum(cnt, 1), EPS)
+            tau2 = np.maximum(raw * raw, EPS)
+            no = cnt.astype(float)
+            shrunk = (tau2 / (tau2 + iv / np.maximum(no, 1))) * raw
+            time_fe[big] = shrunk[big]
+        small = (~big) & (cnt > 0)                        # 1 or 2 observed -> plain mean
+        time_fe[small] = col_mean[small]
         resid_t2 = resid_t - time_fe[None, :]            # de-time-FE residual
 
         # AR prediction of the time factor (Kalman predict)

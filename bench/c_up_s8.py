@@ -364,7 +364,8 @@ class _UnifiedCore:
         if irls:
             pred0 = Wo @ m0
             r2 = (ro - pred0) ** 2
-            wts = self._wt(r2)                  # (no,)
+            # inline _wt (per-row hot path): w = (nu+1)/(nu + r2/scale2)
+            wts = (self.nu + 1.0) / (self.nu + r2 / max(self.scale2, EPS))  # (no,)
             inv_psi = wts / psi_o
         else:
             inv_psi = 1.0 / psi_o
@@ -525,35 +526,45 @@ class _UnifiedCore:
         # robust residuals on observed cells (use the clipped residual for the scale
         # so the per-feature band itself is robust to outliers).
         if obs.any():
-            pred_obs = lr[obs]
-            r2v = (resid_c[obs] - pred_obs) ** 2     # time-FE-removed residual
+            # --- fused masked EW-stat tail ---------------------------------------
+            # All the per-feature online updates below operate on the SAME observed
+            # subset of features; gather the obs index ONCE and materialize the shared
+            # vectors (resid_c[obs], lr[obs], their difference idio_now, and idio_now^2)
+            # a single time. The originals recomputed resid_c[obs]-lr[obs] three times
+            # (r2v, lrr2, psi) and re-evaluated boolean masking for fsc/psi/idio
+            # independently. Pure overhead reduction -- the arithmetic, the order of the
+            # EW recurrences, and the float results are bit-identical.
+            oi = np.where(obs)[0]                     # integer index of observed cells
+            lam = self.lam
+            rc_o = resid_c[oi]
+            lr_o = lr[oi]
+            idio_now = rc_o - lr_o
+            r2v = idio_now * idio_now                 # (resid_c-lr)^2 == (resid_c-pred_obs)^2
             self._update_robust_scale(r2v)
             # per-feature EW robust scale (abs deviation of de-FE/de-season value)
-            self.fsc_sum[obs] = self.lam * self.fsc_sum[obs] + np.abs(resid_c[obs])
-            self.fsc_cnt[obs] = self.lam * self.fsc_cnt[obs] + 1.0
+            self.fsc_sum[oi] = lam * self.fsc_sum[oi] + np.abs(rc_o)
+            self.fsc_cnt[oi] = lam * self.fsc_cnt[oi] + 1.0
             # EW variance of the low-rank prediction residual (robust resid - lr)
-            lrr2 = float(np.mean((resid_c[obs] - lr[obs]) ** 2))
-            self.lrv_sum = self.lam * self.lrv_sum + lrr2
-            self.lrv_cnt = self.lam * self.lrv_cnt + 1.0
+            lrr2 = float(np.mean(r2v))
+            self.lrv_sum = lam * self.lrv_sum + lrr2
+            self.lrv_cnt = lam * self.lrv_cnt + 1.0
             self.lr_var = self.lrv_sum / max(self.lrv_cnt, 1e-3)
             # per-feature idiosyncratic variance psi (EW): variance of the residual the
             # factors do NOT explain. This is the noise floor of the Gaussian model;
             # large psi_j => feature j trusts the cross-section/factors less.
-            self.psi_sum[obs] = self.lam * self.psi_sum[obs] \
-                + (resid_c[obs] - lr[obs]) ** 2
-            self.psi_cnt[obs] = self.lam * self.psi_cnt[obs] + 1.0
+            self.psi_sum[oi] = lam * self.psi_sum[oi] + r2v
+            self.psi_cnt[oi] = lam * self.psi_cnt[oi] + 1.0
             self.psi = self.psi_sum / np.maximum(self.psi_cnt, 1e-3)
             # idiosyncratic AR(1): autocorrelation of the idio residual (resid_c - lr).
-            idio_now = resid_c[obs] - lr[obs]
-            prev = self.idio_last[obs]
-            fresh = self.idio_age[obs] <= 1.5             # consecutive obs only
+            prev = self.idio_last[oi]
+            fresh = self.idio_age[oi] <= 1.5             # consecutive obs only
             if np.any(fresh):
                 pn = prev[fresh]
-                self.ric_num = self.lam * self.ric_num + float(np.sum(idio_now[fresh] * pn))
-                self.ric_den = self.lam * self.ric_den + float(np.sum(pn * pn))
+                self.ric_num = lam * self.ric_num + float(np.sum(idio_now[fresh] * pn))
+                self.ric_den = lam * self.ric_den + float(np.sum(pn * pn))
                 self.rho_idio = float(np.clip(self.ric_num / max(self.ric_den, 1e-6), 0.0, 0.995))
-            self.idio_last[obs] = idio_now
-            self.idio_age[obs] = 0.0
+            self.idio_last[oi] = idio_now
+            self.idio_age[oi] = 0.0
 
         # seasonal beta via online ridge (RLS), closed-form. Target is (x - mu) on
         # observed cells; EW-forgotten so it tracks drifting seasonality. ARD per
@@ -596,7 +607,8 @@ class _UnifiedCore:
         # parameter learning, so W / covariance / scale stay clean (robust emerges).
         if obs.any():
             r2row = float(np.mean((resid[obs] - lr[obs]) ** 2))
-            row_w = self._wt(r2row)
+            # inline _wt (per-row hot path)
+            row_w = (self.nu + 1.0) / (self.nu + r2row / max(self.scale2, EPS))
         else:
             row_w = 1.0
 

@@ -325,17 +325,24 @@ class _UnifiedCore:
         cov = self.cM2 / self.cw - np.outer(mean, mean)
         o = np.where(obs)[0]; m = np.where(miss)[0]
         ridge = 1e-2 * (np.trace(cov) / max(self.N, 1) + EPS)
-        Soo = cov[np.ix_(o, o)] + ridge * np.eye(o.size)
-        Smo = cov[np.ix_(m, o)]
-        xo = resid[o] - mean[o]
+        # ---- float32 linalg fast-path (ACCURACY-GATED) ----
+        # The conditional-mean solve is the bandwidth-dominated step here (Soo can be
+        # ~hundreds x hundreds in the wide/highrank regime). The pooled EW covariance is
+        # accumulated in float64 (range); only this local solve runs in float32 to cut
+        # the memory traffic of cho_factor + the two cho_solve back-substitutions. The
+        # outputs are cast back to float64 for the downstream blend. May move accuracy.
+        Soo = (cov[np.ix_(o, o)] + ridge * np.eye(o.size)).astype(np.float32)
+        Smo = cov[np.ix_(m, o)].astype(np.float32)
+        xo = (resid[o] - mean[o]).astype(np.float32)
+        diag_cov_m = np.diag(cov)[m]
         try:
             c = cho_factor(Soo, lower=True, check_finite=False)
             sol = cho_solve(c, xo, check_finite=False)
-            cmean = mean[m] + Smo @ sol
+            cmean = mean[m] + (Smo @ sol).astype(np.float64)
             # conditional variance per missing cell: diag(cov_mm) - Smo Soo^-1 Smo^T
             B = cho_solve(c, Smo.T, check_finite=False)        # (o, m)
-            cvar = np.diag(cov)[m] - np.einsum("om,om->m", Smo.T, B)
-            cvar = np.maximum(cvar, EPS)
+            quad = np.einsum("om,om->m", Smo.T, B).astype(np.float64)
+            cvar = np.maximum(diag_cov_m - quad, EPS)
             return cmean, cvar
         except Exception:
             return None, None
@@ -368,16 +375,25 @@ class _UnifiedCore:
             inv_psi = wts / psi_o
         else:
             inv_psi = 1.0 / psi_o
-        # posterior precision (R x R) and mean
-        WtP = Wo.T * inv_psi[None, :]           # (R, no)
-        prec = WtP @ Wo + np.diag(1.0 / s)
-        rhs = WtP @ ro + m0 / s
+        # posterior precision (R x R) and mean. ---- float32 fast-path ----
+        # The expensive accumulation WtP @ Wo / WtP @ ro is the per-row bandwidth term
+        # (it touches every observed cell, O(no*R)); running it in float32 halves that
+        # traffic. The R x R SPD solve is then done in float32 and cast back. Accumulators
+        # that need range (psi, s, scale2) stay float64; only this local solve narrows.
+        Wo32 = Wo.astype(np.float32)
+        ro32 = ro.astype(np.float32)
+        inv_psi32 = inv_psi.astype(np.float32)
+        s32 = s.astype(np.float32)
+        m032 = m0.astype(np.float32)
+        WtP = Wo32.T * inv_psi32[None, :]           # (R, no)
+        prec = WtP @ Wo32 + np.diag((1.0 / s32).astype(np.float32))
+        rhs = WtP @ ro32 + m032 / s32
         # prec is a tiny SPD R x R; np.linalg.solve is one LAPACK call without scipy's
         # per-call cho_factor+cho_solve wrapper overhead (paid once PER ROW here).
         try:
-            z_post = np.linalg.solve(prec, rhs)
+            z_post = np.linalg.solve(prec, rhs).astype(np.float64)
         except np.linalg.LinAlgError:
-            z_post = np.linalg.lstsq(prec, rhs, rcond=None)[0]
+            z_post = np.linalg.lstsq(prec, rhs, rcond=None)[0].astype(np.float64)
         return z_post, self.W @ z_post
 
     def _update_robust_scale(self, r2_vals):

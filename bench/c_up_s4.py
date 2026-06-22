@@ -765,8 +765,9 @@ def _impute_panel(X, meta):
         except Exception:
             g_t = np.linalg.lstsq(Gg, Atr + lam_z * g_pred, rcond=None)[0]
 
-        # per-entity loading update A[e] given g_t, Wt (ARD ridge)
-        recon = np.zeros((len(rs), N))
+        # per-entity loading update A[e] given g_t, Wt (ARD ridge). The A[e] solve is
+        # independent per entity (no pooling across k) -> identical arithmetic kept in the
+        # loop; recon is then a single batched matmul, bit-identical row-by-row.
         for k in range(len(rs)):
             e = ent_t[k]; ob = obs_t[k]
             if ob.any():
@@ -778,20 +779,24 @@ def _impute_panel(X, meta):
                                      rhs, check_finite=False)
                 except Exception:
                     A[e] = np.linalg.lstsq(Gk, rhs, rcond=None)[0]
-            recon[k] = (A[e] * g_t) @ Wt.T                 # (N,)
+        recon = (A[ent_t] * g_t[None, :]) @ Wt.T           # (n_e, N)
 
         # fill missing cells: entity FE + time FE + low-rank recon + idiosyncratic carry.
         # The carry = decayed last idiosyncratic residual (resid - recon) of THAT
         # (entity,feature); it extrapolates contiguous per-series gaps and synchronized
         # blackouts that the contemporaneous cross-section cannot reach.
+        # Vectorized over the entities present at t (each writes its own entity rows of the
+        # snapshot, so there is no cross-entity overwrite -> bit-identical).
         idio_age += 1.0
-        for k in range(len(rs)):
-            e = ent_t[k]; miss = ~obs_t[k]
-            if miss.any():
-                cr = rho_idio ** np.minimum(idio_age[e, miss], 60.0) * idio_last[e, miss]
-                out[rs[k], miss] = efe[k, miss] + time_fe[miss] + recon[k, miss] + cr
-                res_snap[e, miss] = recon[k, miss]
-                res_have[e, miss] = True
+        miss_t = ~obs_t                                    # (n_e, N)
+        if miss_t.any():
+            carry = (rho_idio ** np.minimum(idio_age[ent_t], 60.0)) * idio_last[ent_t]
+            full = efe + time_fe[None, :] + recon + carry  # (n_e, N)
+            outt = out[rs]
+            outt[miss_t] = full[miss_t]
+            out[rs] = outt
+            rss = res_snap[ent_t]; rss[miss_t] = recon[miss_t]; res_snap[ent_t] = rss
+            rhh = res_have[ent_t]; rhh[miss_t] = True; res_have[ent_t] = rhh
 
         # --- robust scale + nu EM from block residuals (observed) + carry learning ---
         rv = []

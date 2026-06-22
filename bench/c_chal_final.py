@@ -32,6 +32,11 @@ import w9_cusum_reset as _w9
 
 def online_impute(X, meta):
     X = np.ascontiguousarray(np.asarray(X, dtype=float))
+    # Treat non-finite inputs (+/-Inf) as missing so no downstream core (e.g. an
+    # SVD/effective-rank estimate) spins on them. Robustness invariant: never hang,
+    # always return a finite same-shape array.
+    if not np.isfinite(X).all():
+        X[~np.isfinite(X)] = np.nan
     if _is_panel(meta):
         return _w6.online_impute(X, meta)          # panel specialist (else -> FE)
     T, N = X.shape

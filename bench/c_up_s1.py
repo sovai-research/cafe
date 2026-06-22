@@ -134,6 +134,15 @@ class _UnifiedCore:
         self.mu_cnt = np.zeros((E, N))
         self.g_sum = np.zeros(N)
         self.g_cnt = np.zeros(N)
+        # Incremental mu cache (SPEED): _mu(e) == where(mu_cnt[e]>0, own[e], g).
+        # Initially all counts are 0 so own and g are both 0 -> cache is all zeros,
+        # exactly matching the original where(False, ., 0). After each FE-accumulator
+        # change we patch ONLY the observed entries (O(n_obs)) instead of recomputing
+        # the full-N np.where on every call. _g_cache holds the pooled fallback;
+        # _mu_cache[e] holds the per-entity resolved value (own where seen, else g).
+        self._E = E
+        self._g_cache = np.zeros(N)
+        self._mu_cache = np.zeros((E, N))
         # trailing residual snapshot window (for W refit), filled causally. Held in a
         # preallocated RING (capacity 2*WINDOW) addressed by a head index + count: appending
         # a row is O(N) and dropping the oldest is O(1) (advance head). This replaces the old
@@ -198,10 +207,33 @@ class _UnifiedCore:
     # -- feature FE (mu) for entity e from history <= current (expanding),
     #    falling back to the pooled global expanding mean where e is unseen --
     def _mu(self, e=0):
-        g = np.where(self.g_cnt > 0, self.g_sum / np.maximum(self.g_cnt, 1), 0.0)
-        cnt = self.mu_cnt[e]
-        own = np.where(cnt > 0, self.mu_sum[e] / np.maximum(cnt, 1), 0.0)
-        return np.where(cnt > 0, own, g)
+        # Cache maintained incrementally by _mu_update on every accumulator change;
+        # returns exactly where(mu_cnt[e]>0, mu_sum[e]/cnt, g) as before.
+        return self._mu_cache[e]
+
+    def _mu_update(self, e, obs):
+        # Patch ONLY the observed entries (O(n_obs)). After the FE accumulators were
+        # updated on `obs`: (1) the pooled fallback g changes on obs; (2) entity e's own
+        # mean changes on obs and cnt[e,obs] is now >0 so e uses its own value there;
+        # (3) for OTHER entities, the obs entries that still have cnt==0 must track the
+        # new g. Non-obs entries are untouched (ratios sum/cnt unchanged with no decay).
+        gc = self.g_cnt[obs]
+        gnew = np.where(gc > 0, self.g_sum[obs] / np.maximum(gc, 1), 0.0)
+        self._g_cache[obs] = gnew
+        cnt_e = self.mu_cnt[e, obs]
+        own_e = np.where(cnt_e > 0, self.mu_sum[e, obs] / np.maximum(cnt_e, 1), 0.0)
+        self._mu_cache[e, obs] = np.where(cnt_e > 0, own_e, gnew)
+        if self._E > 1:
+            for eo in range(self._E):
+                if eo == e:
+                    continue
+                ce = self.mu_cnt[eo, obs]
+                unseen = ce <= 0
+                if unseen.any():
+                    oi = np.asarray(obs).nonzero()[0] if obs.dtype == bool else obs
+                    # update only the unseen-of-obs columns to the new g
+                    cols = oi[unseen]
+                    self._mu_cache[eo, cols] = self._g_cache[cols]
 
     # -- robust IRLS weight for a residual given current nu, scale --
     def _wt(self, r2):
@@ -620,6 +652,8 @@ class _UnifiedCore:
         self.mu_cnt[eid, obs] = self.lam_mu * self.mu_cnt[eid, obs] + 1.0
         self.g_sum[obs] = self.lam_mu * self.g_sum[obs] + x_obs_row[obs]
         self.g_cnt[obs] = self.lam_mu * self.g_cnt[obs] + 1.0
+        # incrementally patch the cached mu (O(n_obs)) to reflect the new accumulators
+        self._mu_update(eid, obs)
 
         # periodic pooled W / a / ARD refit
         self.step += 1

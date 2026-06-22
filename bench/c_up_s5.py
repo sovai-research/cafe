@@ -577,8 +577,7 @@ class _UnifiedCore:
                 pen = self.beta_alpha / (ident ** 2)
                 G = self.PtP + np.diag(pen)
                 try:
-                    c = cho_factor(G, lower=True, check_finite=False)
-                    self.beta = cho_solve(c, self.Pty, check_finite=False)
+                    self.beta = np.linalg.solve(G, self.Pty)
                 except Exception:
                     self.beta = np.linalg.lstsq(G, self.Pty, rcond=None)[0]
                 be = np.sum(self.beta ** 2, axis=1)
@@ -760,8 +759,7 @@ def _impute_panel(X, meta):
         lam_z = (a_ar * a_ar) / (1.0 - a_ar * a_ar + 1e-2)
         Gg = AtA + np.diag(alpha) + lam_z * I_R
         try:
-            g_t = cho_solve(cho_factor(Gg, lower=True, check_finite=False),
-                            Atr + lam_z * g_pred, check_finite=False)
+            g_t = np.linalg.solve(Gg, Atr + lam_z * g_pred)
         except Exception:
             g_t = np.linalg.lstsq(Gg, Atr + lam_z * g_pred, rcond=None)[0]
 
@@ -774,8 +772,7 @@ def _impute_panel(X, meta):
                 Gk = Bk.T @ Bk + np.diag(alpha)
                 rhs = Bk.T @ resid_t2[k, ob]
                 try:
-                    A[e] = cho_solve(cho_factor(Gk, lower=True, check_finite=False),
-                                     rhs, check_finite=False)
+                    A[e] = np.linalg.solve(Gk, rhs)
                 except Exception:
                     A[e] = np.linalg.lstsq(Gk, rhs, rcond=None)[0]
             recon[k] = (A[e] * g_t) @ Wt.T                 # (N,)
@@ -846,8 +843,7 @@ def _impute_panel(X, meta):
                     Gf = Af.T @ Af + np.diag(alpha)
                     rhs = Af.T @ Rb[w, f]
                     try:
-                        Wt[f] = cho_solve(cho_factor(Gf, lower=True, check_finite=False),
-                                          rhs, check_finite=False)
+                        Wt[f] = np.linalg.solve(Gf, rhs)
                     except Exception:
                         Wt[f] = np.linalg.lstsq(Gf, rhs, rcond=None)[0]
                 # ARD on factors from combined energy of the row factor and Wt columns

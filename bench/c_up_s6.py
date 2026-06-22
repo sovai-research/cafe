@@ -370,7 +370,8 @@ class _UnifiedCore:
             inv_psi = 1.0 / psi_o
         # posterior precision (R x R) and mean
         WtP = Wo.T * inv_psi[None, :]           # (R, no)
-        prec = WtP @ Wo + np.diag(1.0 / s)
+        prec = WtP @ Wo                         # fresh C-contiguous (R, R)
+        prec.flat[::R + 1] += 1.0 / s           # add factor-prior precision in place
         rhs = WtP @ ro + m0 / s
         # prec is a tiny SPD R x R; np.linalg.solve is one LAPACK call without scipy's
         # per-call cho_factor+cho_solve wrapper overhead (paid once PER ROW here).

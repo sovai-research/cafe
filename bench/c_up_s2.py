@@ -114,6 +114,7 @@ class _UnifiedCore:
         self.W = 0.01 * rng.standard_normal((N, self.R))     # loadings (pooled)
         self.alpha = np.ones(self.R)                          # ARD precisions on W cols
         self.beta = np.zeros((self.P, N)) if self.P else np.zeros((0, N))
+        self._beta_nz = False                                 # True once beta refit runs
         self.beta_alpha = np.ones(max(self.P, 1))             # ARD on Fourier basis
         # online ridge (RLS) accumulators for the seasonal fit of (x-mu) on Phi.
         # Phi is shared across features so PtP is P x P; Pty is P x N. EW-forgotten so
@@ -426,8 +427,15 @@ class _UnifiedCore:
         miss = ~obs
 
         mu = self._mu(eid)
-        # seasonal mean contribution (shrinks via beta ARD)
-        season = (fourier_t @ self.beta) if self.P else np.zeros(N)
+        # seasonal mean contribution (shrinks via beta ARD). Short-circuit to a zero
+        # vector when no seasonality has been learned yet (beta all-zero): the matvec
+        # fourier_t @ 0 == 0 exactly, so this is bit-identical but skips the (P x N)
+        # multiply (which dominates early, before any beta refit, and whenever ARD has
+        # shrunk every harmonic to ~0).
+        if self.P and self._beta_nz:
+            season = fourier_t @ self.beta
+        else:
+            season = np.zeros(N)
 
         # residual = x - mu - season (on observed)
         resid = np.zeros(N)
@@ -581,6 +589,7 @@ class _UnifiedCore:
                     self.beta = cho_solve(c, self.Pty, check_finite=False)
                 except Exception:
                     self.beta = np.linalg.lstsq(G, self.Pty, rcond=None)[0]
+                self._beta_nz = True
                 be = np.sum(self.beta ** 2, axis=1)
                 self.beta_alpha = self.N / (be + 1.0)
 
@@ -639,8 +648,18 @@ def _impute_2d(X, meta):
     core = _UnifiedCore(N, periods, E=1)
     out = X.copy()
     z_prev = None
+    # Precompute the full (T, P) Fourier design matrix ONCE with vectorized sin/cos over
+    # all t, instead of calling _fourier_row(t) inside the per-row loop. Bit-identical:
+    # row t of FT equals _fourier_row(t, periods) = [sin(2pi t/p), cos(2pi t/p)]. It is a
+    # pure function of the time index (no data values), so it stays point-in-time/causal.
+    if periods:
+        per = np.asarray(periods, float)
+        ph = (2.0 * np.pi / per)[None, :] * np.arange(T, dtype=float)[:, None]  # (T, P/2)
+        FT = np.concatenate([np.sin(ph), np.cos(ph)], axis=1)                   # (T, P)
+    else:
+        FT = np.zeros((T, 0))
     for t in range(T):
-        ft = _fourier_row(t, periods)
+        ft = FT[t]
         filled, z_t = core.process_row(X[t], t, z_prev, ft, eid=0)
         out[t] = filled
         z_prev = z_t
