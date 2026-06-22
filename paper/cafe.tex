@@ -328,8 +328,12 @@ missingness---is robust across seeds and normalisations.}
 \setlength{\tabcolsep}{4pt}
 \caption{Beijing Air-Quality, SAITS protocol (standardised, $10\%$ MCAR, MAE
 $\downarrow$). Deep baselines as reported by~\cite{du2023}; they are
-\emph{bidirectional} (use the future). \cafe{} is causal and runs on one CPU
-core.}
+\emph{bidirectional} (use the future). Linear interpolation (our run) is the
+telling cheap baseline: under \emph{scattered} point missingness a gap is flanked
+by observed neighbours, so a straight line between them is hard to beat---it
+already edges every GPU deep net---but it too is \emph{non-causal} (it reads the
+next observed value). \cafe{} is the only causal method here, and still lowest, on
+one CPU core.}
 \label{tab:sota}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
@@ -341,6 +345,7 @@ GP-VAE~\cite{fortuin2020} & .268 & \ding{55} & VAE & GPU \\
 BRITS~\cite{cao2018}      & .153 & \ding{55} & BiRNN & GPU \\
 Transformer~\cite{vaswani2017} & .158 & \ding{55} & Attn & GPU \\
 SAITS~\cite{du2023}       & .137 & \ding{55} & Attn & GPU \\
+Linear interp             & .135 & \ding{55} & interp & CPU \\
 \textbf{\cafe{} (ours)}   & $\mathbf{.108}$ & \ding{51} & factor & \textbf{CPU} \\
 \bottomrule
 \end{tabular}

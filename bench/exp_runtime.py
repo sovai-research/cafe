@@ -74,7 +74,7 @@ def head_to_head():
         ("CAFE (ours)",   P.online_impute,   True,  "factor"),
         ("SoftImpute",    S.impute,          False, "low-rank"),
         ("TRMF",          Tr.impute,         False, "MF+AR"),
-        ("Linear interp", B.linear_interp,   True,  "1D interp"),
+        ("Linear interp", B.linear_interp,   False, "1D interp"),
         ("kNN",           B.knn_impute,      False, "kNN"),
     ]
     rows = []

@@ -52,6 +52,32 @@ def test_polars_roundtrip():
     assert out.null_count().sum_horizontal().item() == 0
 
 
+def test_mixed_columns_passthrough_pandas():
+    """Point-and-shoot: a raw frame with a date + string column 'just works' --
+    numeric columns are imputed, non-numeric columns pass through, order preserved."""
+    import pandas as pd
+    X = _data(T=80, N=3)
+    df = pd.DataFrame(X, columns=["a", "b", "c"])
+    df.insert(0, "date", pd.date_range("2020-01-01", periods=len(df), freq="h"))
+    df["label"] = ["x", "y"] * (len(df) // 2)
+    out = cafe.impute(df)
+    assert list(out.columns) == list(df.columns)                 # order preserved
+    assert (out["date"] == df["date"]).all()                     # date untouched
+    assert (out["label"] == df["label"]).all()                   # string untouched
+    assert out[["a", "b", "c"]].notna().all().all()              # numeric filled
+
+
+def test_mixed_columns_passthrough_polars():
+    import polars as pl
+    X = _data(T=80, N=3)
+    df = pl.DataFrame({"date": [f"t{i}" for i in range(len(X))],
+                       "a": X[:, 0], "b": X[:, 1], "c": X[:, 2]})
+    out = cafe.impute(df)
+    assert out.columns == df.columns                             # order preserved
+    assert out["date"].to_list() == df["date"].to_list()         # string untouched
+    assert out.select(["a", "b", "c"]).null_count().sum_horizontal().item() == 0
+
+
 def test_capabilities():
     res = cafe.CAFE().run(_data())
     assert np.isfinite(np.asarray(res.imputed)).all()

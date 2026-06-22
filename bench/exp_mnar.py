@@ -61,7 +61,7 @@ MECH_LABEL = {"mcar": "MCAR", "mar": "MAR", "mnar": "MNAR", "block": "Block"}
 METHODS = [
     ("CAFE", cafe_impute, True),
     ("LOCF", locf_impute, True),
-    ("LinInterp", linear_interp, True),
+    ("LinInterp", linear_interp, False),   # np.interp reads the NEXT obs -> non-causal
     ("SoftImpute", m_softimpute.impute, False),
 ]
 
@@ -153,9 +153,10 @@ def make_table(avg):
         r"-- each cell's drop probability rises with its own value, so large "
         r"values censor themselves (the hard case that biases every estimator). "
         r"\textbf{Block}: per-column contiguous blackouts, leaving no nearby "
-        r"observation to interpolate from. \cafe{} and LOCF/LinInterp are "
-        r"strictly causal (point-in-time); SoftImpute is a non-causal batch "
-        r"reference (\emph{italic}). Bold $=$ best \emph{causal} method per row.}")
+        r"observation to interpolate from. \cafe{} and LOCF are strictly causal "
+        r"(point-in-time); LinInterp (reads the next observed value) and "
+        r"SoftImpute are non-causal references (\emph{italic}). Bold $=$ best "
+        r"\emph{causal} method per row.}")
     lines.append(r"\label{tab:mnar}")
     lines.append(r"\begin{tabular}{@{}l" + "c" * len(METHODS) + r"@{}}")
     lines.append(r"\toprule")

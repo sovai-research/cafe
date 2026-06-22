@@ -50,7 +50,7 @@ CAP_ROWS = 4000
 METHODS = [
     ("CAFE",         cafe_impute,            True),   # causal (ours)
     ("LOCF",         locf_impute,            True),   # causal local
-    ("LinearInterp", linear_interp,          True),   # causal-ish local
+    ("LinearInterp", linear_interp,          False),  # np.interp reads the gap's far (future) endpoint -> non-causal
     ("SoftImpute",   m_softimpute.impute,    False),  # non-causal batch ref
 ]
 
@@ -146,7 +146,7 @@ STYLE = {
                          zorder=2, ls="--"),
 }
 LABELS = {"CAFE": "CAFÉ (causal, ours)", "LOCF": "LOCF (causal)",
-          "LinearInterp": "Linear interp (causal)",
+          "LinearInterp": "Linear interp (non-causal)",
           "SoftImpute": "SoftImpute (non-causal ref.)"}
 
 
@@ -188,11 +188,13 @@ def make_table(agg_mae):
                  r"gaps.} MAE $\downarrow$ on the held-out block cells as a single "
                  r"per-column gap grows from short ($2\%$ of the series) to long "
                  r"($40\%$), averaged over three datasets (Synthetic, ETTh1, "
-                 r"Beijing) and three seeds. Local causal methods (LOCF, linear) "
-                 r"carry/extrapolate and blow up; \cafe{} stays bounded via its "
-                 r"AR\,+\,season\,+\,factor structure. SoftImpute is a "
-                 r"\emph{non-causal} batch reference (sees the whole series). "
-                 r"\textbf{Bold} = best \emph{causal} method.}")
+                 r"Beijing) and three seeds. The cheap local baselines saturate: "
+                 r"causal LOCF carries the last value, while linear interpolation "
+                 r"draws a straight line across the gap from its \emph{far} (future) "
+                 r"endpoint---non-causal, yet still blows up. \cafe{} stays bounded "
+                 r"via its AR\,+\,season\,+\,factor structure. SoftImpute is a "
+                 r"non-causal batch reference. Non-causal methods are "
+                 r"\emph{italic}; \textbf{bold} $=$ best \emph{causal} method.}")
     lines.append(r"\label{tab:longgap}")
     lines.append(r"\begin{tabular}{@{}lccc@{}}")
     lines.append(r"\toprule")
@@ -206,10 +208,12 @@ def make_table(agg_mae):
         best_causal.append(min(vals, key=lambda kv: kv[1])[0])
 
     disp = {"CAFE": r"\textbf{\cafe{} (ours)}", "LOCF": "LOCF",
-            "LinearInterp": "Linear interp", "SoftImpute": r"\emph{SoftImpute}"}
+            "LinearInterp": r"\emph{Linear interp}", "SoftImpute": r"\emph{SoftImpute}"}
+    _seen_noncausal = False
     for name, _, causal in METHODS:
-        if name == "SoftImpute":
+        if not causal and not _seen_noncausal:
             lines.append(r"\midrule")
+            _seen_noncausal = True
         cells = []
         for col, k in enumerate(idx):
             bold = causal and (name == best_causal[col])
