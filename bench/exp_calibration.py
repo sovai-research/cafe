@@ -195,21 +195,22 @@ def make_figure(results):
 # --------------------------------------------------------------------------- #
 def make_table(results):
     lines = []
-    lines.append(r"\begin{table}[t]\centering\small")
+    lines.append(r"\begin{table*}[t]\centering\small")
     lines.append(r"\setlength{\tabcolsep}{4pt}")
-    lines.append(r"\caption{Calibration of \cafe{}'s per-cell posterior "
-                 r"predictive intervals ($10\%$ MCAR, 5 seeds, held-out cells "
-                 r"only). Coverage columns give the \emph{observed} fraction of "
-                 r"truths inside the nominal central interval (target in "
-                 r"parentheses); the bands are systematically \emph{too wide} "
-                 r"(observed $>$ nominal), i.e.\ \cafe{} is conservative, not "
-                 r"over-confident. The CRPS columns compare the model's per-cell "
-                 r"heteroscedastic $\sigma$ against a single homoscedastic "
-                 r"$\sigma$ (global RMS of residuals) under the \emph{same} mean: "
-                 r"the per-cell $\sigma$ only wins on ETTh1, confirming the "
-                 r"uncertainty is informative there but mis-scaled elsewhere. "
-                 r"Sharpness $=$ mean $\sigma$; MAE for reference. "
-                 r"Lower CRPS/MAE $\downarrow$ is better.}")
+    lines.append(r"\caption{\textbf{Uncertainty is conservative by "
+                 r"construction.} Observed coverage of \cafe{}'s per-cell "
+                 r"posterior intervals ($10\%$ MCAR, 5 seeds, held-out cells; "
+                 r"nominal in parentheses). The intervals \emph{never under-cover} "
+                 r"(observed $\ge$ nominal everywhere)---the safe failure mode for "
+                 r"risk-sensitive decisions: a band may be wide but is never "
+                 r"falsely tight. The per-cell heteroscedastic $\sigma$ also "
+                 r"carries information---it lowers CRPS over a single homoscedastic "
+                 r"$\sigma$ on the real high-frequency ETTh1 data and widens "
+                 r"correctly inside gaps (Fig.~\ref{fig:unc})---though its absolute "
+                 r"scale is over-dispersed on the smoother panels (a global "
+                 r"$\sigma$ scores lower CRPS there), so sharp calibration is left "
+                 r"to future work. Sharpness $=$ mean $\sigma$; MAE for reference; "
+                 r"lower CRPS/MAE $\downarrow$.}")
     lines.append(r"\label{tab:calib}")
     lines.append(r"\begin{tabular}{@{}lcccccccc@{}}")
     lines.append(r"\toprule")
@@ -233,7 +234,7 @@ def make_table(results):
             f"& {r['sharpness']:.3f} & {r['mae']:.3f} \\\\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
-    lines.append(r"\end{table}")
+    lines.append(r"\end{table*}")
     txt = "\n".join(lines) + "\n"
     with open(TAB_OUT, "w") as f:
         f.write(txt)

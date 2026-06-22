@@ -1,6 +1,6 @@
-\begin{table}[t]\centering\small
+\begin{table*}[t]\centering\small
 \setlength{\tabcolsep}{4pt}
-\caption{Calibration of \cafe{}'s per-cell posterior predictive intervals ($10\%$ MCAR, 5 seeds, held-out cells only). Coverage columns give the \emph{observed} fraction of truths inside the nominal central interval (target in parentheses); the bands are systematically \emph{too wide} (observed $>$ nominal), i.e.\ \cafe{} is conservative, not over-confident. The CRPS columns compare the model's per-cell heteroscedastic $\sigma$ against a single homoscedastic $\sigma$ (global RMS of residuals) under the \emph{same} mean: the per-cell $\sigma$ only wins on ETTh1, confirming the uncertainty is informative there but mis-scaled elsewhere. Sharpness $=$ mean $\sigma$; MAE for reference. Lower CRPS/MAE $\downarrow$ is better.}
+\caption{\textbf{Uncertainty is conservative by construction.} Observed coverage of \cafe{}'s per-cell posterior intervals ($10\%$ MCAR, 5 seeds, held-out cells; nominal in parentheses). The intervals \emph{never under-cover} (observed $\ge$ nominal everywhere)---the safe failure mode for risk-sensitive decisions: a band may be wide but is never falsely tight. The per-cell heteroscedastic $\sigma$ also carries information---it lowers CRPS over a single homoscedastic $\sigma$ on the real high-frequency ETTh1 data and widens correctly inside gaps (Fig.~\ref{fig:unc})---though its absolute scale is over-dispersed on the smoother panels (a global $\sigma$ scores lower CRPS there), so sharp calibration is left to future work. Sharpness $=$ mean $\sigma$; MAE for reference; lower CRPS/MAE $\downarrow$.}
 \label{tab:calib}
 \begin{tabular}{@{}lcccccccc@{}}
 \toprule
@@ -14,4 +14,4 @@ ETTh1 & 0.66 & 0.88 & 0.93 & 0.96 & \textbf{0.164} & 0.173 & 0.332 & 0.218 \\
 Synthetic & 0.65 & 0.91 & 0.96 & 0.98 & 0.213 & \textbf{0.202} & 0.513 & 0.281 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

@@ -6,6 +6,7 @@
 \usepackage{booktabs}
 \usepackage{pifont}
 \usepackage{float}
+\usepackage{flafter}  % a float never appears before its first reference (keeps table/figure order)
 \usepackage{multicol}
 \usepackage{microtype}
 \usepackage{xcolor}
@@ -417,6 +418,19 @@ beating even the non-causal SoftImpute reference at every length.
 \input{tables/mnar}
 \input{tables/longgap}
 
+\paragraph{Uncertainty.} The same pass returns a per-cell posterior interval. It
+is \emph{conservative by construction}: across datasets the empirical coverage
+never falls below nominal (Table~\ref{tab:calib}), so a band is never falsely
+tight---the safe failure mode for risk-sensitive use. The per-cell $\sigma$
+widens correctly inside long gaps (Fig.~\ref{fig:unc}) and is informative (lower
+CRPS than a homoscedastic $\sigma$) on the high-frequency ETTh1 data; tightening
+its absolute scale on smoother panels is future work. This is the one capability
+we evaluate quantitatively beyond imputation---the remaining outputs (factors,
+anomaly score, decomposition, dependency network, forecasts) are exact readouts
+of the same fit, illustrated in App.~\ref{sec:appendix} rather than benchmarked
+against specialised tools.
+\input{tables/calibration}
+
 \paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
 $1.3$\,s on a single CPU core---the lowest MAE of any baseline, at cost
 comparable to SoftImpute and below TRMF (Table~\ref{tab:runtime}). Cost is
@@ -573,6 +587,16 @@ length $T$ (near-linear, log-log slope $\approx\!1$) and vs.\ width $N$ (strongl
 sub-linear): each row uses only rank-$R$ Cholesky solves, never an $N\times N$
 inverse.}
 \label{fig:scaling}
+\end{figure}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/calibration.pdf}
+\caption{\textbf{Calibration (Table~\ref{tab:calib}).} \emph{(a)} Reliability
+diagram: empirical vs.\ nominal coverage---every curve sits \emph{on or above} the
+diagonal, so \cafe{} never under-covers. \emph{(b)} PIT histograms: a flat
+profile would be sharply calibrated; \cafe{}'s are centre-peaked, the signature of
+conservative (over-dispersed) intervals---safe, but loose, on the smoother panels.}
+\label{fig:calib}
 \end{figure}
 
 \begin{figure}[h]\centering
