@@ -32,8 +32,13 @@ models---each strong on some regimes and brittle on others, and almost all
 future. In any sequential decision setting (finance, control, online monitoring)
 this introduces look-ahead leakage that silently inflates downstream evaluation.
 We introduce \cafe{}, a single \emph{causal} (strictly point-in-time) estimator
-that subsumes the zoo: a robust dynamic factor model with two-way fixed effects,
-optimised online by one penalised objective whose continuous parameters
+that subsumes the zoo. \cafe{} is a \emph{transparent mechanistic statistical
+model, not a neural network}: it explains every value as a sum of four
+interpretable pieces---a baseline level, a seasonal cycle, a few shared factors,
+and noise---and fills gaps with the closed-form arithmetic a statistician would
+use, updated as data arrives. Concretely it is a robust dynamic factor model
+with two-way fixed effects, optimised online by one penalised objective whose
+continuous parameters
 ---an automatic-relevance-determination (ARD) rank, a learned autoregressive
 coefficient, a learned Student-$t$ degrees-of-freedom, and shrinkage seasonal
 coefficients---are estimated from the data itself by empirical Bayes, never by a
@@ -45,8 +50,9 @@ On six standard published benchmarks \cafe{} is, by a wide margin, the strongest
 \emph{causal} imputer (mean correlation $0.89$ vs.\ $0.41$ for causal
 baselines), is competitive with \emph{non-causal} batch methods that exploit the
 full series, and is the single best method on the largest panel (Beijing air
-quality, $132$ series). \cafe{} is CPU-only, requires no configuration, and runs
-the full benchmark suite in $\sim\!1$\,s.
+quality, $132$ series)---all on a single CPU core, with no GPU, no training run,
+and no hyperparameters to set. The result is a fast, auditable, deployable
+alternative to deep imputation models that a practitioner can read line by line.
 \end{abstract}
 
 \section{Introduction}
@@ -84,6 +90,19 @@ $\le t$. We verify this mechanically (Prop.~\ref{prop:causal}).
 recursion (Cholesky solves only, no inverses); it handles 1D, 2D and panel
 inputs through the same code and needs no hyperparameters from the user.
 \end{enumerate}
+
+\paragraph{In plain terms.} \cafe{} reads a value as
+\emph{level $+$ season $+$ shared trend $+$ noise}. The \emph{level} is each
+series' own running average; the \emph{season} is a handful of sine/cosine waves;
+the \emph{shared trend} is a few common factors that move many series together
+(e.g.\ a weather front across air-quality sensors); the \emph{noise} is what is
+left, modelled with heavy tails so a single spike cannot distort the fit. To fill
+a hole, \cafe{} adds up the pieces it can compute from the past and the rest of
+the current row---exactly the reasoning a careful analyst would apply, but done
+automatically, online, and provably without peeking at the future. The four
+``dials'' that decide how much of each piece to use (how many factors, how much
+memory, how heavy the tails, how strong the seasonality) are \emph{learned from
+the data}, not set by hand. There is no neural network and no training phase.
 
 \section{The \cafe{} Model}\label{sec:model}
 Let $x_{t,i}$ denote feature $i\in\{1,\dots,N\}$ at time $t$, observed on a set
@@ -222,7 +241,8 @@ SAITS~\cite{du2023}       & .137 & \ding{55} & Attn & GPU \\
 
 \paragraph{Breadth across regimes.} Table~\ref{tab:results} reports Pearson
 correlation on six datasets spanning the ImputeBench~\cite{khayati2020}
-(block missingness) and point-missing protocols. Among strictly \emph{causal}
+(block missingness) and the TSI-Bench~\cite{du2024tsibench} point-missing
+protocol. Among strictly \emph{causal}
 methods \cafe{} dominates ($0.89$ vs.\ $0.41$ for mean/LOCF); against
 \emph{non-causal} batch references that see the full series it is competitive and
 best overall on the largest panel (BeijingAir).
@@ -265,16 +285,8 @@ factorization for high-dimensional time series prediction. \emph{NeurIPS}, 2016.
 Models and the Kalman Filter}. Cambridge Univ.\ Press, 1989.
 \bibitem{athey2021} S.~Athey, M.~Bayati, N.~Doudchenko, G.~Imbens, K.~Khosravi.
 Matrix completion methods for causal panel data models. \emph{JASA}, 2021.
-\bibitem{bishop1999} C.~M.~Bishop. Bayesian PCA. \emph{NeurIPS}, 1999.
 \bibitem{cao2018} W.~Cao et al. BRITS: Bidirectional recurrent imputation for
 time series. \emph{NeurIPS}, 2018.
-\bibitem{vaswani2017} A.~Vaswani et al. Attention is all you need.
-\emph{NeurIPS}, 2017.
-\bibitem{fortuin2020} V.~Fortuin et al. GP-VAE: deep probabilistic time series
-imputation. \emph{AISTATS}, 2020.
-\bibitem{yoon2019} J.~Yoon, W.~R.~Zame, M.~van der Schaar. Estimating missing
-data in temporal data streams using multi-directional recurrent neural networks
-(M-RNN). \emph{IEEE TBME}, 2019.
 \bibitem{du2023} W.~Du, D.~C\^ot\'e, Y.~Liu. SAITS: Self-attention-based
 imputation for time series. \emph{Expert Systems with Applications}, 2023.
 \bibitem{tashiro2021} Y.~Tashiro, J.~Song, Y.~Song, S.~Ermon. CSDI: Conditional
@@ -282,6 +294,14 @@ score-based diffusion models for probabilistic time series imputation.
 \emph{NeurIPS}, 2021.
 \bibitem{cini2022} A.~Cini, I.~Marisca, C.~Alippi. Filling the gaps: multivariate
 time series imputation by graph neural networks. \emph{ICLR}, 2022.
+\bibitem{bishop1999} C.~M.~Bishop. Bayesian PCA. \emph{NeurIPS}, 1999.
+\bibitem{vaswani2017} A.~Vaswani et al. Attention is all you need.
+\emph{NeurIPS}, 2017.
+\bibitem{fortuin2020} V.~Fortuin et al. GP-VAE: deep probabilistic time series
+imputation. \emph{AISTATS}, 2020.
+\bibitem{yoon2019} J.~Yoon, W.~R.~Zame, M.~van der Schaar. Estimating missing
+data in temporal data streams using multi-directional recurrent neural networks
+(M-RNN). \emph{IEEE TBME}, 2019.
 \bibitem{khayati2020} M.~Khayati, A.~Lerner, Z.~Tymchenko, P.~Cudr\'e-Mauroux.
 Mind the gap: an experimental evaluation of imputation of missing values
 techniques in time series. \emph{PVLDB} 13(5), 2020.
