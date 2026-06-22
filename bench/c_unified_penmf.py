@@ -215,42 +215,49 @@ class _UnifiedCore:
             A = newA
         Rf = np.where(Wobs, R, 0.0)
         ent = self.ent_buf if self.ent_buf.shape[0] == n else None
+        # --- batched ALS (vectorized rewrite of the per-row/per-column solve loops) ---
+        # The old loops issued ~(n + N) tiny R x R cho_factor/cho_solve calls PER SWEEP,
+        # each paying ~25us of scipy wrapper overhead on ~1us of actual flops. Here every
+        # R x R system in a sweep is assembled and solved in ONE batched LAPACK call. The
+        # math is identical: the row pass keeps the exact Gauss-Seidel AR coupling (prev
+        # row factor of the same entity) via a sequential pure-numpy matvec over a single
+        # pre-computed batched inverse; the column pass is independent across features.
+        Wobs_f = Wobs.astype(float)                       # (n, N)
+        any_obs = Wobs.any(axis=1)                        # (n,)
+        col_has = Wobs.any(axis=0)                        # (N,)
+        if ent is None:                                   # 2D: every row couples to prev
+            same = np.ones(n, dtype=bool)
+        else:                                             # panel: only within an entity
+            same = np.empty(n, dtype=bool)
+            same[1:] = ent[1:] == ent[:-1]
+        same[0] = False
+        I_R = np.eye(self.R)
+        diag_alpha = np.diag(self.alpha)
         for _ in range(SWEEPS):
-            # update row factors A given W, with AR coupling as a ridge toward a*A_prev
-            # of the SAME entity only (consecutive buffer rows can be different entities
-            # in a panel; coupling across entities would corrupt W and the AR coeff).
+            # row factors A given W: G_i = W^T diag(obs_i) W + diag(alpha) (+ I if coupled),
+            # all built at once via a single (n,N) x (N,R^2) matmul.
+            WW = (self.W[:, :, None] * self.W[:, None, :]).reshape(self.N, self.R * self.R)
+            Gs = (Wobs_f @ WW).reshape(n, self.R, self.R) + diag_alpha[None]
+            Gs[same] += I_R
+            Ginv = np.linalg.inv(Gs)                       # one batched factorization
+            rhs0 = Rf @ self.W                             # (n, R) non-AR part
+            # exact Gauss-Seidel AR coupling: each row's ridge uses this sweep's freshly
+            # updated previous-row factor. The batched inverse above already paid the only
+            # expensive step, so this pass is just cheap pure-numpy R x R matvecs (no scipy
+            # per-call overhead) -- numerically identical to the original loop.
             for i in range(n):
-                same_prev = i > 0 and (ent is None or ent[i] == ent[i - 1])
-                w = Wobs[i]
-                if not w.any():
-                    A[i] = self.a * A[i - 1] if same_prev else 0.0
+                if not any_obs[i]:
+                    A[i] = self.a * A[i - 1] if same[i] else 0.0
                     continue
-                Bw = self.W[w]
-                G = Bw.T @ Bw + np.diag(self.alpha)
-                rhs = Bw.T @ Rf[i, w]
-                if same_prev:
-                    # AR penalty lambda_z (=1, scale set by alpha) couples to prev factor
-                    G = G + np.eye(self.R)
-                    rhs = rhs + self.a * A[i - 1]
-                try:
-                    A[i] = cho_solve(cho_factor(G, lower=True, check_finite=False),
-                                     rhs, check_finite=False)
-                except Exception:
-                    A[i] = np.linalg.lstsq(G, rhs, rcond=None)[0]
-            # update loadings W given A, ARD ridge per column
-            AtA = A.T @ A
-            for j in range(self.N):
-                w = Wobs[:, j]
-                if not w.any():
-                    continue
-                Aw = A[w]
-                G = Aw.T @ Aw + np.diag(self.alpha)
-                rhs = Aw.T @ Rf[w, j]
-                try:
-                    self.W[j] = cho_solve(cho_factor(G, lower=True, check_finite=False),
-                                          rhs, check_finite=False)
-                except Exception:
-                    self.W[j] = np.linalg.lstsq(G, rhs, rcond=None)[0]
+                r = rhs0[i] + self.a * A[i - 1] if same[i] else rhs0[i]
+                A[i] = Ginv[i] @ r
+            # loadings W given A (independent across features -> fully batched):
+            # G_j = A^T diag(obs_:,j) A + diag(alpha), rhs_j = A^T Rf[:,j].
+            AA = (A[:, :, None] * A[:, None, :]).reshape(n, self.R * self.R)
+            Gc = (Wobs_f.T @ AA).reshape(self.N, self.R, self.R) + diag_alpha[None]
+            rhs_c = Rf.T @ A                               # (N, R)
+            Wsol = np.linalg.solve(Gc, rhs_c[..., None])[..., 0]
+            self.W[col_has] = Wsol[col_has]                # empty columns keep prior W
         self.A_buf = A
         # --- ARD empirical-Bayes update of per-column precisions alpha_l ---
         #   alpha_l = (N) / (||W[:,l]||^2 + eps)   (evidence-style; unused cols -> huge)
@@ -277,35 +284,6 @@ class _UnifiedCore:
             a_hat = num / den
             self.a = float(np.clip(a_hat, 0.0, 0.999))
         self.W_ready = True
-
-    # -- per-row solve of latent z_t against current W (rank-R, IRLS-weighted) --
-    def _solve_z(self, resid, obs, z_prev):
-        if not obs.any():
-            # blackout row: Kalman/AR prediction is the special case
-            return self.a * z_prev if z_prev is not None else np.zeros(self.R)
-        Bw = self.W[obs]                       # (nobs, R)
-        rw = resid[obs]
-        # IRLS robust weights from a first L2 pass residual
-        G = Bw.T @ Bw + np.diag(self.alpha) + np.eye(self.R)   # AR ridge (lambda_z=1)
-        rhs = Bw.T @ rw + (self.a * z_prev if z_prev is not None else 0.0)
-        try:
-            z = cho_solve(cho_factor(G, lower=True, check_finite=False), rhs,
-                          check_finite=False)
-        except Exception:
-            z = np.linalg.lstsq(G, rhs, rcond=None)[0]
-        # one IRLS reweight pass (Student-t scale mixture)
-        pred = Bw @ z
-        r2 = (rw - pred) ** 2
-        wts = self._wt(r2)
-        Bww = Bw * wts[:, None]
-        G = Bww.T @ Bw + np.diag(self.alpha) + np.eye(self.R)
-        rhs = Bww.T @ rw + (self.a * z_prev if z_prev is not None else 0.0)
-        try:
-            z = cho_solve(cho_factor(G, lower=True, check_finite=False), rhs,
-                          check_finite=False)
-        except Exception:
-            z = np.linalg.lstsq(G, rhs, rcond=None)[0]
-        return z
 
     # -- cross-section conditional mean+variance from pooled EW residual cov --
     #    Returns (cond_mean[miss], cond_var[miss]) for inverse-variance blending with
@@ -870,10 +848,22 @@ def _impute_panel(X, meta):
 
 def online_impute(X, meta):
     X = np.ascontiguousarray(np.asarray(X, dtype=float))
+    # Robustness: non-finite inputs (+/-Inf) are not valid observations -> treat as
+    # missing so the solver never sees Inf (guards the SVD/least-squares path).
+    if not np.all(np.isfinite(X)):
+        X = np.where(np.isfinite(X), X, np.nan)
     if meta and "entity_ids" in meta and "time_ids" in meta \
             and len(np.unique(meta["entity_ids"])) > 1:
-        return _impute_panel(X, meta)
-    return _impute_2d(X, meta)
+        out = _impute_panel(X, meta)
+    else:
+        out = _impute_2d(X, meta)
+    out = np.asarray(out, float)
+    if not np.all(np.isfinite(out)):                 # final safety net: never emit NaN/Inf
+        col = np.nanmean(np.where(np.isfinite(X), X, np.nan), axis=0)
+        col = np.where(np.isfinite(col), col, 0.0)
+        bad = ~np.isfinite(out)
+        out[bad] = np.take(col, np.where(bad)[1])
+    return out
 
 
 if __name__ == "__main__":
