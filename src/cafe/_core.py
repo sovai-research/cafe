@@ -50,11 +50,14 @@ the per-row systems are rank-sized (<=R). Column factors W refit on a trailing w
 only every REFIT_EVERY steps; each row solves its own rank-R factor against current W.
 """
 from __future__ import annotations
+
 import os
+
 for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
            "NUMEXPR_NUM_THREADS"):
     os.environ.setdefault(_v, "2")
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve

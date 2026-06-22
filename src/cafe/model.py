@@ -13,10 +13,11 @@ Quick start
 >>> res.uncertainty, res.factors(), res.anomaly_scores(), res.dependency_network()
 """
 from __future__ import annotations
+
 import numpy as np
 
 from . import _core
-from .io import to_matrix, from_matrix, Ctx
+from .io import Ctx, from_matrix, to_matrix
 
 __all__ = ["CAFE", "CafeResult", "impute"]
 

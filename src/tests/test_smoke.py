@@ -1,8 +1,11 @@
 """Smoke tests: container round-trip (numpy/pandas/polars), causality, and that every
 advertised capability returns something sane."""
-import sys, os
+import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
+
 import cafe
 
 

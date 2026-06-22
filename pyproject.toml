@@ -18,6 +18,14 @@ pandas = ["pandas>=1.3"]
 polars = ["polars>=0.20"]
 viz = ["matplotlib>=3.5"]
 all = ["pandas>=1.3", "polars>=0.20", "matplotlib>=3.5"]
+dev = [
+    "pandas>=1.3",
+    "polars>=0.20",
+    "pytest>=7.0",
+    "hypothesis>=6.0",
+    "ruff>=0.6",
+    "pre-commit>=3.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/sovai-research/cafe"
@@ -25,3 +33,31 @@ Homepage = "https://github.com/sovai-research/cafe"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["cafe*"]
+
+[tool.setuptools.package-data]
+cafe = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["src/tests"]
+markers = [
+    "benchmark: runs the full synthetic benchmark suite (slow-ish; ~2-3s)",
+    "slow: deselect with '-m \"not slow\"'",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+extend-exclude = ["bench", "paper"]
+
+[tool.ruff.lint]
+# Bias toward real-bug detection (F, B) and import hygiene (I); the numeric core
+# is written in a deliberately dense style, so the cosmetic pycodestyle rules that
+# fight it are disabled rather than mass-rewriting working hot-path code.
+select = ["F", "I", "B"]
+ignore = [
+    "B023",  # closures over loop vars are all called immediately here (false positive)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# tests/gen_baseline set sys.path before importing the package + harness on purpose
+"src/tests/*" = ["E402"]

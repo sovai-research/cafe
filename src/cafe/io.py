@@ -4,6 +4,7 @@ out. Optional dependencies (pandas, polars) are detected lazily and never import
 unless the user actually passes one of their objects.
 """
 from __future__ import annotations
+
 import numpy as np
 
 __all__ = ["to_matrix", "from_matrix", "Ctx"]
@@ -58,12 +59,28 @@ def to_matrix(data):
             return np.ascontiguousarray(X), Ctx("polars", False, None, list(data.columns),
                                                 None, None, data.schema)
     # ---- numpy / array-like ----
-    arr = np.asarray(data, dtype=float)
+    try:
+        arr = np.asarray(data, dtype=float)
+    except (ValueError, TypeError) as e:
+        raise TypeError(
+            f"CAFE could not interpret input of type {type(data).__name__!r} as a "
+            "numeric array. Pass a numpy array, pandas/polars Series or DataFrame, "
+            "or any array-like of floats (use NaN for missing)."
+        ) from e
     if arr.ndim == 1:
         return np.ascontiguousarray(arr.reshape(-1, 1)), Ctx("numpy", True)
     if arr.ndim == 2:
         return np.ascontiguousarray(arr), Ctx("numpy", False)
-    raise ValueError(f"CAFE expects 1D or 2D input; got shape {arr.shape}")
+    if arr.ndim == 3:
+        raise ValueError(
+            f"CAFE got a 3D array of shape {arr.shape}. For panel (entity x time x "
+            "feature) data, stack it to a 2D (rows, features) matrix and pass "
+            "meta={'entity_ids': ..., 'time_ids': ...} to CAFE().run / .impute."
+        )
+    raise ValueError(
+        f"CAFE expects 1D (series) or 2D (matrix) input; got a {arr.ndim}D array "
+        f"of shape {arr.shape}."
+    )
 
 
 def from_matrix(X, ctx: Ctx):

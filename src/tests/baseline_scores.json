@@ -1,0 +1,23 @@
+{
+  "_note": "Per-dataset corr for cafe.impute on bench/harness DATASETS. Regression gate floors = these minus tolerance. Regenerate: python src/tests/gen_baseline.py",
+  "mean_corr": 0.8025,
+  "min_corr": 0.4233,
+  "per_dataset": {
+    "1d_ar_mcar20": 0.9516,
+    "1d_seasonal_block": 0.8811,
+    "2d_drift_block": 0.7422,
+    "2d_heavytail_mcar30": 0.4233,
+    "2d_highmiss_mcar60": 0.7887,
+    "2d_highrank_mcar30": 0.6137,
+    "2d_large_block30": 0.9047,
+    "2d_large_mcar30": 0.9898,
+    "2d_small_block20": 0.8962,
+    "2d_small_mar30": 0.9551,
+    "2d_small_mcar20": 0.9608,
+    "2d_small_mnar30": 0.8903,
+    "panel_blackout25": 0.4873,
+    "panel_block30": 0.4956,
+    "panel_mar40": 0.9178,
+    "panel_mcar20": 0.9418
+  }
+}
