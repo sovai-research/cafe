@@ -49,16 +49,19 @@ from scipy.linalg import cho_factor, cho_solve
 
 # ----------------------------------------------------------------- knobs ----
 # These are PRINCIPLED PRIORS / numerical caps, NOT constants fit to the cases.
-L_MAX = 6            # max latent columns; ARD prunes the live ones down implicitly
+L_MAX = 12           # max latent columns; ARD prunes the live ones down implicitly
 EM_SWEEPS = 5        # warm-started EM sweeps per refit on the expanding window
-REFIT_GROWTH = 1.6   # geometric refit schedule (refit when t >= last*GROWTH)
+REFIT_GROWTH = 1.4   # geometric refit schedule (refit when t >= last*GROWTH)
 MIN_REFIT = 10       # don't refit until this many distinct times seen
 JITTER = 1e-6
 ARD_FLOOR = 1e-8     # numerical floor for ARD precisions
-NU_MIN, NU_MAX = 2.5, 1e6   # learned Student-t dof clamp (inf-ish => Gaussian)
+NU_MIN, NU_MAX = 3.0, 1e6   # learned Student-t dof clamp (inf-ish => Gaussian)
 SEAS_PERIODS = 4     # number of candidate Fourier fundamental periods probed
 SEAS_HARM = 3        # harmonics per period
 RIDGE_BETA0 = 1.0    # initial ARD precision on seasonal coeffs (shrunk by data)
+PRIOR_FRAC = 4.0     # Gaussian pseudo-obs fraction for the dof (nu) prior (shrinkage
+                     # toward Gaussianity; nu drops only under strong outlier evidence)
+FORGET_HL = 100.0     # forgetting half-life in time units (0 => off, stationary EW)
 
 
 # =========================================================================== #
@@ -92,16 +95,31 @@ def _candidate_periods():
 # and the design-period list.  All quantities depend ONLY on the passed block.
 # =========================================================================== #
 def _fit(block, blk_times, blk_eids, T_total, periods,
-         W0=None, beta0=None, alpha0=None, nu0=50.0):
+         W0=None, beta0=None, alpha0=None, nu0=20.0):
     n, N = block.shape
     obs = np.isfinite(block)
-    cnt = obs.sum(0)
+
+    # ---- EXPONENTIAL FORGETTING (adaptive / non-stationary prior) ----------
+    # Weight each row by a half-life decay of its AGE relative to the most recent
+    # time in the block (= tau, identical under truncation -> point-in-time safe).
+    # This is the empirical-Bayes equivalent of a slow random-walk prior on the
+    # parameters: FORGET_HL=inf -> stationary expanding window; finite HL lets
+    # W/mu/beta TRACK drifting loadings & level breaks. Data-driven via time index
+    # only; no dataset-type threshold. Recency weights the PARAMETER estimation
+    # (mu, beta, W, Psi) -- never the per-row latent z (which is row-specific).
+    if FORGET_HL > 0 and n > 1:
+        age = float(blk_times.max()) - blk_times.astype(float)
+        rw = np.power(0.5, age / FORGET_HL)                # (n,) in (0,1]
+    else:
+        rw = np.ones(n)
+    cnt = (obs * rw[:, None]).sum(0)
 
     # ---- seasonal + trend regression (ARD shrinkage on beta) ---------------
     Phi = _fourier_design(blk_times, T_total, periods)     # (n, P)
     P = Phi.shape[1]
-    # global feature mean (mu); start residual = block - mu
-    mu = np.where(cnt > 0, np.where(obs, block, 0.0).sum(0) / np.maximum(cnt, 1), 0.0)
+    # recency-weighted feature mean (mu); start residual = block - mu
+    mu = np.where(cnt > 1e-9, (np.where(obs, block, 0.0) * rw[:, None]).sum(0)
+                  / np.maximum(cnt, 1e-9), 0.0)
     R = np.where(obs, block - mu, 0.0)                     # centered residual
 
     # Fit beta (N x P) by ridge with per-coefficient ARD precision (shared across
@@ -111,7 +129,8 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
     else:
         beta = np.zeros((N, P))
     ab = beta0 is not None
-    PtP = Phi.T @ Phi                                      # (P,P) (dense rows complete)
+    Phw = Phi * rw[:, None]                                 # recency-weighted design
+    PtP = Phw.T @ Phi                                      # (P,P) weighted normal eqs
     # ARD precision per seasonal coeff (empirical-Bayes-ish): shrink unused harmonics
     lam = np.full(P, RIDGE_BETA0)
     lam[0] = 1e-6                                          # don't shrink intercept-ish
@@ -119,9 +138,9 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
         G = PtP + np.diag(lam)
         try:
             cG = cho_factor(G, lower=True)
-            B = cho_solve(cG, Phi.T @ R)                   # (P, N)
+            B = cho_solve(cG, Phw.T @ R)                   # (P, N)
         except Exception:
-            B = np.linalg.lstsq(G, Phi.T @ R, rcond=None)[0]
+            B = np.linalg.lstsq(G, Phw.T @ R, rcond=None)[0]
         beta = B.T                                         # (N, P)
         # empirical-Bayes ARD update on each seasonal coeff: precision ~ N / ||b||^2
         col_energy = np.sum(beta * beta, axis=0) + 1e-9
@@ -131,18 +150,49 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
     R = np.where(obs, block - mu - seasonal, 0.0)          # residual for factor model
 
     # ---- low-rank factor model with ARD on W columns + Student-t IRLS ------
-    Lr = min(L_MAX, max(1, min(n, N)))
-    if W0 is not None and W0.shape == (N, Lr):
-        W = W0.copy()
-    else:
+    # Lr is fixed by N only (NOT by n) so the latent dimension is constant across
+    # refits -> the carried Kalman state never changes shape. ARD prunes unused cols.
+    Lr = min(L_MAX, max(1, N))
+    # Initialize W from a truncated SVD of the mean-imputed residual. This is
+    # deterministic, point-in-time (uses only the block), basis-stable across
+    # refits (singular-value ordered), and -- unlike warm-starting a possibly
+    # COLLAPSED W -- it cannot perpetuate an ARD death-spiral. The subsequent EM
+    # + ARD then prune/refine. (SVD gives the MLE PPCA subspace directly.)
+    # A couple of soft-impute SVD iterations (reconstruct -> refill the MISSING
+    # entries with the rank-Lr reconstruction -> re-SVD). This de-biases the
+    # subspace when missingness is contiguous/blocky (zero-filling alone shrinks
+    # the components toward 0 in the gaps). Strictly within-block -> point-in-time.
+    Rfill = R.copy()                                       # missing already 0 (centered)
+    W = None
+    try:
+        if min(Rfill.shape) > Lr:
+            for _it in range(2):
+                Usv, Ssv, Vt = np.linalg.svd(Rfill, full_matrices=False)
+                k = Lr
+                recon = (Usv[:, :k] * Ssv[:k]) @ Vt[:k]
+                Rfill = np.where(obs, R, recon)            # keep observed, fill gaps
+            Usv, Ssv, Vt = np.linalg.svd(Rfill, full_matrices=False)
+            W = (Vt[:Lr].T * Ssv[:Lr]) / np.sqrt(max(n, 1))
+    except Exception:
+        W = None
+    if W is None:
         rng = np.random.default_rng(0)
         W = rng.standard_normal((N, Lr)) * 0.1
-    if alpha0 is not None and alpha0.shape == (Lr,):
-        alpha = alpha0.copy()
-    else:
-        alpha = np.full(Lr, 1.0)                           # ARD precisions on W cols
-    psi = np.maximum(np.var(R[obs]) if obs.any() else 1.0, 1e-3)
-    Psi = np.full(N, psi)                                  # per-feature noise
+    if W0 is not None and W0.shape == (N, Lr) and np.linalg.norm(W0) > 1e-3:
+        # blend warm start for basis continuity, but never trust a collapsed W0
+        W = 0.5 * W + 0.5 * W0
+    # ARD precisions are RE-EQUILIBRATED from scratch each refit (NOT warm-started):
+    # warm-starting alpha causes a shrinkage death-spiral (each refit inherits the
+    # previous large precision -> W stays ~0 -> precision grows). W itself IS warm-
+    # started (basis continuity); only its prior precision is re-learned from data.
+    alpha = np.full(Lr, 1.0)                               # ARD precisions on W cols
+    # ROBUST per-feature noise init via MAD (so the Student-t IRLS weights are
+    # meaningful from the very first sweep; outliers don't inflate the scale).
+    Psi = np.empty(N)
+    for j in range(N):
+        cj = R[obs[:, j], j] if obs[:, j].any() else np.array([0.0])
+        mad = np.median(np.abs(cj - np.median(cj))) if cj.size else 0.0
+        Psi[j] = max((1.4826 * mad) ** 2, 1e-3)
     nu = float(np.clip(nu0, NU_MIN, NU_MAX))
 
     Z = np.zeros((n, Lr))
@@ -159,7 +209,9 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
             Wo = W[oi]
             xi = R[i, oi]
             pso = Psi[oi]
-            # IRLS robustness weights (Gaussian when nu large -> w~1)
+            # IRLS robustness weights (Gaussian when nu large -> w~1). From sweep 1
+            # onward so the first W/z estimate captures the bulk low-rank structure
+            # before outliers are down-weighted (avoids over-robustifying real data).
             if sweep > 0:
                 ri = xi - Wo @ Z[i]
                 wgt = (nu + 1.0) / (nu + (ri * ri) / pso)
@@ -176,27 +228,38 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
                 Z[i] = np.linalg.lstsq(G, rhs, rcond=None)[0]
             ZtZ += np.outer(Z[i], Z[i])
         # ---- M-step: W rows by ARD ridge over rows observing feature j -------
+        # Also accumulate the per-column W POSTERIOR VARIANCE trace (diag of the
+        # row solve covariance), which is what makes the ARD update stable: the
+        # MacKay evidence update  alpha_l = M / (||W_:l||^2 + sum_j Cov_j[l,l])
+        # cannot collapse to W=0 under warm-starting (the variance term keeps the
+        # denominator bounded below), unlike the naive N/||W||^2 spiral.
         new_W = W.copy()
+        wvar = np.zeros(Lr)                                # sum_j posterior var of W[j,l]
+        nfeat = 0
         for j in range(N):
             rj = obs[:, j]
             if not rj.any():
                 continue
             Zr = Z[rj]
-            # robust weights for this feature's rows
+            # robust weights for this feature's rows x recency forgetting weight
             rr = R[rj, j] - Zr @ W[j]
-            wgt = (nu + 1.0) / (nu + (rr * rr) / Psi[j]) if sweep > 0 else np.ones(rj.sum())
+            wgt = ((nu + 1.0) / (nu + (rr * rr) / Psi[j])) if sweep > 0 else np.ones(rj.sum())
+            wgt = wgt * rw[rj]
             G = (Zr.T * wgt) @ Zr + np.diag(alpha)
             rhs = (Zr.T * wgt) @ R[rj, j]
             try:
                 cG = cho_factor(G + JITTER * eyeL, lower=True)
                 new_W[j] = cho_solve(cG, rhs)
+                Ginv = cho_solve(cG, eyeL)
             except Exception:
-                new_W[j] = np.linalg.lstsq(G, rhs, rcond=None)[0]
+                Ginv = np.linalg.pinv(G)
+                new_W[j] = Ginv @ rhs
+            wvar += Psi[j] * np.diag(Ginv)                 # posterior var scaled by noise
+            nfeat += 1
         W = new_W
-        # ---- ARD update on W columns: alpha_l = N / (||W_:l||^2)  (auto rank) -
-        col_energy = np.sum(W * W, axis=0) + 1e-9
-        alpha = np.minimum(1e8, N / col_energy)
-        alpha = np.maximum(alpha, ARD_FLOOR)
+        # ---- ARD evidence update on W columns (auto rank, collapse-proof) ----
+        col_energy = np.sum(W * W, axis=0) + wvar + 1e-9
+        alpha = np.clip(max(nfeat, 1) / col_energy, ARD_FLOOR, 1e8)
         # ---- Psi update (per-feature) from weighted residuals ----------------
         pred = Z @ W.T
         resid = (R - pred)
@@ -205,18 +268,22 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
             if not rj.any():
                 continue
             d = resid[rj, j]
-            wgt = (nu + 1.0) / (nu + (d * d) / Psi[j]) if sweep > 0 else np.ones(rj.sum())
+            wgt = ((nu + 1.0) / (nu + (d * d) / Psi[j])) * rw[rj]
             Psi[j] = max(float(np.sum(wgt * d * d) / max(np.sum(wgt), 1e-9)), 1e-4)
         # ---- nu update (EM for Student-t dof) from standardized residuals ----
-        if sweep > 0:
+        # A weak Gaussian PRIOR (PRIOR_FRAC pseudo-observations with weight w=1) is
+        # mixed in. This regularizes the dof toward Gaussianity so that nu only
+        # collapses to small values under STRONG, persistent outlier evidence
+        # (genuine heavy tails), not from mild model-misfit leptokurtosis on
+        # structured real data. Principled empirical-Bayes shrinkage, no thresholds.
+        if True:
             d_all = resid[obs]
-            psi_all = np.repeat(Psi[None, :], n, axis=0)[obs]
+            psi_all = np.broadcast_to(Psi[None, :], (n, N))[obs]
             s2 = (d_all * d_all) / psi_all
             wgt = (nu + 1.0) / (nu + s2)
-            # solve psi-digamma fixed point approximately via moment match:
-            # E[w]=1 at the true nu; use the standard one-step EM surrogate.
-            m = float(np.mean(wgt - np.log(np.maximum(wgt, 1e-9))))
-            # fixed-point: find nu s.t.  log(nu/2)-digamma(nu/2)+1 = m'  (approx)
+            n_prior = int(PRIOR_FRAC * wgt.size)
+            if n_prior > 0:
+                wgt = np.concatenate([wgt, np.ones(n_prior)])  # Gaussian pseudo-obs
             nu = _update_nu(nu, wgt)
 
     # ---- transition A (diag) + Q from consecutive filtered latents ---------
@@ -252,21 +319,27 @@ def _fit(block, blk_times, blk_eids, T_total, periods,
 
 
 def _update_nu(nu, w):
-    """One Newton step on the Student-t dof EM objective:
-       f(nu) = 1 - digamma(nu/2) + log(nu/2) + mean(log w - w) = 0.
-    Uses scipy-free digamma approximation (Stirling-ish). Clamped."""
+    """EM update for the Student-t degrees-of-freedom (Liu & Rubin fixed point,
+    dimension d=1 per scalar residual). Solve for new nu:
+       log(nu/2) - psi(nu/2) + 1
+         + (1/n) Σ_i ( log w_i - w_i )
+         + psi((nu_old+1)/2) - log((nu_old+1)/2)  = 0
+    The last two terms (the E-step correction at the OLD nu) are what make this
+    converge DOWNWARD for genuinely heavy-tailed residuals. Scipy-free digamma."""
     from math import log
     Ew = float(np.mean(w))
     Elw = float(np.mean(np.log(np.maximum(w, 1e-12))))
-    c = 1.0 + Elw - Ew
-    # solve  log(nu/2) - psi(nu/2) + c = 0  by a few bisection steps on log-nu.
+    h_old = (nu + 1.0) / 2.0
+    corr = _digamma(h_old) - log(h_old)                    # E-step correction at nu_old
+    c = 1.0 + Elw - Ew + corr
+    # solve  log(nu/2) - psi(nu/2) + c = 0  by bisection on nu.
     def g(v):
         h = v / 2.0
         return log(h) - _digamma(h) + c
     lo, hi = NU_MIN, NU_MAX
     glo, ghi = g(lo), g(hi)
     if glo * ghi > 0:                                      # no sign change -> extreme
-        return NU_MAX if c > 0 else NU_MIN
+        return NU_MIN if glo < 0 else NU_MAX
     for _ in range(40):
         mid = (lo + hi) / 2.0
         gm = g(mid)
@@ -340,7 +413,7 @@ def online_impute(X, meta):
         W0 = par["W"] if par is not None and par["W"].shape[0] == N else None
         beta0 = par["beta"] if par is not None else None
         alpha0 = par["alpha"] if par is not None and par["W"].shape[0] == N else None
-        nu0 = par["nu"] if par is not None else 50.0
+        nu0 = par["nu"] if par is not None else 20.0
         par = _fit(blk, bt, be, 0, periods,
                    W0=W0, beta0=beta0, alpha0=alpha0, nu0=nu0)
 

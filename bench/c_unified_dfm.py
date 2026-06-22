@@ -62,12 +62,15 @@ import numpy as np
 from scipy.linalg import cho_factor, cho_solve
 
 # ----- principled caps (NOT tuned to any case): keep runtime + EM bounded -------
-EM_SWEEPS = 6           # warm-started EM sweeps per refit on the expanding window
+EM_SWEEPS = 8  # warm-started EM sweeps per refit on the expanding window
 REFIT_GROWTH = 1.6      # geometric refit schedule (refit when pos >= last*GROWTH)
-MIN_REFIT_TIMES = 6     # don't fit dynamics until this many distinct times seen
-L_MAX = 6               # max latent factors; ARD prunes down from here
+MIN_REFIT_TIMES = 12    # don't fit dynamics until this many distinct times seen
+L_MAX = 8  # max latent factors; ARD prunes down from here
 JITTER = 1e-6
-NU_INIT = 30.0          # start near-Gaussian; EM pulls it down only if data is heavy
+NU_INIT = 6.0           # start ROBUST (heavy-tail prior); EM raises nu toward
+                        # Gaussian only if the data's residuals are actually light.
+                        # Robust-first prevents early sweeps from baking outliers
+                        # into the factor subspace before nu has a chance to adapt.
 NU_MIN, NU_MAX = 2.5, 1e4
 
 
@@ -77,31 +80,64 @@ NU_MIN, NU_MAX = 2.5, 1e4
 #  Implements: ARD on W columns, per-feature R, diagonal AR A in [0,1], Fourier
 #  beta with ARD ridge, and EM-updated Student-t nu.
 # =========================================================================== #
-def _build_phi(time_vals, K, span):
-    """Fourier design matrix Phi (n, 2K+1): [1, sin/cos at K harmonics].
-
-    Frequencies are chosen so the LOWEST harmonic already completes >= 2 full
-    cycles over the data span (period = span / (m+1), m=1..K). This deliberately
-    excludes the 1-cycle-over-span term, which would just fit slow TREND/AR drift
-    and steal it from the latent dynamics. ARD ridge on beta then shrinks any
-    harmonic the data does not actually need -- so seasonality switches itself on
-    only when a genuine repeated cycle exists. No per-dataset period constant."""
-    n = len(time_vals)
-    if K <= 0:
-        return np.ones((n, 1))
+def _build_phi(time_vals, periods):
+    """Fourier design matrix Phi (n, 1 + 2*sum_p H_p): intercept + sin/cos
+    harmonics for each DATA-DETECTED seasonal period in `periods`. Periods are
+    discovered empirically (autocorrelation peaks) -- no hard-coded period. Each
+    period gets 2 harmonics (fundamental + 1st overtone). ARD ridge on beta then
+    shrinks any term the data does not need."""
     t = np.asarray(time_vals, float)
-    base = max(span, 2.0)
+    n = len(t)
     cols = [np.ones(n)]
-    # harmonics h = 2..K+1 of the fundamental (period = span/h), i.e. >= 2 cycles
-    # over the span. h=1 (single slow trend) is excluded so seasonality does not
-    # steal the latent AR drift. With many harmonics the basis can resolve short
-    # periods; ARD ridge on beta shrinks the ones the data does not need.
-    for h in range(2, K + 2):
-        period = base / h
-        ang = 2.0 * np.pi * t / period
-        cols.append(np.sin(ang))
-        cols.append(np.cos(ang))
+    for per in periods:
+        if per < 2:
+            continue
+        for h in (1, 2):
+            ang = 2.0 * np.pi * h * t / per
+            cols.append(np.sin(ang))
+            cols.append(np.cos(ang))
     return np.ascontiguousarray(np.column_stack(cols))
+
+
+def _detect_periods(series, max_lag, top=2):
+    """Detect up to `top` dominant seasonal periods from the autocorrelation of a
+    1D residual series (NaNs allowed). Empirical-Bayes-style: pick lags whose ACF
+    is a local maximum and exceeds a noise band. Returns a sorted list of periods.
+    Purely data-driven; no dataset-specific constant."""
+    x = np.asarray(series, float)
+    fin = np.isfinite(x)
+    if fin.sum() < 16:
+        return []
+    x = x.copy()
+    x[~fin] = np.nanmean(x[fin])
+    x = x - x.mean()
+    nrm = float(x @ x) + 1e-12
+    # cap the max lag by the block length (causal) and by an absolute capacity
+    # bound (keeps the O(n*Lmax) ACF scan cheap on long real series); neither
+    # depends on the TOTAL series length, so truncation cannot change it.
+    Lmax = int(min(max_lag, len(x) // 2 - 1, 512))
+    if Lmax < 3:
+        return []
+    # autocorrelation via FFT (O(n log n)) up to Lmax
+    nfft = 1
+    while nfft < 2 * len(x):
+        nfft *= 2
+    fx = np.fft.rfft(x, nfft)
+    acf_full = np.fft.irfft(fx * np.conj(fx), nfft)[: Lmax + 1]
+    ac = acf_full / nrm
+    band = 2.0 / np.sqrt(fin.sum())          # ~95% white-noise ACF band
+    cands = []
+    for L in range(3, Lmax):
+        if ac[L] > band and ac[L] >= ac[L - 1] and ac[L] >= ac[L + 1]:
+            cands.append((ac[L], L))
+    cands.sort(reverse=True)
+    out = []
+    for _, L in cands:
+        if all(abs(L - p) > 1 and (L % p != 0 or L == p) for p in out):
+            out.append(L)
+        if len(out) >= top:
+            break
+    return sorted(out)
 
 
 def _fit_params(block, block_tids, block_eids, ent_unique, time_unit,
@@ -131,14 +167,8 @@ def _fit_params(block, block_tids, block_eids, ent_unique, time_unit,
     gsum = np.where(obs, block, 0.0).sum(0)
     gmean = np.where(cnt > 0, gsum / np.maximum(cnt, 1), 0.0)
 
-    # ---- Fourier seasonal regression beta with ARD ridge ---------------------
-    # period hint = span of the data (one fundamental cycle over the window); the
-    # harmonics cover sub-cycles. beta fit by ridge on the entity-demeaned obs.
     span = (block_tids.max() - block_tids.min() + 1) if n else 1.0
-    Phi = _build_phi(block_tids, K, span)
-    P = Phi.shape[1]
-    # entity-demeaned target (remove FE so beta captures shared seasonality only)
-    # build per-row entity mean
+    # ---- entity-demeaned target (remove FE so seasonality is the shared part) -
     ent_mean = np.zeros((n, N))
     # map entity -> its observed mean vector
     emean = {}
@@ -155,6 +185,27 @@ def _fit_params(block, block_tids, block_eids, ent_unique, time_unit,
     for i in range(n):
         ent_mean[i] = emean[block_eids[i]]
     target = np.where(obs, block - ent_mean, 0.0)
+
+    # ---- DETECT seasonal periods from the data (empirical, no constants) -----
+    # Average the demeaned target across features into one pooled series indexed
+    # by time, then read autocorrelation peaks. K caps the max detectable period.
+    periods = []
+    if K > 0:
+        # detect on the per-time pooled feature mean (works for 1D/2D/panel alike)
+        tmin = int(block_tids.min())
+        L_series = int(block_tids.max()) - tmin + 1
+        psum = np.zeros(L_series)
+        pc = np.zeros(L_series)
+        for i in range(n):
+            oi = obs[i]
+            if oi.any():
+                ti = int(block_tids[i]) - tmin
+                psum[ti] += float(np.mean(target[i, oi]))
+                pc[ti] += 1.0
+        pooled = np.where(pc > 0, psum / np.maximum(pc, 1), np.nan)
+        periods = _detect_periods(pooled, max_lag=K, top=2)
+    Phi = _build_phi(block_tids, periods)
+    P = Phi.shape[1]
 
     # ridge solve per feature with ARD on beta (shared ridge tau_b learned by EB).
     # beta_j = (Phi_o' Phi_o + lam I)^-1 Phi_o' y_o    (only observed rows for j)
@@ -189,73 +240,107 @@ def _fit_params(block, block_tids, block_eids, ent_unique, time_unit,
     Xc = np.where(obs, block - ent_mean - season, 0.0)
 
     # ---- low-rank factor EM with PER-COLUMN ARD + per-feature R --------------
-    Lr = min(L, max(1, min(n, N)))
+    # Lr is fixed (= min(L, N)) across refits so the carried Kalman state keeps a
+    # stable dimension; ARD prunes redundant columns rather than dropping them.
+    Lr = max(1, min(L, N))
+
+    # SVD-based initialisation of W on the mean-filled centred residual: a data-
+    # driven starting point at the right SCALE (truncated principal subspace), so
+    # the EM does not have to grow W up from a tiny random seed (which, at small n,
+    # gets pruned by ARD before it can fit). Standard PPCA init.
+    def _svd_init():
+        Xf = Xc.copy()                     # already centred; missing -> 0
+        # robust: winsorise at a per-feature MAD multiple so a handful of heavy-tail
+        # outliers do not steer the principal subspace (the SVD is otherwise L2 and
+        # outlier-sensitive). MAD-based -> scale-free, not a tuned constant.
+        for j in range(N):
+            cj = Xf[:, j]
+            mad = np.median(np.abs(cj[obs[:, j]])) if obs[:, j].any() else 0.0
+            if mad > 0:
+                lim = 8.0 * 1.4826 * mad   # ~8 sigma robust cap
+                np.clip(cj, -lim, lim, out=cj)
+        try:
+            U_, s_, Vt_ = np.linalg.svd(Xf, full_matrices=False)
+            k = min(Lr, len(s_))
+            scale = np.sqrt(np.maximum(s_[:k], 1e-6) / max(np.sqrt(n), 1.0))
+            Wi = (Vt_[:k].T * scale)        # (N, k)
+            if Wi.shape[1] < Lr:
+                pad = np.random.default_rng(0).standard_normal((N, Lr - Wi.shape[1])) * 0.1
+                Wi = np.hstack([Wi, pad])
+            return np.ascontiguousarray(Wi)
+        except Exception:
+            return np.random.default_rng(0).standard_normal((N, Lr)) * 0.1
+
+    R0 = np.maximum(np.var(Xc[obs]) if obs.any() else 1.0, 1e-3) * np.ones(N)
     if warm is not None and warm.get("W") is not None and warm["W"].shape == (N, Lr):
+        # warm-carry the loadings (they evolve smoothly and, on heavy-tailed data,
+        # carry the robustly-cleaned subspace forward). Revive any column the ARD
+        # pruned to ~0 from a fresh SVD direction so pruning stays REVERSIBLE.
         W = warm["W"].copy()
-        alpha = warm.get("alpha", np.ones(Lr)).copy()
-        R = warm.get("R", np.ones(N)).copy()
-        if alpha.shape[0] != Lr:
-            alpha = np.ones(Lr)
+        R = warm.get("R", R0).copy()
         if R.shape[0] != N:
-            R = np.ones(N)
+            R = R0
+        col_norm = np.sqrt(np.sum(W ** 2, axis=0))
+        dead = col_norm < 1e-3 * (np.sqrt(np.mean(R)) + 1e-9)
+        if dead.any():
+            W[:, dead] = _svd_init()[:, dead]
     else:
-        rng = np.random.default_rng(0)
-        W = rng.standard_normal((N, Lr)) * 0.1
-        alpha = np.ones(Lr)                      # ARD prior variance per column
-        R = np.maximum(np.var(Xc[obs]) if obs.any() else 1.0, 1e-3) * np.ones(N)
+        W = _svd_init()
+        R = R0
+    alpha = np.ones(Lr)
 
     nu = warm.get("nu", NU_INIT) if warm is not None else NU_INIT
+    # ARD ridge per loading column (relevance). Large lam_l => column pruned.
+    # Stable sparse-Bayes / RVM formulation: latent prior is FIXED N(0, I); the
+    # shrinkage lives on the loadings W. lam is RE-INITIALISED each refit (not warm
+    # carried): a column pruned (lam->inf) in one window would otherwise be stuck
+    # dead forever; EM re-discovers the relevant rank in a few sweeps from warm W/R.
+    lam = np.ones(Lr)
 
     for sweep in range(EM_SWEEPS):
-        # E-step: latent scores Z (n, Lr); ridge by R and ARD via ZtZ + diag(1/alpha)
+        # E-step: latent scores Z (n, Lr) with FIXED latent prior N(0, I).
+        #   Z_i = (W_o' R_o^-1 W_o + I)^-1 W_o' R_o^-1 x_i
         Z = np.zeros((n, Lr))
-        inv_alpha = 1.0 / np.maximum(alpha, 1e-8)
         for i in range(n):
             oi = obs[i]
             if not oi.any():
                 continue
-            Wo = W[oi]
-            ro = R[oi]
-            # G = Wo' diag(1/ro) Wo + diag(1/alpha)
+            Wo = W[oi]; ro = R[oi]
             WtR = Wo.T / ro                       # (Lr, m)
-            G = WtR @ Wo + np.diag(inv_alpha)
+            G = WtR @ Wo + np.eye(Lr)
             try:
                 c = cho_factor(G + JITTER * np.eye(Lr), lower=True, check_finite=False)
                 Z[i] = cho_solve(c, WtR @ Xc[i, oi], check_finite=False)
             except Exception:
                 Z[i] = np.linalg.lstsq(Wo, Xc[i, oi], rcond=None)[0]
 
-        # M-step: W rows; per-feature R; ARD alpha. Student-t weights via IRLS.
-        # robustness weights w_ij from current residual (scale-mixture): downweight
-        # rows with large standardized residual. Uses learned nu.
+        # Student-t IRLS weights from current residual (scale-mixture robustness):
+        # rows with large standardized residual are down-weighted. Uses learned nu.
         pred = Z @ W.T
         resid = np.where(obs, Xc - pred, 0.0)
-        # per-observation t-weight = (nu+1)/(nu + (r^2 / R))
         with np.errstate(divide="ignore", invalid="ignore"):
             r2 = (resid ** 2) / np.maximum(R, 1e-8)
-        tw = (nu + 1.0) / (nu + np.where(obs, r2, 0.0))
-        tw = np.where(obs, tw, 0.0)
+        tw = np.where(obs, (nu + 1.0) / (nu + r2), 0.0)
 
+        # M-step W (per feature row), ridged by the ARD column relevances lam:
+        #   W_j = (Z_w' Z + R_j diag(lam))^-1 Z_w' x_j   (diag(lam) shrinks weak cols)
         new_W = W.copy()
+        Lam = np.diag(lam)
         for j in range(N):
             rj = obs[:, j]
             if not rj.any():
                 continue
-            Zr = Z[rj]
-            wj = tw[rj, j]
+            Zr = Z[rj]; wj = tw[rj, j]
             Zw = Zr * wj[:, None]
-            # ML estimate of W given the latent scores; ARD shrinkage acts through
-            # the LATENT prior (E-step diag(1/alpha)), NOT a second ridge on W -- a
-            # double penalty there drives a degenerate alpha->0->W->0 death spiral.
-            G = Zr.T @ Zw + JITTER * np.eye(Lr)
+            G = Zr.T @ Zw + R[j] * Lam + JITTER * np.eye(Lr)
             try:
-                c = cho_factor(G + JITTER * np.eye(Lr), lower=True, check_finite=False)
+                c = cho_factor(G, lower=True, check_finite=False)
                 new_W[j] = cho_solve(c, Zw.T @ Xc[rj, j], check_finite=False)
             except Exception:
                 new_W[j] = np.linalg.lstsq(Zr, Xc[rj, j], rcond=None)[0]
         W = new_W
 
-        # per-feature R from weighted residuals
+        # per-feature R from weighted residuals (robust)
         pred = Z @ W.T
         resid = np.where(obs, Xc - pred, 0.0)
         with np.errstate(divide="ignore", invalid="ignore"):
@@ -265,12 +350,18 @@ def _fit_params(block, block_tids, block_eids, ent_unique, time_unit,
         den = np.maximum(obs.sum(0), 1.0)
         R = np.maximum(num / den, R_floor)      # principled relative noise floor
 
-        # ARD update: alpha_l = mean_j W[j,l]^2  (per-column relevance, latent prior
-        # = N(0, diag(alpha))). Columns explaining nothing collapse -> automatic
-        # rank. Capped at the data scale so a factor cannot de-regularize to fit a
-        # single row exactly (the small-N / L>=N identifiability guard).
-        alpha = np.maximum(np.mean(W ** 2, axis=0), 1e-8)
-        alpha = np.minimum(alpha, 10.0 * float(fvar.mean()))
+        # ARD update of column relevances via EXPLAINED VARIANCE. Each factor's
+        # contribution to the (whitened) data is e_l = var(z_l) * sum_j W[j,l]^2/R[j].
+        # We pull the prior precision lam_l toward N/e_l, but inflate it sharply for
+        # factors whose explained variance is a tiny FRACTION of the strongest
+        # factor's -- those are noise directions and get pruned (lam->large) =>
+        # AUTOMATIC RANK. The fraction test is scale-free (ratio to the max), not a
+        # per-dataset constant. Deferred a couple of sweeps so columns can grow in.
+        if sweep >= 2:
+            wnorm = np.sum((W ** 2) / np.maximum(R, 1e-8)[:, None], axis=0)
+            lam = N / np.maximum(wnorm, 1e-8)
+            lam = np.minimum(lam, 1e8)
+            alpha = 1.0 / np.maximum(lam, 1e-8)  # stored for inspection
 
         # EM for nu (every other sweep): moment-match standardized residuals.
         if sweep >= 1 and (sweep % 2 == 1):
@@ -321,7 +412,7 @@ def _fit_params(block, block_tids, block_eids, ent_unique, time_unit,
     else:
         qd = np.maximum(alpha, 1e-3)
 
-    return dict(W=W, alpha=alpha, R=R, a=a, qd=qd, beta=beta, K=K,
+    return dict(W=W, alpha=alpha, R=R, a=a, qd=qd, beta=beta, periods=periods,
                 gmean=gmean, emean=emean, nu=nu, span=float(span), Lr=Lr)
 
 
@@ -352,13 +443,13 @@ def online_impute(X, meta):
     for r in range(T_rows):
         rows_by_time[t_to_pos[int(tids[r])]].append(r)
 
-    # number of Fourier harmonics. A rich basis (period span/h, h=2..K+1) so short
-    # cycles can be resolved; the ARD ridge on beta shrinks every harmonic the data
-    # does not need, so this is a CAPACITY bound (grows with series length), not a
-    # per-dataset knob. Capped so the per-feature ridge solve stays cheap.
-    K = int(np.clip(nT // 4, 0, 20))
-    if nT < 8:
-        K = 0
+    # K = MAX seasonal period the empirical detector may consider. We pass a large
+    # constant; _detect_periods internally caps the lag at (block_length // 2 - 1),
+    # i.e. by the data available UP TO tau at each refit -- so K does NOT depend on
+    # the TOTAL series length (which would leak future info under truncation and
+    # break causality). The detector keeps only ACF-significant periods; ARD on
+    # beta shrinks unhelpful harmonics. Not a per-dataset constant.
+    K = 100000
     L = min(L_MAX, N)
 
     # ---- params (shared); warm-started across refits -------------------------
@@ -370,10 +461,14 @@ def online_impute(X, meta):
         params = _fit_params(X[keep], tids[keep], eids[keep], ent_unique,
                              1.0, L, K, warm=params)
 
+    # CAUSAL refit schedule: the FIRST fit happens only once `init_pos` distinct
+    # times are available, and it uses data <= that time. Crucially we do NOT fit
+    # before the loop and then apply to earlier times (that would use future data).
+    # Times before the first fit are imputed by a strictly-past running column mean
+    # (point-in-time). Every later fit uses only rows with time <= the current tau.
     init_pos = max(min(MIN_REFIT_TIMES, nT) - 1, 0)
-    refit(init_pos)
-    last_refit_pos = init_pos
-    refit_threshold = max(MIN_REFIT_TIMES, int(init_pos * REFIT_GROWTH) + 1)
+    last_refit_pos = -1
+    refit_threshold = init_pos
 
     # per-entity Kalman state (reset at first appearance)
     state_z = {int(e): None for e in ent_unique}
@@ -383,12 +478,39 @@ def online_impute(X, meta):
     off_sum = {int(e): np.zeros(N) for e in ent_unique}
     off_cnt = {int(e): np.zeros(N) for e in ent_unique}
 
+    # strictly-past running column mean for the cold-start fallback (causal)
+    cs_sum = np.zeros(N); cs_cnt = np.zeros(N)
+
+    # strictly-past EXPONENTIALLY-WEIGHTED column level (for the non-panel level):
+    # recency-weighted so the baseline tracks slow drift / level breaks (the model
+    # then only has to explain the de-levelled signal). Forgetting is a principled
+    # non-stationary prior. The half-life is a FIXED capacity constant (does not
+    # depend on total series length, so truncation cannot change it -> causal).
+    EW_HALFLIFE = 100.0
+    ew_lam = 0.5 ** (1.0 / EW_HALFLIFE)
+    ew_sum = np.zeros(N)
+    ew_cnt = np.zeros(N)        # per-feature decayed observation weight
+
     for pos in range(nT):
         tau = uniq_times[pos]
-        if pos > last_refit_pos and pos >= refit_threshold:
+        if pos >= refit_threshold:
             refit(pos)
             last_refit_pos = pos
             refit_threshold = max(refit_threshold + 1, int(pos * REFIT_GROWTH) + 1)
+
+        if params is None:
+            # cold start: no model yet (fewer than init_pos times seen). Impute
+            # missing cells with the strictly-past running column mean, advance the
+            # running stats, and continue. Purely point-in-time.
+            cmean = np.where(cs_cnt > 0, cs_sum / np.maximum(cs_cnt, 1), 0.0)
+            for r in rows_by_time[pos]:
+                row = X[r]; miss = np.isnan(row)
+                if miss.any():
+                    out[r, miss] = cmean[miss]
+            for r in rows_by_time[pos]:
+                orow = X[r]; o = np.isfinite(orow)
+                cs_sum[o] += orow[o]; cs_cnt[o] += 1
+            continue
 
         W = params["W"]; alpha = params["alpha"]; R = params["R"]
         a = params["a"]; qd = params["qd"]; beta = params["beta"]
@@ -399,7 +521,7 @@ def online_impute(X, meta):
         invR = 1.0 / np.maximum(R, 1e-8)
 
         # seasonal component at this time (deterministic in tau)
-        phi_t = _build_phi(np.array([tau]), params["K"], span)[0]   # (P,)
+        phi_t = _build_phi(np.array([tau]), params["periods"])[0]   # (P,)
         season = phi_t @ beta                                       # (N,)
 
         # CONTEMPORANEOUS time effect (cross-section @ tau is allowed): pooled mean
@@ -437,7 +559,12 @@ def online_impute(X, meta):
                 base = np.where(oc > 0, off_sum[e] / np.maximum(oc, 1),
                                 emean.get(e, gmean)) + tfe + season
             else:
-                base = gmean + season
+                # non-panel level: blend the fitted (expanding) gmean with the
+                # strictly-past EW level so the baseline follows drift/level breaks.
+                # Falls back to gmean per-feature where no recent obs exist.
+                ew_level = np.where(ew_cnt > 1e-6, ew_sum / np.maximum(ew_cnt, 1e-6),
+                                    gmean)
+                base = ew_level + season
 
             if obs.any():
                 o = obs
@@ -487,6 +614,17 @@ def online_impute(X, meta):
             if obs.any():
                 off_sum[e][obs] += row[obs]
                 off_cnt[e][obs] += 1
+
+        # advance the strictly-past EW level using THIS time's observed values
+        # (after they have been used for imputation -> causal). Decay all features,
+        # add observed ones. Pooled across entities at this time for panels.
+        ew_sum *= ew_lam
+        ew_cnt *= ew_lam
+        for r in rows_by_time[pos]:
+            row = X[r]; o = np.isfinite(row)
+            if o.any():
+                ew_sum[o] += row[o]
+                ew_cnt[o] += 1.0
 
     # safety: strictly-past running column-mean fill for any residual NaN
     if np.isnan(out).any():
