@@ -40,8 +40,8 @@ from c_fe_lowrank import online_impute as _fe
 from c_router import _is_panel
 
 # ---- hyper-parameters (capped, 1D path only) ---- #
-MIN_WARM = 60          # need this many observed samples before trusting Fourier fit
-REFIT_K = 24           # refit coefficients every K newly-observed samples
+MIN_WARM = 48          # need this many observed samples before trusting Fourier fit
+REFIT_K = 8            # re-detect/refit every K newly-observed samples
 MAX_HARM = 8           # harmonics per detected period (covers daily+weekly: with a
                        # 24-lag fundamental + a 168 long period, 8 harmonics resolve
                        # the overlapping cycle structure; selected empirically)
