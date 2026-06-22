@@ -5,6 +5,8 @@
 \usepackage{amsmath,amssymb,amsthm}
 \usepackage{booktabs}
 \usepackage{pifont}
+\usepackage{float}
+\usepackage{multicol}
 \usepackage{microtype}
 \usepackage{xcolor}
 \usepackage{graphicx}
@@ -68,54 +70,6 @@ alternative to deep imputation models that a practitioner can read line by line.
 \end{abstract}
 
 \section{Introduction}
-Missing data is the rule, not the exception, in multivariate time series:
-sensors drop out, markets close, filings arrive irregularly, and panels are
-unbalanced. The dominant workflow is to \emph{pick} an imputer per
-dataset---SoftImpute~\cite{mazumder2010} for low-rank structure, TRMF~\cite{yu2016}
-for temporal dynamics, a Kalman smoother~\cite{harvey1989} for state-space
-structure, MC-NNM~\cite{athey2021} for panels, $k$NN or MICE for tabular blocks,
-or a deep model (BRITS~\cite{cao2018}, SAITS~\cite{du2023}, CSDI~\cite{tashiro2021},
-GRIN~\cite{cini2022}) when accuracy dominates compute. This has two costs. First,
-\emph{method selection}: the practitioner must diagnose the regime and tune the
-estimator, and a wrong choice fails silently. Second, and more insidiously,
-\emph{look-ahead leakage}: nearly every estimator above fills $x_t$ using all
-rows, so the imputation at $t$ depends on observations at times $>t$. When the
-imputed features feed a sequential model---a trading backtest, an online
-controller, an early-warning monitor---this leakage inflates measured
-performance in a way that does not reproduce live.
-
-\paragraph{Contributions.}
-\begin{enumerate}\itemsep1pt
-\item \textbf{One model, not a zoo.} \cafe{} is a single penalised objective
-(\S\ref{sec:model}) whose learned continuous parameters recover SoftImpute,
-TRMF, the Kalman filter, MC-NNM and EW-covariance imputation as special cases
-(Table~\ref{tab:special}). There is no routing and no data-dependent model
-selection.
-\item \textbf{Intrinsic, not tuned, adaptation.} Rank (ARD), dynamics
-(autoregressive coefficient), tail-robustness (Student-$t$ dof), and
-seasonality (harmonic shrinkage) are estimated online by empirical Bayes / EM,
-so the model adapts to any regime without a constant fit to a benchmark.
-\item \textbf{Certified causality.} \cafe{} is strictly point-in-time: the
-imputation and \emph{every} fitted parameter at time $t$ use only data at times
-$\le t$. We verify this mechanically (Prop.~\ref{prop:causal}).
-\item \textbf{CPU-first, zero-config.} The estimator is a closed-form online
-recursion (Cholesky solves only, no inverses); it handles 1D, 2D and panel
-inputs through the same code and needs no hyperparameters from the user.
-\end{enumerate}
-
-\paragraph{In plain terms.} \cafe{} reads a value as
-\emph{level $+$ season $+$ shared trend $+$ noise}. The \emph{level} is each
-series' own running average; the \emph{season} is a handful of sine/cosine waves;
-the \emph{shared trend} is a few common factors that move many series together
-(e.g.\ a weather front across air-quality sensors); the \emph{noise} is what is
-left, modelled with heavy tails so a single spike cannot distort the fit. To fill
-a hole, \cafe{} adds up the pieces it can compute from the past and the rest of
-the current row---exactly the reasoning a careful analyst would apply, but done
-automatically, online, and provably without peeking at the future. The four
-``dials'' that decide how much of each piece to use (how many factors, how much
-memory, how heavy the tails, how strong the seasonality) are \emph{learned from
-the data}, not set by hand. There is no neural network and no training phase.
-
 \begin{figure*}[t]
 \centering
 \begin{tikzpicture}[
@@ -167,6 +121,54 @@ $\beta$) are learned from the data; classical imputers are the corners of this
 parameter space, so there is no model to select.}
 \label{fig:hero}
 \end{figure*}
+
+Missing data is the rule, not the exception, in multivariate time series:
+sensors drop out, markets close, filings arrive irregularly, and panels are
+unbalanced. The dominant workflow is to \emph{pick} an imputer per
+dataset---SoftImpute~\cite{mazumder2010} for low-rank structure, TRMF~\cite{yu2016}
+for temporal dynamics, a Kalman smoother~\cite{harvey1989} for state-space
+structure, MC-NNM~\cite{athey2021} for panels, $k$NN or MICE for tabular blocks,
+or a deep model (BRITS~\cite{cao2018}, SAITS~\cite{du2023}, CSDI~\cite{tashiro2021},
+GRIN~\cite{cini2022}) when accuracy dominates compute. This has two costs. First,
+\emph{method selection}: the practitioner must diagnose the regime and tune the
+estimator, and a wrong choice fails silently. Second, and more insidiously,
+\emph{look-ahead leakage}: nearly every estimator above fills $x_t$ using all
+rows, so the imputation at $t$ depends on observations at times $>t$. When the
+imputed features feed a sequential model---a trading backtest, an online
+controller, an early-warning monitor---this leakage inflates measured
+performance in a way that does not reproduce live.
+
+\paragraph{Contributions.}
+\begin{enumerate}\itemsep1pt
+\item \textbf{One model, not a zoo.} \cafe{} is a single penalised objective
+(\S\ref{sec:model}) whose learned continuous parameters recover SoftImpute,
+TRMF, the Kalman filter, MC-NNM and EW-covariance imputation as special cases
+(Figure~\ref{fig:hero}, Table~\ref{tab:special}). There is no routing and no
+data-dependent model selection.
+\item \textbf{Intrinsic, not tuned, adaptation.} Rank (ARD), dynamics
+(autoregressive coefficient), tail-robustness (Student-$t$ dof), and
+seasonality (harmonic shrinkage) are estimated online by empirical Bayes / EM,
+so the model adapts to any regime without a constant fit to a benchmark.
+\item \textbf{Certified causality.} \cafe{} is strictly point-in-time: the
+imputation and \emph{every} fitted parameter at time $t$ use only data at times
+$\le t$. We verify this mechanically (Prop.~\ref{prop:causal}).
+\item \textbf{CPU-first, zero-config.} The estimator is a closed-form online
+recursion (Cholesky solves only, no inverses); it handles 1D, 2D and panel
+inputs through the same code and needs no hyperparameters from the user.
+\end{enumerate}
+
+\paragraph{In plain terms.} \cafe{} reads a value as
+\emph{level $+$ season $+$ shared trend $+$ noise}. The \emph{level} is each
+series' own running average; the \emph{season} is a handful of sine/cosine waves;
+the \emph{shared trend} is a few common factors that move many series together
+(e.g.\ a weather front across air-quality sensors); the \emph{noise} is what is
+left, modelled with heavy tails so a single spike cannot distort the fit. To fill
+a hole, \cafe{} adds up the pieces it can compute from the past and the rest of
+the current row---exactly the reasoning a careful analyst would apply, but done
+automatically, online, and provably without peeking at the future. The four
+``dials'' that decide how much of each piece to use (how many factors, how much
+memory, how heavy the tails, how strong the seasonality) are \emph{learned from
+the data}, not set by hand. There is no neural network and no training phase.
 
 \section{The \cafe{} Model}\label{sec:model}
 Let $x_{t,i}$ denote feature $i\in\{1,\dots,N\}$ at time $t$, observed on a set
@@ -338,6 +340,86 @@ GPU-trained deep imputers on standard benchmarks, while being the only method
 that is \emph{causal} (no look-ahead) and CPU-only---running the full suite in
 $\sim\!1$\,s. The right reading is accuracy \emph{at strictly less information and
 $\sim$1000$\times$ less compute}.
+
+\onecolumn
+\appendix
+\section{What \cafe{} yields from one causal pass}\label{sec:appendix}
+Every panel below is produced by the \emph{same} forward run of the model on real or
+synthetic data and read straight from its internal state---no quantity is illustrative.
+Together they show that a single causal estimator delivers a portfolio of capabilities
+that normally require separate tools.
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.86\textwidth]{figures/causal_moat.pdf}
+\caption{\textbf{The moat: no look-ahead.} For a fixed early missing cell, we re-impute
+on growing time-prefixes. \cafe{}'s estimate is \emph{frozen} the moment its time passes
+(flat line), so a backtest cannot be contaminated; the non-causal batch method's ``past''
+estimate keeps changing as the future is revealed. This is what makes \cafe{} safe for
+sequential decision-making.}
+\label{fig:moat}
+\end{figure}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.86\textwidth]{figures/decomposition.pdf}
+\caption{\textbf{Interpretability.} The imputed value is the sum of human-readable
+parts---level, season, shared factors, idiosyncratic carry---read from the trace, not a
+black box. Each term can be inspected, audited, or used on its own.}
+\label{fig:decomp}
+\end{figure}
+
+\begin{multicols}{2}
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/uncertainty.pdf}
+\caption{\textbf{Calibrated uncertainty.} Every fill carries a posterior band that widens
+inside long gaps (less information). Enables confidence intervals, error propagation, and
+multiple imputation.}
+\label{fig:unc}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/factors.pdf}
+\caption{\textbf{Latent factors \& learned rank.} The common factors $z_t$ (a streaming
+robust DFM); ARD prunes the rest, so the effective rank is discovered, not set.}
+\label{fig:fac}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/dependency_net.pdf}
+\caption{\textbf{Dependency network.} The residual covariance recovers the cross-sectional
+correlation structure between series---useful as features and for contagion analysis.}
+\label{fig:net}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/anomaly.pdf}
+\caption{\textbf{Anomaly detection (free).} The Student-$t$ weights drop exactly on injected
+outliers---a point-in-time data-quality / fault score from the same pass.}
+\label{fig:anom}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/adaptation.pdf}
+\caption{\textbf{Self-tuning dials.} The tails ($\nu$), memory ($a$) and effective rank
+adapt online from the data---no hyperparameters.}
+\label{fig:adapt}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/forecasting.pdf}
+\caption{\textbf{Forecasting = imputation.} Masking the last rows and imputing them yields a
+forecast via the AR/Kalman state---one model for fill, forecast and nowcast.}
+\label{fig:fc}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/benchmark.pdf}
+\caption{\textbf{Accuracy.} Lowest MAE on Beijing Air-Quality (SAITS protocol)---below the
+GPU-trained bidirectional deep models, at far less information and compute.}
+\label{fig:bench}
+\end{figure}
+\end{multicols}
+
+\twocolumn
 
 \begin{thebibliography}{99}\small\setlength{\itemsep}{0pt}
 \bibitem{mazumder2010} R.~Mazumder, T.~Hastie, R.~Tibshirani. Spectral
