@@ -87,8 +87,41 @@ def test_capabilities():
     assert net.shape == (5, 5)
     assert np.allclose(np.diag(net), 1.0, atol=1e-6)   # correlation matrix
     parts = res.decompose()
-    assert set(parts) == {"level", "season", "factor"}
+    assert set(parts) == {"level", "season", "factor", "residual"}
     assert isinstance(res.params["nu"], float)
+
+
+def test_anomaly_scores_bounded_and_detect():
+    """Anomaly score lives in [0, 1] and spikes on planted outliers."""
+    x = _data(T=200, N=1)[:, 0]
+    finite = ~np.isnan(x)
+    base = x.copy()
+    spikes = [40, 90, 150]
+    for s in spikes:                                    # plant +6 sigma outliers
+        base[s] = np.nanmean(x) + 6 * np.nanstd(x)
+    score = np.asarray(cafe.CAFE().run(base).anomaly_scores())
+    assert score.min() >= 0.0 and score.max() <= 1.0   # bounded by construction
+    assert np.mean(score[spikes]) > np.median(score[finite]) + 0.3   # outliers stand out
+
+
+def test_decomposition_sums_exactly():
+    """level + season + factor + residual reconstructs the filled data exactly."""
+    res = cafe.CAFE().run(_data())
+    parts = res.decompose()
+    total = sum(np.asarray(parts[k]) for k in ("level", "season", "factor", "residual"))
+    assert np.allclose(total, np.asarray(res.imputed), atol=1e-9)
+
+
+def test_uncertainty_widens_in_gap():
+    """The predictive std grows from a gap's edge toward its middle (AR forecast
+    variance) and never decreases -- bands widen inside gaps, then saturate."""
+    rng = np.random.default_rng(0)
+    x = np.cumsum(rng.standard_normal(400)) * 0.3        # smooth, persistent series
+    x[150:210] = np.nan                                  # a 60-step block gap
+    sd = np.asarray(cafe.CAFE().run(x).uncertainty).ravel()[150:210]
+    assert np.all(np.isfinite(sd))
+    assert sd[30] > sd[1] * 1.2                          # middle materially wider than edge
+    assert sd[-1] >= sd[0]                               # monotone-ish growth into the gap
 
 
 def test_forecast():

@@ -113,9 +113,16 @@ class CafeResult:
 
     # ---- anomaly / outlier score (free byproduct of the Student-t weights) ----
     def anomaly_scores(self):
-        """Per-time outlier score in [0, 1] (1 = strongly down-weighted by the
-        Student-t robustness, i.e. anomalous). Causal: row t uses only data <= t."""
-        s = 1.0 - self._comp()["row_w"]
+        """Per-time outlier score in [0, 1] (0 = perfect fit, 1 = strong outlier).
+
+        The Student-t IRLS weight is ``w = (nu+1)/(nu+u)`` with ``u`` the standardised
+        squared residual, so ``w`` exceeds 1 for well-fitting rows. We report the
+        bounded, monotone-in-``u`` quantity ``u/(nu+u) = 1 - w*nu/(nu+1)`` instead --
+        exactly 0 at a perfect fit and approaching 1 as the residual blows up. Causal:
+        row t uses only data <= t."""
+        C = self._comp()
+        nu, w = C["nu"], C["row_w"]
+        s = np.clip(1.0 - w * (nu / (nu + 1.0)), 0.0, 1.0)
         if self._ctx.kind == "pandas":
             import pandas as pd
             return pd.Series(s, index=self._ctx.index, name="anomaly")
@@ -123,9 +130,15 @@ class CafeResult:
 
     # ---- additive decomposition ----
     def decompose(self):
-        """dict of the additive parts (level, season, factor) as containers."""
+        """Additive parts as containers: ``level + season + factor + residual`` equals
+        the (filled) data exactly, so the decomposition is complete -- ``residual`` is
+        the heavy-tailed noise the structural parts don't explain (near zero at imputed
+        cells, the observation noise at observed cells)."""
         C = self._comp()
-        return {k: from_matrix(C[k], self._ctx) for k in ("level", "season", "factor")}
+        struct = C["level"] + C["season"] + C["factor"]
+        parts = {"level": C["level"], "season": C["season"], "factor": C["factor"],
+                 "residual": self._filled - struct}
+        return {k: from_matrix(v, self._ctx) for k, v in parts.items()}
 
     # ---- cross-sectional dependency network ----
     def dependency_network(self):

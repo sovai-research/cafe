@@ -76,8 +76,8 @@ res.imputed                  # the filled data (original container)
 res.uncertainty              # per-cell posterior std  (bands widen inside long gaps)
 res.confidence_interval()    # (lower, upper) at 1.96 sigma
 res.factors()                # latent common factors z_t  (streaming robust DFM)
-res.anomaly_scores()         # per-time outlier score from the Student-t weights
-res.decompose()              # {'level', 'season', 'factor'} additive parts
+res.anomaly_scores()         # per-time outlier score in [0,1] (0 = fit, 1 = outlier)
+res.decompose()              # {'level','season','factor','residual'} — sums to the data
 res.dependency_network()     # NxN residual-correlation network between series
 res.params                   # learned dials: {'nu', 'ar', 'effective_rank'}
 

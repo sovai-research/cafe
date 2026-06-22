@@ -235,6 +235,12 @@ class _UnifiedCore:
         self.psi = np.ones(N)
         self.psi_sum = np.ones(N)
         self.psi_cnt = np.full(N, 1e-3)
+        # EW variance of the FACTOR contribution lr per feature (E[lr^2]). Used ONLY for
+        # the predictive band: inside a gap the factor state z is forecast (z_t = a z_{t-1}),
+        # so its contribution carries the AR(a) k-step forecast variance lrc*(1-a^{2k}),
+        # which makes the band widen through the gap. Never feeds the imputed value.
+        self.lrc_sum = np.zeros(N)
+        self.lrc_cnt = np.full(N, 1e-3)
         self.s_fac = np.ones(self.R)
         # per-feature idiosyncratic AR(1) carry: the part of the residual NOT explained
         # by the common factors persists in time (TRMF/AR on the idiosyncratic channel).
@@ -586,11 +592,27 @@ class _UnifiedCore:
                         + (1.0 - w_xs) * (lr[miss] + _carry_m) + w_xs * xs)
             out[miss] = fill
             if getattr(self, "record", False):       # opt-in introspection (no prod effect)
+                # Posterior predictive variance that GROWS through a gap and saturates at
+                # the marginal -- the textbook forecast variance of an AR state. k = steps
+                # since the last observation = the forecast horizon for this cell.
                 _vlr = max(self.lr_var, EPS)
-                _fv = (_vlr * xsv) / (_vlr + xsv) if xs is not None \
-                    else np.full(int(miss.sum()), _vlr)
+                _k = self.idio_age[miss] + 1.0
+                if xs is not None:
+                    # contemporaneous cross-section observed -> conditional fusion variance
+                    _fv = (_vlr * xsv) / (_vlr + xsv)
+                else:
+                    # gap: the factor state z is forecast (z_t = a z_{t-1}), so add its
+                    # AR(a) k-step forecast variance lrc*(1-a^{2k}) on top of the residual
+                    # floor. a~1 (smooth series) -> slow saturation -> a band that visibly
+                    # widens deep into the gap; a~0 -> flat. Never touches the fill.
+                    _lrc = self.lrc_sum[miss] / np.maximum(self.lrc_cnt[miss], 1e-3)
+                    _fv = _vlr + _lrc * (1.0 - self.a ** (2.0 * _k))
+                # idiosyncratic floor = k-step AR(1) forecast variance psi*(1-rho^{2k}):
+                # grows from the 1-step value to the stationary psi (k->inf recovers the
+                # old constant psi; rho_idio=0 leaves it flat).
+                _idio = np.maximum(self.psi[miss], 0.0) * (1.0 - self.rho_idio ** (2.0 * _k))
                 _cv = np.full(N, np.nan)
-                _cv[miss] = _fv + np.maximum(self.psi[miss], 0.0)   # posterior predictive var
+                _cv[miss] = _fv + _idio                            # posterior predictive var
                 self._cvar_row = _cv
 
         # advance idiosyncratic-carry age for every feature (reset below for observed)
@@ -629,6 +651,9 @@ class _UnifiedCore:
             self.psi_sum[oi] = lam * self.psi_sum[oi] + r2v
             self.psi_cnt[oi] = lam * self.psi_cnt[oi] + 1.0
             self.psi = self.psi_sum / np.maximum(self.psi_cnt, 1e-3)
+            # EW factor-contribution variance E[lr^2] per feature (band-only, see __init__)
+            self.lrc_sum[oi] = lam * self.lrc_sum[oi] + lr_o * lr_o
+            self.lrc_cnt[oi] = lam * self.lrc_cnt[oi] + 1.0
             # idiosyncratic AR(1): autocorrelation of the idio residual (resid_c - lr).
             prev = self.idio_last[oi]
             fresh = self.idio_age[oi] <= 1.5             # consecutive obs only
