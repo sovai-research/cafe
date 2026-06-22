@@ -1,0 +1,19 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+
+# Scratch / models
+temp/
+*.pkl
+
+# LaTeX intermediates
+*.aux
+*.log
+*.out
+*.xdv
+*.synctex.gz
+
+# OS
+.DS_Store
