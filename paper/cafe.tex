@@ -24,6 +24,13 @@
 \definecolor{cafegrey}{HTML}{94A3B8}
 \newcommand{\ubt}[3]{\textcolor{#1}{\underbrace{#2}_{\text{\scriptsize #3}}}}
 
+\usepackage{listings}
+\lstdefinestyle{cafepy}{language=Python, basicstyle=\ttfamily\scriptsize,
+  keywordstyle=\color{cafeblue}\bfseries, stringstyle=\color{cafeteal},
+  commentstyle=\color{cafeslate}\itshape, showstringspaces=false, breaklines=true,
+  columns=fullflexible, frame=leftline, framesep=5pt, rulecolor=\color{cafegrey},
+  xleftmargin=7pt, aboveskip=3pt, belowskip=2pt, breakatwhitespace=true}
+
 \newcommand{\cafe}{CAF\'E}
 \newtheorem{proposition}{Proposition}
 
@@ -78,39 +85,44 @@ alternative to deep imputation models that a practitioner can read line by line.
                minimum height=9mm, align=center},
   lf/.style={-{Stealth[length=5pt]}, cafeslate, line width=0.8pt},
   leaf/.style={rounded corners=2pt, draw=cafeteal!55, fill=cafeteal!8, inner sep=3pt,
-               font=\footnotesize, align=center, minimum width=22mm},
-  dial/.style={font=\scriptsize\itshape, cafeamber, inner sep=1pt},
+               font=\footnotesize, align=center, minimum width=33mm, minimum height=8mm},
 ]
+% top: the model (what every value is)
 \node[term, fill=cafebg] (X) at (0,0) {observed\\[-1pt]$X_{\le t}$\\[-2pt]\scriptsize with gaps};
-\node[term, draw=cafeblue!55, fill=cafeblue!8] (fill) at (12.2,0)
+\node[term, draw=cafeblue!55, fill=cafeblue!8] (fill) at (12.4,0)
    {imputed $\hat{X}$\\[-2pt]\scriptsize $+$ uncertainty};
-\node (eq) at (6.0,0) {$\displaystyle \hat{x}_{t,i}=
+\node (eq) at (6.1,0) {$\displaystyle \hat{x}_{t,i}=
    \ubt{cafeblue}{\mu_{e,i}}{level}+
    \ubt{cafeteal}{(\Phi_t\beta)_i}{season}+
    \ubt{cafeamber}{(Wz_t)_i}{factors}+
    \ubt{caferred}{\varepsilon_{t,i}}{noise}$};
 \draw[lf] (X.east) -- (eq.west);
 \draw[lf] (eq.east) -- (fill.west);
-\node[font=\footnotesize\itshape, cafeslate] (cap) at (6.0,-1.15)
+\node[font=\footnotesize\itshape, cafeslate] at (6.1,-1.05)
    {point-in-time: $\hat{x}_t$ and every fitted parameter use only data $\le t$\, (no look-ahead)};
 \draw[-{Stealth[length=5pt]}, cafegrey, line width=1pt]
-   (-1.4,-1.75) -- node[below, font=\scriptsize, pos=0.985]{$t$} (13.6,-1.75);
-\node[term, fill=cafeteal!12, draw=cafeteal, align=center, minimum width=34mm] (obj) at (1.6,-4.0)
-   {\textbf{one penalised objective}\\[1pt]
-    {\scriptsize fit online; \emph{dials learned from data:}}\\[1pt]
-    {\scriptsize\itshape $\nu$\,(tails)\, $a$\,(memory)\, ARD\,(rank)\, $\beta$\,(season)}};
-\node[leaf] (l1) at (8.2,-2.55) {SoftImpute};
-\node[leaf] (l2) at (8.2,-3.35) {TRMF};
-\node[leaf] (l3) at (8.2,-4.15) {Kalman / SSM};
-\node[leaf] (l4) at (8.2,-4.95) {MC-NNM};
-\node[leaf] (l5) at (8.2,-5.75) {EW-cov};
-\draw[lf] (obj.east) to[out=35,in=180]  node[dial,above,pos=0.5]{$a{=}0,\,\nu{\to}\infty$} (l1.west);
-\draw[lf] (obj.east) to[out=18,in=180]  node[dial,above,pos=0.5]{$a$ learned} (l2.west);
-\draw[lf] (obj.east) to[out=2,in=180]   node[dial,above,pos=0.5]{$a{\to}1$} (l3.west);
-\draw[lf] (obj.east) to[out=-14,in=180] node[dial,below,pos=0.5]{FE $+$ low rank} (l4.west);
-\draw[lf] (obj.east) to[out=-30,in=180] node[dial,below,pos=0.5]{rank ${\to}0$} (l5.west);
-\node[font=\footnotesize\itshape, cafeslate, align=left] at (11.6,-4.15)
-   {each classical\\ imputer is a\\ \textbf{\textcolor{cafeteal}{special case}}};
+   (-1.5,-1.55) -- node[below, font=\scriptsize, pos=0.99]{$t$} (13.9,-1.55);
+% connector: the equation IS fit by one objective
+\node[draw=cafeteal, rounded corners=3pt, fill=cafeteal!12, align=center, very thick,
+      minimum width=58mm, inner sep=5pt] (obj) at (4.0,-3.7)
+   {\textbf{one penalised objective} $\mathcal{L}$ \;\; \scriptsize(fit jointly, online, data $\le t$)\\[2pt]
+    \scriptsize\emph{dials learned from data:}\;
+    \textcolor{caferred}{$\nu$\,tails}\, \textcolor{cafeamber}{$a$\,memory}\,
+    \textcolor{cafeamber}{ARD\,rank}\, \textcolor{cafeteal}{$\beta$\,season}};
+\draw[-{Stealth[length=5pt]}, cafeteal, line width=1pt]
+   (eq.south) -- (obj.north -| eq.south);
+\node[anchor=west, font=\scriptsize\itshape, cafeslate, align=left, fill=white,
+      inner sep=1.5pt] at (6.5,-2.35)
+   {the four terms are\\ \emph{fit jointly} (one $\mathcal{L}$)};
+% right: classical methods are corners of this objective
+\node[leaf] (l1) at (11.6,-2.55) {\textbf{SoftImpute}\\[-1pt]{\scriptsize\itshape $a{=}0,\ \nu{\to}\infty$}};
+\node[leaf] (l2) at (11.6,-3.55) {\textbf{TRMF}\\[-1pt]{\scriptsize\itshape $a$ learned}};
+\node[leaf] (l3) at (11.6,-4.55) {\textbf{Kalman / SSM}\\[-1pt]{\scriptsize\itshape $a{\to}1$}};
+\node[leaf] (l4) at (11.6,-5.55) {\textbf{MC-NNM}\\[-1pt]{\scriptsize\itshape FE $+$ low rank}};
+\node[leaf] (l5) at (11.6,-6.55) {\textbf{EW-cov}\\[-1pt]{\scriptsize\itshape rank ${\to}\,0$}};
+\foreach \l in {l1,l2,l3,l4,l5}{\draw[lf] (obj.east) to[out=0,in=180] (\l.west);}
+\node[font=\footnotesize\itshape, cafeslate, align=center] at (4.0,-6.4)
+   {each classical imputer is a\\ \textbf{\textcolor{cafeteal}{special case}} (a corner of $\mathcal{L}$)};
 \end{tikzpicture}
 \caption{\textbf{CAF\'E in one picture.} \emph{Top:} every value is the sum of four
 interpretable parts---a per-series level, a Fourier season, a few shared low-rank
@@ -230,10 +242,10 @@ continuous parameters (no hard-coding).}
 Method & \cafe{} parameter regime \\
 \midrule
 Feature-mean / FE & $R{=}0,\ \beta{=}0$ \\
-SoftImpute~\cite{mazumder2010} & $a{=}0,\ \nu{\to}\infty,\ \text{ARD keeps few }l$ \\
-TRMF~\cite{yu2016} & $a\in(0,1)$ learned, AR penalty on \\
+SoftImpute~\cite{mazumder2010} & $a{=}0,\ \nu{\to}\infty$, few factors \\
+TRMF~\cite{yu2016} & $a\in(0,1)$ learned, AR penalty \\
 Kalman / SSM~\cite{harvey1989} & $a{\to}1$ (random-walk state) \\
-EW-cov / Gaussian cond.\ mean & $R{\to}0$, full residual covariance \\
+EW-cov / Gauss.\ cond.\ mean & $R{\to}0$, full resid.\ covariance \\
 MC-NNM~\cite{athey2021} & $\mu_e+\text{time-FE}+$ low rank \\
 Robust ($t$) regression & $\nu$ small (heavy tails) \\
 Harmonic / seasonal & $\beta\neq0$ via ARD \\
@@ -259,9 +271,24 @@ produce it are measurable functions of $\{x_{t}: t\le\tau\}$ only. Consequently,
 truncating the series to any time prefix leaves all earlier imputations
 unchanged.
 \end{proposition}
-\noindent The proposition is enforced mechanically by a verifier that re-runs the
-estimator on every time prefix and asserts bitwise stability of past
-imputations; \cafe{} passes on all benchmark cases.
+\noindent\emph{Proof sketch.} \cafe{} maintains a state
+$S_\tau=(z_\tau,W,\alpha,a,\nu,s)$ and processes rows in increasing time order,
+writing $S_\tau=g(S_{\tau-1},x_\tau)$: the Kalman posterior for $z_\tau$ depends
+only on $z_{\tau-1}$, the current row and the parameters, while the
+loadings/ARD/AR refresh reads only a trailing window of rows with time
+$\le\tau$. Hence $S_\tau$ is a measurable function of $\{x_t:t\le\tau\}$, and by
+induction so is every parameter and the fill $\hat x_\tau=W_{\!m}z_\tau$ (fused
+with a cross-sectional conditional mean built from time-$\le\tau$ statistics).
+Truncating the series at any $k$ therefore leaves $S_\tau$ and $\hat x_\tau$ for
+all $\tau<k$ literally unchanged. $\square$
+
+We also enforce this \emph{mechanically}: a verifier re-runs the estimator on
+every time prefix and compares each early fill against the full-series value.
+Across $59{,}336$ (cell, prefix) comparisons on four datasets \cafe{}'s maximum
+deviation is exactly $0$, whereas a non-causal batch method (SoftImpute)
+silently revises the \emph{same} past cells by $0.25$ standard deviations as the
+future arrives (Table~\ref{tab:causalverify}).
+\input{tables/causal_verify}
 
 \section{Benchmarks and Results}\label{sec:exp}
 We benchmark \cafe{} \emph{without retraining any competitor}: we reproduce each
@@ -335,14 +362,92 @@ BeijingAir   & .83 & .83 & $\mathbf{.91}$ & .89 & .63 & .86 \\
 \end{tabular}
 \end{table}
 
+\paragraph{The cost of look-ahead.} \S\ref{sec:model} argued that non-causal
+imputers leak the future; here we measure the damage. On ETTh1 we train a ridge
+forecaster to predict the next step from imputed features under a strict
+$70/30$ temporal split, then score it two ways: \emph{reported} (features from a
+single batch imputation of the whole series) and \emph{live} (each test row
+re-imputed point-in-time). The gap $\Delta_{R^2}$ is pure look-ahead optimism.
+Bidirectional imputers inflate reported $R^2$ by up to $0.48$ (SoftImpute) and
+$0.19$ (TRMF)---indeed TRMF's honest \emph{live} $R^2$ ($0.16$) is \emph{worse}
+than \cafe{}'s ($0.26$) despite a better-looking reported number---while
+\cafe{}'s reported and live scores are identical by construction
+(Table~\ref{tab:leakage}, Fig.~\ref{fig:leakage}).
+\input{tables/leakage}
+
+\paragraph{Ablation.} Table~\ref{tab:ablation} removes one learned dial at a
+time. Three earn their place decisively on the regime they target: Student-$t$
+tails on heavy-tailed data (MAE $1.33\!\to\!2.08$ when removed), the AR
+coefficient on dynamic block-gap data, and ARD rank on drifting data. The
+seasonal dial is the exception---it is decisive on a strongly periodic
+\emph{univariate} series (Seas-1D, $0.58\!\to\!1.37$ if removed) but roughly
+neutral on multivariate panels, where the low-rank term already absorbs periodic
+structure and ARD shrinks the harmonics toward zero. We keep it because it is
+ARD-gated and never materially hurts, but it is the one component that is
+regime-specific rather than universal.
+\input{tables/ablation}
+
+\paragraph{Robustness: mechanisms and long gaps.} \cafe{} is the best
+\emph{causal} method under all four missingness mechanisms
+(Table~\ref{tab:mnar}). Under self-masking MNAR every estimator degrades---a
+bias no ignorable-missingness method escapes---but \cafe{}'s relative margin is
+preserved, and on contiguous \emph{block} gaps it halves the error of LOCF and
+linear interpolation. That advantage widens with gap length
+(Table~\ref{tab:longgap}, Fig.~\ref{fig:longgap}): as a single gap grows to
+$40\%$ of the series, local methods saturate near the unconditional error while
+\cafe{} stays bounded via its AR\,$+$\,season\,$+$\,factor extrapolation,
+beating even the non-causal SoftImpute reference at every length.
+\input{tables/mnar}
+\input{tables/longgap}
+
+\paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
+$1.4$\,s on a single CPU core---the lowest MAE of any baseline, at cost
+comparable to SoftImpute and below TRMF (Table~\ref{tab:runtime}). Cost is
+linear in series length $T$ (measured log-log slope $1.03$) and sub-linear in
+width $N$ (slope $0.25$): each row performs only rank-$R$ Cholesky solves, never
+an $N\times N$ inverse (Fig.~\ref{fig:scaling}). Against GPU-trained deep
+imputers, which require a full training run (and, for diffusion models, hundreds
+of denoising steps per fill), this is the $\sim\!10^3\times$ compute gap
+referenced below.
+\input{tables/runtime}
+
 \paragraph{Takeaway.} \cafe{} matches or beats both classical batch methods and
 GPU-trained deep imputers on standard benchmarks, while being the only method
 that is \emph{causal} (no look-ahead) and CPU-only---running the full suite in
 $\sim\!1$\,s. The right reading is accuracy \emph{at strictly less information and
 $\sim$1000$\times$ less compute}.
 
-\onecolumn
 \appendix
+\section{Using the \texttt{cafe} library}\label{sec:lib}
+\cafe{} ships as a small, dependency-light Python package (\texttt{numpy}\,+\,\texttt{scipy};
+\texttt{pandas}/\texttt{polars} optional). It is zero-configuration and container-native---a
+\texttt{numpy} array, \texttt{pandas} or \texttt{polars} frame (1D or 2D) goes in, the same
+type comes back with gaps filled and no look-ahead:
+\begin{lstlisting}[style=cafepy]
+import cafe
+filled = cafe.impute(df)   # same container type back;
+                           # gaps filled point-in-time
+\end{lstlisting}
+The \emph{same} causal pass exposes every capability visualised in Appendix~\ref{sec:appendix}
+(Figures~\ref{fig:moat}--\ref{fig:bench}):
+\begin{lstlisting}[style=cafepy]
+res = cafe.CAFE().run(df)
+res.imputed               # filled data (orig. container)
+res.uncertainty           # per-cell posterior std
+res.factors()             # latent common factors z_t
+res.dependency_network()  # NxN residual-corr network
+res.anomaly_scores()      # Student-t outlier score
+res.decompose()           # level / season / factor
+res.params                # {nu, ar, effective_rank}
+
+# forecasting == imputing future rows
+future = cafe.CAFE().forecast(df, horizon=24)
+\end{lstlisting}
+Causality and edge-case robustness are part of the test suite: a verifier asserts that past
+imputations are unchanged when the future is appended, and a contract checks finite, same-shape
+output on degenerate inputs (all-missing, $1\times1$, constant, $\pm\infty$, single entity/time).
+
+\onecolumn
 \section{What \cafe{} yields from one causal pass}\label{sec:appendix}
 Every panel below is produced by the \emph{same} forward run of the model on real or
 synthetic data and read straight from its internal state---no quantity is illustrative.
@@ -370,9 +475,10 @@ black box. Each term can be inspected, audited, or used on its own.}
 \begin{multicols}{2}
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/uncertainty.pdf}
-\caption{\textbf{Calibrated uncertainty.} Every fill carries a posterior band that widens
-inside long gaps (less information). Enables confidence intervals, error propagation, and
-multiple imputation.}
+\caption{\textbf{Conservative uncertainty.} Every fill carries a posterior band that widens
+inside long gaps (less information). The bands are \emph{never over-confident}---empirically
+they over-cover, a safe failure mode for decision-making---and enable confidence intervals,
+error propagation, and multiple imputation.}
 \label{fig:unc}
 \end{figure}
 
@@ -418,6 +524,39 @@ GPU-trained bidirectional deep models, at far less information and compute.}
 \label{fig:bench}
 \end{figure}
 \end{multicols}
+
+\section{Experimental figures}\label{sec:expfigs}
+These panels accompany the experiments of \S\ref{sec:exp}; every number is from a
+real run on the stated data.
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/leakage.pdf}
+\caption{\textbf{The cost of look-ahead (Table~\ref{tab:leakage}).} \emph{Left:}
+a downstream ridge forecaster's reported vs.\ honest \emph{live} $R^2$ on ETTh1;
+batch (bidirectional) imputation inflates the reported score, and the same
+fixed model is worse live, while \cafe{} is identical both ways. \emph{Right:}
+mean $|$revision$|$ of an early imputed cell as the future is revealed---batch
+methods keep rewriting their own past, \cafe{} is flat at zero.}
+\label{fig:leakage}
+\end{figure}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.74\textwidth]{figures/longgap.pdf}
+\caption{\textbf{Graceful degradation under long gaps (Table~\ref{tab:longgap}).}
+Imputation MAE as a single contiguous gap grows to $40\%$ of the series. Local
+causal methods (LOCF, linear) saturate near the unconditional error; \cafe{}
+stays bounded and beats even the non-causal SoftImpute reference at every length.}
+\label{fig:longgap}
+\end{figure}
+
+\begin{figure}[h]\centering
+\includegraphics[width=0.92\textwidth]{figures/scaling.pdf}
+\caption{\textbf{Scaling (Table~\ref{tab:runtime}).} Wall-clock vs.\ series
+length $T$ (log-log slope $1.03$, near-linear) and vs.\ width $N$ (slope $0.25$,
+sub-linear): each row uses only rank-$R$ Cholesky solves, never an $N\times N$
+inverse.}
+\label{fig:scaling}
+\end{figure}
 
 \twocolumn
 

@@ -31,41 +31,49 @@ med = np.median(alpha, axis=1, keepdims=True)
 eff = (alpha < med).sum(axis=1)
 
 # --- figure ------------------------------------------------------------------
-fig, ax = plt.subplots(figsize=(3.4, 2.5))
+# Two stacked panels: continuous dials (nu, a) on top with twin axes; the
+# integer effective rank on its own panel below (avoids misleading rescaling
+# and the overlap between the rank step and the AR line).
+fig, (ax, axr) = plt.subplots(
+    2, 1, figsize=(3.4, 3.0), sharex=True,
+    gridspec_kw=dict(height_ratios=[2.4, 1.0]), constrained_layout=True)
 
-# left axis: nu (robustness dial)
+# --- top panel: nu (left) and a (right twin) -------------------------------
 l_nu, = ax.plot(t, nu, color=P["red"], lw=1.3, label=r"$\nu$  tails (dof)")
-ax.set_xlabel("time  $t$", fontsize=9)
 ax.set_ylabel(r"Student-$t$ dof  $\nu$", color=P["red"], fontsize=9)
 ax.tick_params(axis="y", labelcolor=P["red"])
 V.style_ax(ax)
 
-# right twin axis: a (memory dial)
 ax_a = ax.twinx()
 l_a, = ax_a.plot(t, a, color=P["blue"], lw=1.3, label=r"$a$  memory (AR)")
 ax_a.set_ylabel(r"AR coef.  $a$", color=P["blue"], fontsize=9)
 ax_a.tick_params(axis="y", labelcolor=P["blue"], labelsize=8)
 ax_a.spines["top"].set_visible(False)
 
-# effective rank as a step trace, scaled onto the AR axis for shared display
-amin, amax = float(np.nanmin(a)), float(np.nanmax(a))
-emax = max(int(eff.max()), 1)
-eff_scaled = amin + (eff / emax) * (amax - amin)
-l_r, = ax_a.step(t, eff_scaled, where="post", color=P["teal"], lw=1.3,
-                 alpha=0.85, label=r"eff. rank ($\times$%d)" % emax)
-
-# legend combining all three traces
-lines = [l_nu, l_a, l_r]
+# compact stacked legend in the empty mid-right band (there nu has fallen to
+# ~4.2 and a sits near 0.8, leaving the mid-height clear), so it covers no data
+lines = [l_nu, l_a]
 ax.legend(lines, [ln.get_label() for ln in lines], fontsize=7.5,
-          loc="center right", frameon=False)
+          loc="center right", bbox_to_anchor=(0.995, 0.62),
+          frameon=True, framealpha=0.9, ncol=1, handlelength=1.5,
+          borderpad=0.35, handletextpad=0.5, labelspacing=0.35)
 
-ax.set_title("CAFE learns its own dials online:\ntails ($\\nu$), memory ($a$), rank",
+# --- bottom panel: integer effective rank ----------------------------------
+axr.step(t, eff, where="post", color=P["teal"], lw=1.3, alpha=0.9)
+axr.fill_between(t, eff, step="post", color=P["teal"], alpha=0.12)
+axr.set_ylabel("eff.\nrank", color=P["teal"], fontsize=9)
+axr.tick_params(axis="y", labelcolor=P["teal"])
+axr.set_xlabel("time  $t$", fontsize=9)
+emax = max(int(eff.max()), 1)
+axr.set_ylim(0, emax + 0.5)
+axr.set_yticks(range(0, emax + 1))
+V.style_ax(axr)
+
+fig.suptitle("CAFE learns its own dials online:\ntails ($\\nu$), memory ($a$), rank",
              fontsize=9)
-
-fig.tight_layout()
 out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "paper", "figures", "adaptation.pdf")
 os.makedirs(os.path.dirname(out), exist_ok=True)
-fig.savefig(out, bbox_inches="tight")
+fig.savefig(out, bbox_inches="tight", pad_inches=0.03)
 print("saved", out, "nu range", nu.min(), nu.max(),
       "a range", a.min(), a.max(), "eff range", eff.min(), eff.max())

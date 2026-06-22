@@ -51,36 +51,47 @@ fill = C["filled"][:, j]                          # + idiosyncratic AR carry
 
 obs_mask = ~np.isnan(Xo[:, j])
 
+# --- zoom to a readable window centred on the missing block ----------------
+# Full 400-step panel overlays four wiggly curves into illegible spaghetti;
+# a window around the gap shows the additive layering clearly. Still the exact
+# same real model output -- only the x-range shown is restricted.
+pad = max(blk_len, 30)
+w0 = max(0, blk_start - pad)
+w1 = min(T, blk_end + pad)
+ws = slice(w0, w1)
+
 # --- plot -------------------------------------------------------------------
-fig, ax = plt.subplots(figsize=(3.4, 2.5))
+fig, ax = plt.subplots(figsize=(6.8, 2.6), constrained_layout=True)
 
 # shade the missing block span lightly
-ax.axvspan(blk_start, blk_end, color=PAL["grey"], alpha=0.16, lw=0,
+ax.axvspan(blk_start, blk_end, color=PAL["grey"], alpha=0.18, lw=0,
            label="missing block")
 
 # observed points
-ax.scatter(t[obs_mask], Xo[obs_mask, j], s=5, color=PAL["grey"],
-           alpha=0.7, zorder=2, label="observed", edgecolors="none")
+win_obs = obs_mask & (t >= w0) & (t < w1)
+ax.scatter(t[win_obs], Xo[win_obs, j], s=9, color=PAL["ink"],
+           alpha=0.55, zorder=5, label="observed", edgecolors="none")
 
 # stacked / overlaid additive pieces
-ax.plot(t, lvl, lw=1.3, color=PAL["slate"], label="level")
-ax.plot(t, lvl_sea, lw=1.3, color=PAL["teal"], label="+ season")
-ax.plot(t, recon, lw=1.3, color=PAL["blue"], label="+ factor")
-ax.plot(t, fill, lw=1.3, color=PAL["red"], ls=(0, (4, 1.5)),
-        label="+ AR carry = fill")
+ax.plot(t[ws], lvl[ws], lw=1.2, color=PAL["slate"], label="level")
+ax.plot(t[ws], lvl_sea[ws], lw=1.2, color=PAL["teal"], label="+ season")
+ax.plot(t[ws], recon[ws], lw=1.2, color=PAL["blue"], label="+ factor")
+ax.plot(t[ws], fill[ws], lw=1.6, color=PAL["red"], ls=(0, (4, 1.5)),
+        zorder=4, label="+ AR carry = fill")
 
 ax.set_title("CAFE decomposes every value into interpretable parts",
-             fontsize=8.5, pad=4)
+             fontsize=10, pad=5)
 ax.set_xlabel("time $t$", fontsize=9)
 ax.set_ylabel(f"series $j={j}$ value", fontsize=9)
-ax.set_xlim(0, T - 1)
+ax.set_xlim(w0, w1 - 1)
 V.style_ax(ax)
-ax.legend(fontsize=6.6, ncol=2, loc="upper left", framealpha=0.85,
-          handlelength=1.6, columnspacing=1.0, borderaxespad=0.3)
+ax.legend(fontsize=7.5, ncol=1, loc="center left",
+          bbox_to_anchor=(1.01, 0.5), framealpha=0.9,
+          handlelength=1.8, borderaxespad=0.0)
 
 out = "/Users/dereksnow/Sovai/Github/TIMARA/paper/figures/decomposition.pdf"
 os.makedirs(os.path.dirname(out), exist_ok=True)
-fig.savefig(out, bbox_inches="tight")
+fig.savefig(out, bbox_inches="tight", pad_inches=0.03)
 plt.close(fig)
 
 # honesty check: on OBSERVED cells the fill must equal the observed value, and

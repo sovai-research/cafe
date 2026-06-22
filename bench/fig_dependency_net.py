@@ -39,7 +39,7 @@ Rord = R[np.ix_(order, order)]
 
 # --- plot -------------------------------------------------------------------
 plt.rcParams.update({"font.size": 8, "pdf.fonttype": 42, "ps.fonttype": 42})
-fig, ax = plt.subplots(figsize=(3.4, 2.5))
+fig, ax = plt.subplots(figsize=(3.4, 2.7), constrained_layout=True)
 
 im = ax.imshow(Rord, cmap="RdBu_r", vmin=-1, vmax=1, interpolation="nearest")
 
@@ -49,8 +49,8 @@ ax.set_xticklabels(labels, fontsize=6, rotation=90)
 ax.set_yticklabels(labels, fontsize=6)
 ax.set_xlabel("series (reordered by leading eigenvector)", fontsize=8)
 ax.set_ylabel("series", fontsize=8)
-ax.set_title("Residual covariance = learned dependency\nnetwork between series",
-             fontsize=9)
+ax.set_title("Learned dependency network (residual correlation)",
+             fontsize=9, pad=6)
 
 # thin grid between cells for readability
 ax.set_xticks(np.arange(-0.5, N, 1), minor=True)
@@ -60,12 +60,12 @@ ax.tick_params(which="minor", length=0)
 for s in ("top", "right", "bottom", "left"):
     ax.spines[s].set_visible(False)
 
-cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
+cbar = fig.colorbar(im, ax=ax, fraction=0.046)
 cbar.set_label("residual correlation", fontsize=8)
 cbar.ax.tick_params(labelsize=7)
 cbar.outline.set_visible(False)
 
-fig.savefig(OUT, bbox_inches="tight")
+fig.savefig(OUT, bbox_inches="tight", pad_inches=0.03)
 plt.close(fig)
 
 # off-diagonal correlation magnitude as a sanity readout

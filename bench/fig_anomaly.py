@@ -43,8 +43,9 @@ flagged = row_w < thr
 
 # --- figure ---------------------------------------------------------------
 fig, (ax0, ax1) = plt.subplots(
-    2, 1, figsize=(3.4, 2.5), sharex=True,
-    gridspec_kw=dict(height_ratios=[1.45, 1.0], hspace=0.18))
+    2, 1, figsize=(3.4, 2.7), sharex=True,
+    gridspec_kw=dict(height_ratios=[1.4, 1.0], hspace=0.16),
+    constrained_layout=True)
 
 # top: observed series + injected outliers circled
 ax0.plot(t[obs_j], xj[obs_j], color=P["slate"], lw=1.0, alpha=0.55, zorder=1)
@@ -56,33 +57,35 @@ ax0.scatter(t[out_j], xj[out_j], s=46, facecolors="none",
 ax0.set_ylabel(f"series {j}", fontsize=8)
 ax0.set_title("Student-t weights flag outliers point-in-time\n(free anomaly score)",
               fontsize=9)
-ax0.legend(fontsize=6.5, loc="upper left", frameon=False, ncol=2,
+ax0.legend(fontsize=6.5, loc="lower left", frameon=False, ncol=2,
            handletextpad=0.3, columnspacing=0.9, borderaxespad=0.2)
 V.style_ax(ax0)
 
 # bottom: per-row Student-t weight, shade where flagged
+ymax = max(1.05, float(row_w.max()) * 1.02)
+# thin rug of true-outlier rows along the top of the panel (out of the curve)
+rug_y = ymax * 0.96
+ax1.plot(t[out_rows], np.full(out_rows.sum(), rug_y),
+         marker="|", ls="none", ms=4, mew=0.8, color=P["red"], alpha=0.7,
+         label="true outlier row", zorder=4)
 ax1.axhline(thr, color=P["grey"], lw=0.8, ls="--", zorder=1)
 ax1.fill_between(t, 0, row_w, where=flagged, step="mid",
-                 color=P["red"], alpha=0.20, zorder=1,
+                 color=P["red"], alpha=0.20, zorder=2,
                  label=f"flagged (w < {thr:.2f})")
-ax1.plot(t, row_w, color=P["teal"], lw=1.3, zorder=2)
-# mark where true outlier rows are, to show alignment
-ymax = max(1.05, float(row_w.max()) * 1.02)
-ax1.plot(t[out_rows], np.full(out_rows.sum(), -0.04 * ymax),
-         marker="|", ls="none", ms=5, color=P["red"], alpha=0.8,
-         label="true outlier row")
-ax1.set_ylim(-0.08 * ymax, ymax)
+ax1.plot(t, row_w, color=P["teal"], lw=1.0, zorder=3)
+ax1.set_ylim(0, ymax * 1.04)
 ax1.set_ylabel("row weight", fontsize=8)
 ax1.set_xlabel("time t", fontsize=8)
-ax1.legend(fontsize=6.5, loc="lower center", frameon=True, framealpha=0.85,
-           edgecolor="none", ncol=2, handletextpad=0.3, columnspacing=0.9,
-           borderaxespad=0.2)
+leg = ax1.legend(fontsize=6.5, loc="upper center", bbox_to_anchor=(0.5, -0.58),
+                 frameon=False, ncol=2, handletextpad=0.3, columnspacing=1.0,
+                 borderaxespad=0.0)
 V.style_ax(ax1)
 
 out = os.path.abspath(os.path.join(
     os.path.dirname(__file__), "..", "paper", "figures", "anomaly.pdf"))
 os.makedirs(os.path.dirname(out), exist_ok=True)
-fig.savefig(out, bbox_inches="tight")
+fig.savefig(out, bbox_inches="tight", pad_inches=0.03,
+            bbox_extra_artists=(leg,))
 plt.close(fig)
 
 # --- honesty check: do low weights line up with true outliers? -----------

@@ -1,0 +1,15 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{Robustness across missingness \emph{mechanisms} (MAE $\downarrow$, averaged over Beijing, ETTh1 and a synthetic panel; $20\%$ missing, 3 seeds). \textbf{MCAR}: entries dropped independently and uniformly. \textbf{MAR}: missingness in a column is a logistic function of the neighbouring column's value (missing-at-random given observed data). \textbf{MNAR}: self-masking -- each cell's drop probability rises with its own value, so large values censor themselves (the hard case that biases every estimator). \textbf{Block}: per-column contiguous blackouts, leaving no nearby observation to interpolate from. \cafe{} and LOCF/LinInterp are strictly causal (point-in-time); SoftImpute is a non-causal batch reference (\emph{italic}). Bold $=$ best \emph{causal} method per row.}
+\label{tab:mnar}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Mechanism & CAFE & LOCF & LinInterp & \textit{SoftImpute} \\
+\midrule
+MCAR & \textbf{0.244} & 0.362 & 0.261 & \textit{0.951} \\
+MAR & \textbf{0.254} & 0.373 & 0.271 & \textit{0.983} \\
+MNAR & \textbf{0.296} & 0.415 & 0.306 & \textit{1.217} \\
+Block & \textbf{0.518} & 1.179 & 0.994 & \textit{0.936} \\
+\bottomrule
+\end{tabular}
+\end{table}

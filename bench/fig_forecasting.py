@@ -31,7 +31,7 @@ hist_t = np.arange(origin)
 fut_t = np.arange(origin, T)
 
 # --- plot -------------------------------------------------------------------
-fig, ax = plt.subplots(figsize=(3.4, 2.5))
+fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
 
 # observed history (truth that the model actually saw)
 ax.plot(hist_t, Xtrue[:origin, j], color=PALETTE["ink"], lw=1.3,
@@ -52,20 +52,25 @@ ax.plot([origin - 1, origin], [Xtrue[origin - 1, j], filled[origin, j]],
 # forecast-origin marker
 ax.axvline(origin, color=PALETTE["slate"], lw=0.9, ls=":")
 ax.axvspan(origin, T - 1, color=PALETTE["amber"], alpha=0.08, lw=0)
-ax.text(origin + 1, ax.get_ylim()[1], "forecast origin", fontsize=7,
-        color=PALETTE["slate"], va="top", ha="left")
+
+# annotate the origin in whitespace just left of the line, inside the data area
+y0, y1 = ax.get_ylim()
+ax.text(origin - 4, y0 + 0.06 * (y1 - y0), "forecast\norigin", fontsize=6.5,
+        color=PALETTE["slate"], va="bottom", ha="right", linespacing=0.95)
 
 style_ax(ax)
 ax.set_xlabel("time step $t$", fontsize=9)
 ax.set_ylabel(f"series {j} value", fontsize=9)
-ax.set_title("Forecasting is just imputing future rows (one model)", fontsize=9)
-ax.legend(fontsize=7, loc="lower left", framealpha=0.85)
+ax.set_title("Forecasting is just imputing future rows (one model)", fontsize=9,
+             pad=14)
+ax.legend(fontsize=6.6, loc="lower center", bbox_to_anchor=(0.5, 1.0),
+          ncol=3, columnspacing=1.0, handlelength=1.6, handletextpad=0.5,
+          borderpad=0.3, framealpha=0.0, borderaxespad=0.2)
 
-fig.tight_layout()
 out = os.path.abspath(os.path.join(os.path.dirname(__file__),
                                    "..", "paper", "figures", "forecasting.pdf"))
 os.makedirs(os.path.dirname(out), exist_ok=True)
-fig.savefig(out, bbox_inches="tight")
+fig.savefig(out, bbox_inches="tight", pad_inches=0.03)
 
 mae = np.abs(filled[origin:, j] - Xtrue[origin:, j]).mean()
 print(f"saved {out}  H={H} origin={origin}  series {j} forecast MAE={mae:.3f}")

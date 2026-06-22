@@ -36,7 +36,7 @@ active_mask[order[:split]] = True
 eff_rank = int(active_mask.sum())
 
 # --- plot -----------------------------------------------------------------
-fig, ax = plt.subplots(figsize=(3.4, 2.5))
+fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
 active_cols = [PAL["blue"], PAL["amber"], PAL["teal"], PAL["green"],
                PAL["purple"], PAL["red"]]
 ci = 0
@@ -48,26 +48,29 @@ for r in range(R):
     if active_mask[r]:
         col = active_cols[ci % len(active_cols)]; ci += 1
         ax.plot(t, Z[:, r], color=col, lw=1.3, zorder=3,
-                label=f"factor {ci} (alpha={alpha_final[r]:.2f})")
+                label=rf"factor {ci} ($\alpha$={alpha_final[r]:.2f})")
 
 # one grey legend proxy for the pruned bundle
 ax.plot([], [], color=PAL["grey"], lw=0.8,
-        label=f"pruned x{R - eff_rank} (alpha={alpha_final[~active_mask].min():.0f}+)")
+        label=rf"pruned $\times${R - eff_rank} "
+              rf"($\alpha\geq${alpha_final[~active_mask].min():.0f})")
 
 V.style_ax(ax)
 ax.axhline(0.0, color=PAL["ink"], lw=0.5, alpha=0.4, zorder=0)
 ax.set_xlabel("time t", fontsize=9)
-ax.set_ylabel("latent factor value $Z_{t,r}$", fontsize=9)
-ax.set_title("Latent factors emerge; ARD prunes the rest (rank is learned)",
-             fontsize=8.2)
-ax.legend(fontsize=6.5, loc="upper left", frameon=False, handlelength=1.6,
-          labelspacing=0.3)
-ax.text(0.97, 0.05, f"effective rank = {eff_rank}", transform=ax.transAxes,
-        fontsize=8.5, ha="right", va="bottom",
-        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=PAL["slate"], lw=0.8))
+ax.set_ylabel(r"latent factor value $Z_{t,r}$", fontsize=9)
+ax.set_title("Latent factors emerge; ARD prunes the rest", fontsize=10)
 
-fig.tight_layout()
+# legend below the axes so it never covers the factor paths
+ax.legend(fontsize=7, ncol=2, loc="upper center", bbox_to_anchor=(0.5, -0.28),
+          frameon=False, handlelength=1.6, columnspacing=1.2,
+          labelspacing=0.3)
+ax.text(0.97, 0.04, f"effective rank = {eff_rank}", transform=ax.transAxes,
+        fontsize=8, ha="right", va="bottom",
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec=PAL["slate"],
+                  lw=0.8, alpha=0.9))
+
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
-fig.savefig(OUT, bbox_inches="tight")
+fig.savefig(OUT, bbox_inches="tight", pad_inches=0.03)
 print("saved", os.path.abspath(OUT))
 print(f"R={R} eff_rank={eff_rank} alpha_final={np.round(alpha_final,3)}")

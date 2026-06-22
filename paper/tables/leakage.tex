@@ -1,0 +1,14 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{3pt}
+\caption{\textbf{Look-ahead optimism on ETTh1.} A ridge forecaster predicts the next-step target from imputed features under a strict temporal split ($70/30$, $30\%$ contiguous block missingness). \emph{Reported} $R^2$ uses a single batch (bidirectional) imputation; \emph{Live} re-imputes each test row point-in-time (expanding walk-forward). The same trained model is scored both ways. $\Delta_{R^2}=\text{Reported}-\text{Live}$ is the optimism injected by look-ahead. \emph{Revision} is the mean $|$change$|$ of an early imputed cell as the future is revealed (z-scored). \cafe{} is causal: $\Delta_{R^2}=0$ and revision $=0$ \emph{by truncation invariance}.}
+\label{tab:leakage}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method & Causal? & Rep.\ $R^2$ & Live $R^2$ & $\Delta_{R^2}\!\downarrow$ & Rev.\ $\downarrow$ \\
+\midrule
+SoftImpute & \ding{55} & 0.045 & -0.431 & 0.476 & 0.489 \\
+TRMF & \ding{55} & 0.355 & 0.163 & 0.192 & 0.713 \\
+\textbf{CAFE} & \ding{51} & 0.260 & 0.260 & \textbf{0.000} & \textbf{0.000} \\
+\bottomrule
+\end{tabular}
+\end{table}

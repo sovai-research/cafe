@@ -70,7 +70,7 @@ def main():
     pad = 0.18 * (yhi_v - ylo)
 
     # plot ----------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(3.4, 2.5))
+    fig, ax = plt.subplots(figsize=(3.4, 2.7), constrained_layout=True)
 
     ax.fill_between(t, lo, hi, color=PAL["blue"], alpha=0.20, lw=0,
                     label=r"$\pm 2\sqrt{\mathrm{cvar}}$")
@@ -83,31 +83,35 @@ def main():
     # mark the missing block
     ax.axvspan(a, b, color=PAL["amber"], alpha=0.07, lw=0, zorder=0)
 
+    # extra headroom at top for the in-block annotation so it clears the title
     ax.set_xlim(lo_x, hi_x)
-    ax.set_ylim(ylo - pad, yhi_v + pad)
+    ax.set_ylim(ylo - pad, yhi_v + pad * 2.4)
     ax.set_xlabel("time", fontsize=9)
     ax.set_ylabel(f"series {j}", fontsize=9)
-    ax.set_title("Every fill carries a calibrated\nuncertainty band",
-                 fontsize=9.5)
+    ax.set_title("Every fill carries an uncertainty band (widens in gaps)",
+                 fontsize=9.5, pad=6)
 
     # annotate the widening of the band inside the block ------------------
     mid = (a + b) // 2
     y_top = float((fj + 2 * sd)[mid])
     ax.annotate("band widens:\nno data in block",
-                xy=(mid, y_top), xytext=(mid, yhi_v + pad * 0.2),
-                fontsize=7.2, ha="center", va="bottom", color=PAL["amber"],
+                xy=(mid, y_top), xytext=(mid, yhi_v + pad * 2.2),
+                fontsize=7.0, ha="center", va="top", color=PAL["amber"],
                 arrowprops=dict(arrowstyle="->", color=PAL["amber"], lw=1.0))
 
-    ax.text(0.985, 0.12, f"2$\\sigma$ coverage = {cover:.0%}",
-            transform=ax.transAxes, fontsize=7.5, color=PAL["slate"],
-            ha="right", va="bottom",
-            bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="none",
-                      alpha=0.7))
+    # honest calibration number, parked in clear space at lower left
+    ax.text(0.02, 0.04, f"2$\\sigma$ coverage = {cover:.0%}",
+            transform=ax.transAxes, fontsize=7.2, color=PAL["slate"],
+            ha="left", va="bottom",
+            bbox=dict(boxstyle="round,pad=0.25", fc="white", ec=PAL["grey"],
+                      lw=0.5, alpha=0.85))
     V.style_ax(ax)
-    ax.legend(fontsize=6.6, loc="lower left", frameon=False,
-              ncol=2, handlelength=1.3, columnspacing=1.0, borderaxespad=0.2)
+    # legend below the axes so it never covers data
+    ax.legend(fontsize=6.8, loc="upper center", bbox_to_anchor=(0.5, -0.22),
+              frameon=False, ncol=4, handlelength=1.2, columnspacing=1.1,
+              handletextpad=0.5, borderaxespad=0.0)
 
-    fig.savefig(OUT, bbox_inches="tight")
+    fig.savefig(OUT, bbox_inches="tight", pad_inches=0.03)
     plt.close(fig)
     sz = os.path.getsize(OUT)
     print(f"saved {OUT} ({sz} bytes); series j={j}, block=[{a},{b}], "

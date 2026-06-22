@@ -1,0 +1,17 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{Calibration of \cafe{}'s per-cell posterior predictive intervals ($10\%$ MCAR, 5 seeds, held-out cells only). Coverage columns give the \emph{observed} fraction of truths inside the nominal central interval (target in parentheses); the bands are systematically \emph{too wide} (observed $>$ nominal), i.e.\ \cafe{} is conservative, not over-confident. The CRPS columns compare the model's per-cell heteroscedastic $\sigma$ against a single homoscedastic $\sigma$ (global RMS of residuals) under the \emph{same} mean: the per-cell $\sigma$ only wins on ETTh1, confirming the uncertainty is informative there but mis-scaled elsewhere. Sharpness $=$ mean $\sigma$; MAE for reference. Lower CRPS/MAE $\downarrow$ is better.}
+\label{tab:calib}
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+& \multicolumn{4}{c}{Observed coverage} & \multicolumn{2}{c}{CRPS $\downarrow$} & & \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-7}
+Dataset & @50 & @80 & @90 & @95 & per-cell & homosc. & Sharp. & MAE \\
+& \scriptsize(.50) & \scriptsize(.80) & \scriptsize(.90) & \scriptsize(.95) & & & & \\
+\midrule
+Beijing & 0.94 & 0.99 & 0.99 & 0.99 & 0.170 & \textbf{0.133} & 0.580 & 0.136 \\
+ETTh1 & 0.66 & 0.88 & 0.93 & 0.96 & \textbf{0.163} & 0.171 & 0.334 & 0.218 \\
+Synthetic & 0.65 & 0.91 & 0.96 & 0.98 & 0.219 & \textbf{0.208} & 0.526 & 0.290 \\
+\bottomrule
+\end{tabular}
+\end{table}

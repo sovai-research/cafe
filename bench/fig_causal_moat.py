@@ -59,36 +59,46 @@ def main():
     print(f"SoftImpute value range = {soft_spread:.3f}  (wanders)")
 
     pal = V.PALETTE
-    fig, ax = plt.subplots(figsize=(6.8, 2.6))
+    fig, ax = plt.subplots(figsize=(6.8, 2.6), constrained_layout=True)
 
     ax.plot(Ls, soft_vals, "-o", color=pal["red"], lw=1.3, ms=3.2,
             label="SoftImpute (non-causal batch)", zorder=3)
     ax.plot(Ls, cafe_vals, "-o", color=pal["blue"], lw=1.3, ms=3.2,
             label="CAFE (online, point-in-time)", zorder=4)
 
-    # mark when the target cell first became available (t0) -- everything to the
-    # right is "future" relative to the imputed cell.
-    ax.axvline(t0, color=pal["grey"], lw=0.9, ls=":", zorder=1)
-    ymin, ymax = ax.get_ylim()
-    ax.text(t0 + 2, ymax - 0.04 * (ymax - ymin),
-            f"target cell observed window ends at t={t0}",
-            fontsize=7, color=pal["slate"], va="top")
+    # Headroom so annotations sit in clean whitespace, not on the data.
+    dmin = float(min(cafe_vals.min(), soft_vals.min()))
+    dmax = float(max(cafe_vals.max(), soft_vals.max()))
+    span = dmax - dmin
+    ymin, ymax = dmin - 0.10 * span, dmax + 0.26 * span
+    ax.set_ylim(ymin, ymax)
 
-    # Annotations.
-    cy = cafe_vals.mean()
-    ax.annotate("CAFE: invariant to the future\n(frozen once t passes)",
-                xy=(Ls[len(Ls) // 2], cafe_vals[len(Ls) // 2]),
-                xytext=(Ls[len(Ls) // 3], cy - 0.55 * (ymax - ymin) * 0.6
-                        if cy > (ymin + ymax) / 2 else cy + 0.30 * (ymax - ymin)),
-                fontsize=7.5, color=pal["blue"], ha="center",
+    # Mark when the target cell first became available (t0): everything to the
+    # right is "future" relative to the imputed cell. Label rides the vline so it
+    # never crosses a data series.
+    ax.axvline(t0, color=pal["grey"], lw=0.9, ls=":", zorder=1)
+    ax.text(t0 + 3, ymax - 0.03 * span,
+            f"target window ends at $t={t0}$ (everything right of this is future)",
+            fontsize=7, color=pal["slate"], va="top", ha="left", zorder=5)
+
+    cafe_y = float(cafe_vals[0])
+    # CAFE callout: park it in the empty band just below the flat blue line,
+    # over the right half where SoftImpute has already dropped far away.
+    ki = int(0.62 * (len(Ls) - 1))
+    ax.annotate("CAFE: invariant to the future\n(frozen once $t$ has passed)",
+                xy=(Ls[ki], cafe_y),
+                xytext=(Ls[ki], cafe_y - 0.30 * span),
+                fontsize=7.5, color=pal["blue"], ha="center", va="top",
+                zorder=5,
                 arrowprops=dict(arrowstyle="->", color=pal["blue"], lw=0.9))
+    # SoftImpute callout: park it in the empty upper-right band, well above the
+    # wandering red line, pointing down to its largest deviation.
     kmax = int(np.argmax(np.abs(soft_vals - soft_vals[0])))
-    ax.annotate("SoftImpute: past estimate\nchanges as future is revealed",
+    ax.annotate("SoftImpute: estimate of the\npast drifts as future is revealed",
                 xy=(Ls[kmax], soft_vals[kmax]),
-                xytext=(Ls[max(1, kmax - 3)],
-                        soft_vals[kmax] + 0.30 * (ymax - ymin)
-                        * (1 if soft_vals[kmax] < (ymin + ymax) / 2 else -1)),
-                fontsize=7.5, color=pal["red"], ha="center",
+                xytext=(Ls[-1], dmin + 0.34 * span),
+                fontsize=7.5, color=pal["red"], ha="right", va="bottom",
+                zorder=5,
                 arrowprops=dict(arrowstyle="->", color=pal["red"], lw=0.9))
 
     ax.set_xlabel("prefix length $L$ (rows of history given to the imputer)",
@@ -97,10 +107,10 @@ def main():
                   fontsize=9)
     ax.set_title("No look-ahead: CAFE's past imputations are frozen; "
                  "batch methods leak", fontsize=9.5)
-    ax.legend(fontsize=7.5, loc="best", frameon=False)
+    ax.legend(fontsize=7.5, loc="lower left", frameon=False)
     V.style_ax(ax)
 
-    fig.savefig(OUT, bbox_inches="tight")
+    fig.savefig(OUT, bbox_inches="tight", pad_inches=0.03)
     plt.close(fig)
     sz = os.path.getsize(OUT)
     print(f"saved {OUT}  ({sz} bytes)")

@@ -1,0 +1,17 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Proposition~\ref{prop:causal}, measured.} Truncation invariance is checked by re-imputing on every time prefix $X_{:k}$ and comparing each early missing cell ($t<k$) against the full-series fill. \cafe{} (causal) is bitwise identical across all 59{,}336 (cell, prefix) comparisons; the non-causal SoftImpute revises the \emph{same} early cells as the future is revealed (mean $|$revision$|$ on the standardised scale).}
+\label{tab:causalverify}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Dataset & \#cmp & \cafe{} max$|\Delta|$ & SoftImpute mean$|$rev$|$ \\
+\midrule
+BeijingAir & 25{,}022 & $0.0$ & $0.17$ \\
+ETTh1 & 5{,}625 & $0.0$ & $0.19$ \\
+Synthetic2D & 16{,}594 & $0.0$ & $0.13$ \\
+Panel & 12{,}095 & $0.0$ & $0.52$ \\
+\midrule
+\textbf{Overall} & 59{,}336 & $0.0$ & $\mathbf{0.25}$ \\
+\bottomrule
+\end{tabular}
+\end{table}

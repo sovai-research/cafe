@@ -32,7 +32,7 @@ labels = [r[0] for r in results]
 vals = [r[1] for r in results]
 ypos = list(range(len(results)))
 
-fig, ax = plt.subplots(figsize=(3.4, 2.5))
+fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
 
 colors = [PALETTE["teal"] if "CAFE" in lab else PALETTE["grey"] for lab in labels]
 bars = ax.barh(ypos, vals, color=colors, height=0.68,
@@ -56,14 +56,15 @@ for y, v, lab in zip(ypos, vals, labels):
             color=PALETTE["teal"] if is_cafe else PALETTE["ink"],
             fontweight="bold" if is_cafe else "normal", zorder=4)
 
-# Annotation on the CAFE bar.
+# Annotation on the CAFE bar, placed in the empty right-hand whitespace.
 cafe_y = labels.index("CAFE (ours)")
 ax.annotate("causal + CPU\n(others bidirectional + GPU)",
-            xy=(vals[cafe_y] * 0.5, cafe_y),
-            xytext=(max(vals) * 0.34, cafe_y - 1.15),
+            xy=(vals[cafe_y], cafe_y),
+            xytext=(max(vals) * 0.40, cafe_y - 0.55),
             fontsize=6.6, color=PALETTE["teal"], ha="left", va="center",
             arrowprops=dict(arrowstyle="->", color=PALETTE["teal"],
-                            lw=0.8, shrinkA=0, shrinkB=2))
+                            lw=0.8, shrinkA=2, shrinkB=2,
+                            connectionstyle="arc3,rad=0.2"))
 
 ax.set_title("Lowest MAE on Beijing Air-Quality --\nat less information and ~1000x less compute",
              fontsize=8.8, fontweight="bold", pad=6)
@@ -75,5 +76,5 @@ ax.grid(False, axis="y")
 ax.set_ylim(len(results) - 0.5, -0.5)
 
 os.makedirs(os.path.dirname(OUT), exist_ok=True)
-fig.savefig(OUT, bbox_inches="tight")
+fig.savefig(OUT, bbox_inches="tight", pad_inches=0.03)
 print("saved", OUT, "size", os.path.getsize(OUT))
