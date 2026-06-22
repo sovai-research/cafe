@@ -79,7 +79,7 @@ ax.plot(t[ws], recon[ws], lw=1.2, color=PAL["blue"], label="+ factor")
 ax.plot(t[ws], fill[ws], lw=1.6, color=PAL["red"], ls=(0, (4, 1.5)),
         zorder=4, label="+ AR carry = fill")
 
-ax.set_title("CAFE decomposes every value into interpretable parts",
+ax.set_title("CAFÉ decomposes every value into interpretable parts",
              fontsize=10, pad=5)
 ax.set_xlabel("time $t$", fontsize=9)
 ax.set_ylabel(f"series $j={j}$ value", fontsize=9)

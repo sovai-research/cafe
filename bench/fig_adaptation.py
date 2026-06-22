@@ -69,7 +69,7 @@ axr.set_ylim(0, emax + 0.5)
 axr.set_yticks(range(0, emax + 1))
 V.style_ax(axr)
 
-fig.suptitle("CAFE learns its own dials online:\ntails ($\\nu$), memory ($a$), rank",
+fig.suptitle("CAFÉ learns its own dials online:\ntails ($\\nu$), memory ($a$), rank",
              fontsize=9)
 out = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                    "paper", "figures", "adaptation.pdf")

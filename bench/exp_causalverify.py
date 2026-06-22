@@ -246,7 +246,7 @@ def write_table(results, soft_overall, total_cmp, global_max_dev):
     path = os.path.join(ROOT, "paper", "tables", "causal_verify.tex")
     lines = []
     lines.append(r"\begin{table}[t]\centering\small")
-    lines.append(r"\setlength{\tabcolsep}{5pt}")
+    lines.append(r"\setlength{\tabcolsep}{4pt}")
     lines.append(r"\caption{\textbf{Proposition~\ref{prop:causal}, measured.} "
                  r"Truncation invariance is checked by re-imputing on every time "
                  r"prefix $X_{:k}$ and comparing each early missing cell "

@@ -64,7 +64,7 @@ def main():
     ax.plot(Ls, soft_vals, "-o", color=pal["red"], lw=1.3, ms=3.2,
             label="SoftImpute (non-causal batch)", zorder=3)
     ax.plot(Ls, cafe_vals, "-o", color=pal["blue"], lw=1.3, ms=3.2,
-            label="CAFE (online, point-in-time)", zorder=4)
+            label="CAFÉ (online, point-in-time)", zorder=4)
 
     # Headroom so annotations sit in clean whitespace, not on the data.
     dmin = float(min(cafe_vals.min(), soft_vals.min()))
@@ -85,7 +85,7 @@ def main():
     # CAFE callout: park it in the empty band just below the flat blue line,
     # over the right half where SoftImpute has already dropped far away.
     ki = int(0.62 * (len(Ls) - 1))
-    ax.annotate("CAFE: invariant to the future\n(frozen once $t$ has passed)",
+    ax.annotate("CAFÉ: invariant to the future\n(frozen once $t$ has passed)",
                 xy=(Ls[ki], cafe_y),
                 xytext=(Ls[ki], cafe_y - 0.30 * span),
                 fontsize=7.5, color=pal["blue"], ha="center", va="top",
@@ -105,7 +105,7 @@ def main():
                   fontsize=9)
     ax.set_ylabel(f"imputed value at cell $(t_0{{=}}{t0},\\,j{{=}}{j})$",
                   fontsize=9)
-    ax.set_title("No look-ahead: CAFE's past imputations are frozen; "
+    ax.set_title("No look-ahead: CAFÉ's past imputations are frozen; "
                  "batch methods leak", fontsize=9.5)
     ax.legend(fontsize=7.5, loc="lower left", frameon=False)
     V.style_ax(ax)

@@ -23,7 +23,7 @@ results = [
     ("Transformer", 0.158),
     ("BRITS",       0.153),
     ("SAITS",       0.137),
-    ("CAFE (ours)", 0.111),
+    ("CAFÉ (ours)", 0.109),
 ]
 
 # Sort worst -> best so best ends up at the top of a horizontal bar chart.
@@ -34,14 +34,14 @@ ypos = list(range(len(results)))
 
 fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
 
-colors = [PALETTE["teal"] if "CAFE" in lab else PALETTE["grey"] for lab in labels]
+colors = [PALETTE["teal"] if "CAFÉ" in lab else PALETTE["grey"] for lab in labels]
 bars = ax.barh(ypos, vals, color=colors, height=0.68,
                edgecolor="white", linewidth=0.4, zorder=3)
 
 ax.set_yticks(ypos)
 ax.set_yticklabels(labels, fontsize=8)
 for tick, lab in zip(ax.get_yticklabels(), labels):
-    if "CAFE" in lab:
+    if "CAFÉ" in lab:
         tick.set_color(PALETTE["teal"])
         tick.set_fontweight("bold")
 
@@ -50,14 +50,14 @@ ax.set_xlim(0, max(vals) * 1.18)
 
 # Value labels at bar ends.
 for y, v, lab in zip(ypos, vals, labels):
-    is_cafe = "CAFE" in lab
+    is_cafe = "CAFÉ" in lab
     ax.text(v + max(vals) * 0.012, y, f"{v:.3f}",
             va="center", ha="left", fontsize=7.6,
             color=PALETTE["teal"] if is_cafe else PALETTE["ink"],
             fontweight="bold" if is_cafe else "normal", zorder=4)
 
 # Annotation on the CAFE bar, placed in the empty right-hand whitespace.
-cafe_y = labels.index("CAFE (ours)")
+cafe_y = labels.index("CAFÉ (ours)")
 ax.annotate("causal + CPU\n(others bidirectional + GPU)",
             xy=(vals[cafe_y], cafe_y),
             xytext=(max(vals) * 0.40, cafe_y - 0.55),

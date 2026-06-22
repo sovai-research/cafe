@@ -34,7 +34,9 @@
 \newcommand{\cafe}{CAF\'E}
 \newtheorem{proposition}{Proposition}
 
-\title{\textbf{\cafe{}: Causal Adaptive Factor Estimation for\\ Point-in-Time Missing-Value Imputation}}
+\title{\textbf{\cafe{}: Causal Adaptive Factor Estimation}\\[4pt]
+  {\large\normalfont One point-in-time pass for imputation, forecasting,\\
+   uncertainty, factors, anomalies and dependency networks}}
 \author[1]{Derek Snow}
 \affil[1]{Sovai Research \quad \texttt{cloudmachineengine@gmail.com}}
 \date{}
@@ -44,6 +46,12 @@
 
 \begin{abstract}
 \noindent
+\textbf{\cafe{} is a single causal (strictly point-in-time) statistical model
+that turns one forward pass over a time series or panel into a whole toolbox: it
+imputes missing values \emph{and} forecasts, and from the \emph{same} pass reads
+out per-cell uncertainty, the latent common factors, a streaming anomaly score,
+an additive level/season/factor decomposition, and a cross-sectional dependency
+network---capabilities normally split across half a dozen separate tools.}
 Imputation of missing values in time series and panel data is dominated by a
 \emph{zoo} of specialised estimators---low-rank matrix factorisation, temporal
 regularised factorisation, Kalman/state-space smoothers, matrix completion with
@@ -130,7 +138,9 @@ factors, and heavy-tailed noise---and each gap is filled using \emph{only} data 
 its own time $t$ (a mechanical verifier certifies no look-ahead). \emph{Bottom:} a
 single penalised objective whose dials (Student-$t$ $\nu$, AR $a$, ARD rank, seasonal
 $\beta$) are learned from the data; classical imputers are the corners of this
-parameter space, so there is no model to select.}
+parameter space, so there is no model to select. The \emph{same} pass also yields
+forecasts, uncertainty bands, latent factors, an anomaly score and a dependency
+network (App.~\ref{sec:appendix}).}
 \label{fig:hero}
 \end{figure*}
 
@@ -229,9 +239,12 @@ data~\cite{bishop1999}; \emph{(ii)} the autoregressive coefficient $a\in[0,1)$
 is fit by closed-form ridge regression on the latent path, interpolating
 \emph{static} ($a{\to}0$) and \emph{random-walk} ($a{\to}1$) dynamics;
 \emph{(iii)} $\nu$ is learned, so heavy tails trigger redescending downweighting
-while near-Gaussian data recovers ordinary least squares; \emph{(iv)} ARD on
-$\beta$ shrinks unsupported harmonics to zero, so ``no seasonality'' is the
-learned default. No quantity in \eqref{eq:obj} is a constant fit to a benchmark.
+while near-Gaussian data recovers ordinary least squares; \emph{(iv)} the season
+is fit on the \emph{factor residual} $x-\mu-gWz$ ($g{=}N/(N{+}R)$, so a cycle the
+shared low-rank factors already explain is claimed first and not double-counted),
+and ARD on $\beta$ shrinks unsupported harmonics to zero, so ``no seasonality''
+is the learned default. No quantity in \eqref{eq:obj} is a constant fit to a
+benchmark.
 
 \begin{table}[t]\centering\small
 \caption{Classical imputers as special cases of \cafe{}, reached by its learned
@@ -327,7 +340,7 @@ GP-VAE~\cite{fortuin2020} & .268 & \ding{55} & VAE & GPU \\
 BRITS~\cite{cao2018}      & .153 & \ding{55} & BiRNN & GPU \\
 Transformer~\cite{vaswani2017} & .158 & \ding{55} & Attn & GPU \\
 SAITS~\cite{du2023}       & .137 & \ding{55} & Attn & GPU \\
-\textbf{\cafe{} (ours)}   & $\mathbf{.111}$ & \ding{51} & factor & \textbf{CPU} \\
+\textbf{\cafe{} (ours)}   & $\mathbf{.109}$ & \ding{51} & factor & \textbf{CPU} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -369,22 +382,25 @@ $70/30$ temporal split, then score it two ways: \emph{reported} (features from a
 single batch imputation of the whole series) and \emph{live} (each test row
 re-imputed point-in-time). The gap $\Delta_{R^2}$ is pure look-ahead optimism.
 Bidirectional imputers inflate reported $R^2$ by up to $0.48$ (SoftImpute) and
-$0.19$ (TRMF)---indeed TRMF's honest \emph{live} $R^2$ ($0.16$) is \emph{worse}
-than \cafe{}'s ($0.26$) despite a better-looking reported number---while
-\cafe{}'s reported and live scores are identical by construction
+$0.19$ (TRMF): TRMF's flattering reported $R^2$ ($0.36$) collapses to $0.16$ once
+the imputation is done honestly point-in-time, and that $0.19$ is pure
+look-ahead. \cafe{}'s reported and live scores are identical by construction, and
+the model-free \emph{revision moat} corroborates it---a batch method rewrites an
+early cell by $0.5$--$0.7$ SD as the future arrives, \cafe{} by exactly zero
 (Table~\ref{tab:leakage}, Fig.~\ref{fig:leakage}).
 \input{tables/leakage}
 
 \paragraph{Ablation.} Table~\ref{tab:ablation} removes one learned dial at a
 time. Three earn their place decisively on the regime they target: Student-$t$
-tails on heavy-tailed data (MAE $1.33\!\to\!2.08$ when removed), the AR
+tails on heavy-tailed data (MAE $1.35\!\to\!2.10$ when removed), the AR
 coefficient on dynamic block-gap data, and ARD rank on drifting data. The
-seasonal dial is the exception---it is decisive on a strongly periodic
-\emph{univariate} series (Seas-1D, $0.58\!\to\!1.37$ if removed) but roughly
-neutral on multivariate panels, where the low-rank term already absorbs periodic
-structure and ARD shrinks the harmonics toward zero. We keep it because it is
-ARD-gated and never materially hurts, but it is the one component that is
-regime-specific rather than universal.
+seasonal dial is regime-specific but earns its place where it matters: it is
+decisive on periodic series---the univariate Seas-1D ($0.58\!\to\!1.37$ if
+removed) and the real ETTh1 anchor, where keeping it lowers MAE ($0.235$ vs.\
+$0.251$). Because it is fit on the \emph{factor residual} (\S\ref{sec:model}, so
+the low-rank term claims the shared cycle first) and ARD-gated, it costs only a
+few hundredths of MAE on panels with no matching harmonic---sharply less than a
+naive seasonal term that double-counts the factors.
 \input{tables/ablation}
 
 \paragraph{Robustness: mechanisms and long gaps.} \cafe{} is the best
@@ -401,10 +417,10 @@ beating even the non-causal SoftImpute reference at every length.
 \input{tables/longgap}
 
 \paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
-$1.4$\,s on a single CPU core---the lowest MAE of any baseline, at cost
+$1.3$\,s on a single CPU core---the lowest MAE of any baseline, at cost
 comparable to SoftImpute and below TRMF (Table~\ref{tab:runtime}). Cost is
-linear in series length $T$ (measured log-log slope $1.03$) and sub-linear in
-width $N$ (slope $0.25$): each row performs only rank-$R$ Cholesky solves, never
+linear in series length $T$ (measured log-log slope $\approx\!1$) and strongly
+sub-linear in width $N$: each row performs only rank-$R$ Cholesky solves, never
 an $N\times N$ inverse (Fig.~\ref{fig:scaling}). Against GPU-trained deep
 imputers, which require a full training run (and, for diffusion models, hundreds
 of denoising steps per fill), this is the $\sim\!10^3\times$ compute gap
@@ -552,7 +568,7 @@ stays bounded and beats even the non-causal SoftImpute reference at every length
 \begin{figure}[h]\centering
 \includegraphics[width=0.92\textwidth]{figures/scaling.pdf}
 \caption{\textbf{Scaling (Table~\ref{tab:runtime}).} Wall-clock vs.\ series
-length $T$ (log-log slope $1.03$, near-linear) and vs.\ width $N$ (slope $0.25$,
+length $T$ (near-linear, log-log slope $\approx\!1$) and vs.\ width $N$ (strongly
 sub-linear): each row uses only rank-$R$ Cholesky solves, never an $N\times N$
 inverse.}
 \label{fig:scaling}

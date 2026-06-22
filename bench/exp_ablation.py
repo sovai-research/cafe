@@ -198,8 +198,8 @@ ROWHEAD = {
 def write_table(mae, dnames, vnames, best):
     cols = "l" + "c" * len(dnames)
     lines = []
-    lines.append(r"\begin{table}[t]\centering\small")
-    lines.append(r"\setlength{\tabcolsep}{4pt}")
+    lines.append(r"\begin{table*}[t]\centering\small")
+    lines.append(r"\setlength{\tabcolsep}{8pt}")
     lines.append(r"\caption{\textbf{Ablation: each learned dial earns its place.} "
                  r"Imputation MAE ($\downarrow$, lower better) at $15\%$ missing, mean "
                  r"of 3 seeds. Each column is a regime that one dial targets, masked by "
@@ -228,7 +228,7 @@ def write_table(mae, dnames, vnames, best):
             lines.append(r"\midrule")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
-    lines.append(r"\end{table}")
+    lines.append(r"\end{table*}")
     out = "\n".join(lines) + "\n"
     tdir = os.path.join(ROOT, "paper", "tables")
     os.makedirs(tdir, exist_ok=True)

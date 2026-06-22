@@ -684,7 +684,13 @@ class _UnifiedCore:
         # harmonic shrinks beta to ~0 when there is no cycle (seasonality emerges).
         if self.P and obs.any():
             yrow = np.zeros(N)
-            yrow[obs] = x_obs_row[obs] - mu[obs]
+            g = N / (N + self.R)
+            yrow[obs] = x_obs_row[obs] - mu[obs] - g * lr[obs] - time_fe
+            # ROBUST season fit (winsorize target; no-op when near-Gaussian / no_robust
+            # forces nu huge -> wide band). Stops a heavy-tailed outlier corrupting beta.
+            _bnd = (1.5 + self.nu / 4.0) * 1.4826 * (self.fsc_sum[obs] /
+                                                     np.maximum(self.fsc_cnt[obs], 1e-3))
+            yrow[obs] = np.clip(yrow[obs], -_bnd, _bnd)
             self.PtP = self.lam * self.PtP + np.outer(fourier_t, fourier_t)
             self.Pty[:, obs] = self.lam * self.Pty[:, obs] + np.outer(fourier_t, yrow[obs])
             self.Pty[:, ~obs] = self.lam * self.Pty[:, ~obs]

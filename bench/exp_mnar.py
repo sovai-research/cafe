@@ -161,7 +161,8 @@ def make_table(avg):
     lines.append(r"\toprule")
     hdr = "Mechanism"
     for mlabel, _, causal in METHODS:
-        hdr += " & " + (mlabel if causal else r"\textit{" + mlabel + r"}")
+        disp = r"\cafe{}" if mlabel == "CAFE" else mlabel
+        hdr += " & " + (disp if causal else r"\textit{" + disp + r"}")
     lines.append(hdr + r" \\")
     lines.append(r"\midrule")
     for mech in MECHS:
@@ -197,8 +198,9 @@ def make_figure(avg):
         vals = [avg[m][lab][0] for m in MECHS]
         off = (i - (nmeth - 1) / 2) * width
         hatch = "//" if not METHODS[i][2] else None
+        disp = "CAFÉ" if lab == "CAFE" else lab
         ax.bar(x + off, vals, width=width * 0.95, color=colors[lab],
-               label=(lab + " (ref)" if not METHODS[i][2] else lab),
+               label=(disp + " (ref)" if not METHODS[i][2] else disp),
                hatch=hatch, edgecolor="white", lw=0.4, zorder=3)
     ax.set_xticks(x)
     ax.set_xticklabels([MECH_LABEL[m] for m in MECHS])

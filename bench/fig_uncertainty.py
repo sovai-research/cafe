@@ -76,7 +76,7 @@ def main():
                     label=r"$\pm 2\sqrt{\mathrm{cvar}}$")
     ax.plot(t, Xtrue[:, j], color=PAL["grey"], lw=1.0, alpha=0.85,
             label="ground truth", zorder=2)
-    ax.plot(t, fj, color=PAL["blue"], lw=1.3, label="CAFE fill", zorder=3)
+    ax.plot(t, fj, color=PAL["blue"], lw=1.3, label="CAFÉ fill", zorder=3)
     ax.plot(t[obs], Xobs[obs, j], ls="none", marker="o", ms=2.4,
             mfc=PAL["ink"], mec="none", label="observed", zorder=4)
 

@@ -637,12 +637,35 @@ class _UnifiedCore:
             self.idio_last[oi] = idio_now
             self.idio_age[oi] = 0.0
 
-        # seasonal beta via online ridge (RLS), closed-form. Target is (x - mu) on
-        # observed cells; EW-forgotten so it tracks drifting seasonality. ARD per
-        # harmonic shrinks beta to ~0 when there is no cycle (seasonality emerges).
+        # seasonal beta via online ridge (RLS), closed-form. Target is the FACTOR
+        # RESIDUAL (x - mu - lowrank - time_fe) on observed cells -- NOT (x - mu) --
+        # so season explains only the periodicity the shared factors did not already
+        # absorb. On wide panels the low-rank term captures a common cycle and this
+        # residual carries little periodic energy, so the ARD drives beta->0 (no
+        # double-counting); on a lone series the factors cannot model the cycle, the
+        # residual keeps it, and beta fits it. lr and time_fe are point-in-time
+        # (data <= t), so this stays causal-invariant. EW-forgotten so it tracks
+        # drifting seasonality; ARD per harmonic shrinks beta to ~0 when no cycle.
         if self.P and obs.any():
             yrow = np.zeros(N)
-            yrow[obs] = x_obs_row[obs] - mu[obs]
+            # trust the low-rank de-double-counting in proportion to how well a shared
+            # factor is identified: with R offered factors a common signal is only
+            # credible once N >> R, so g = N/(N+R) -> ~0 for a lone series (season keeps
+            # the whole cycle, as it must to extrapolate across gaps) and -> ~1 for a wide
+            # panel (factors own the shared cycle, season only mops up the remainder). g
+            # depends on N and R alone, so it stays point-in-time / causal-invariant.
+            g = N / (N + self.R)
+            yrow[obs] = x_obs_row[obs] - mu[obs] - g * lr[obs] - time_fe
+            # ROBUST season fit. The Fourier RLS is plain least-squares, so without
+            # protection a single heavy-tailed outlier corrupts beta GLOBALLY -- every
+            # row then inherits a spurious seasonal wave (the dominant reason an explicit
+            # season can hurt on heavy-tailed data). Winsorize the target to a band set by
+            # the per-feature robust scale and the learned dof nu: wide (a no-op) when nu
+            # is large / near-Gaussian, tight when heavy tails are learned -- the same
+            # self-gating M-estimator the data term uses, so benign data is never clipped.
+            _bnd = (1.5 + self.nu / 4.0) * 1.4826 * (self.fsc_sum[obs] /
+                                                     np.maximum(self.fsc_cnt[obs], 1e-3))
+            yrow[obs] = np.clip(yrow[obs], -_bnd, _bnd)
             self.PtP = self.lam * self.PtP + np.outer(fourier_t, fourier_t)
             self.Pty[:, obs] = self.lam * self.Pty[:, obs] + np.outer(fourier_t, yrow[obs])
             self.Pty[:, ~obs] = self.lam * self.Pty[:, ~obs]

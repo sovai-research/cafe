@@ -640,12 +640,23 @@ class _UnifiedCore:
             self.idio_last[oi] = idio_now
             self.idio_age[oi] = 0.0
 
-        # seasonal beta via online ridge (RLS), closed-form. Target is (x - mu) on
-        # observed cells; EW-forgotten so it tracks drifting seasonality. ARD per
-        # harmonic shrinks beta to ~0 when there is no cycle (seasonality emerges).
+        # seasonal beta via online ridge (RLS), closed-form. Target is the FACTOR
+        # RESIDUAL (x - mu - g*lowrank - time_fe), g = N/(N+R), so season explains only
+        # the periodicity the shared factors did not already absorb -- no double-counting
+        # on wide panels, full cycle kept for a lone series (needed to extrapolate across
+        # gaps). g depends on N,R alone -> causal-invariant. EW-forgotten so it tracks
+        # drift; ARD per harmonic shrinks beta to ~0 when there is no cycle.
         if self.P and obs.any():
             yrow = np.zeros(N)
-            yrow[obs] = x_obs_row[obs] - mu[obs]
+            g = N / (N + self.R)
+            yrow[obs] = x_obs_row[obs] - mu[obs] - g * lr[obs] - time_fe
+            # ROBUST season fit: winsorize the target so a heavy-tailed outlier cannot
+            # corrupt beta globally (the Fourier RLS is plain least-squares). Band set by
+            # the per-feature robust scale and learned nu -- wide/no-op when near-Gaussian,
+            # tight under heavy tails -- the same self-gating M-estimator the data term uses.
+            _bnd = (1.5 + self.nu / 4.0) * 1.4826 * (self.fsc_sum[obs] /
+                                                     np.maximum(self.fsc_cnt[obs], 1e-3))
+            yrow[obs] = np.clip(yrow[obs], -_bnd, _bnd)
             self.PtP = self.lam * self.PtP + np.outer(fourier_t, fourier_t)
             self.Pty[:, obs] = self.lam * self.Pty[:, obs] + np.outer(fourier_t, yrow[obs])
             self.Pty[:, ~obs] = self.lam * self.Pty[:, ~obs]

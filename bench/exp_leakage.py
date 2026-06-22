@@ -256,7 +256,7 @@ def make_figure(A, Ls, revis):
                      color=(pal["red"] if abs(g) > 0.02 else pal["green"]))
     axL.axhline(0, color=pal["grey"], lw=0.8)
     axL.set_xticks(x)
-    axL.set_xticklabels(names, fontsize=8)
+    axL.set_xticklabels([("CAFÉ" if n == "CAFE" else n) for n in names], fontsize=8)
     axL.set_ylabel("downstream test $R^2$", fontsize=9)
     axL.set_title("Look-ahead optimism: reported vs. honest live", fontsize=9)
     # custom legend: hatch by alpha
@@ -268,14 +268,15 @@ def make_figure(A, Ls, revis):
 
     # ---- RIGHT: revision magnitude vs prefix length ----
     for n in names:
-        axR.plot(Ls, revis[n], "-o", color=cmap[n], lw=1.4, ms=3.0, label=n,
+        axR.plot(Ls, revis[n], "-o", color=cmap[n], lw=1.4, ms=3.0,
+                 label=("CAFÉ" if n == "CAFE" else n),
                  zorder=4 if n == "CAFE" else 3)
     axR.set_xlabel("prefix length $L$ (rows revealed)", fontsize=9)
     axR.set_ylabel("mean $|$revision$|$ of early cells\n(z-scored)", fontsize=9)
-    axR.set_title("Revision moat: batch fills wander, CAFE is frozen", fontsize=9)
+    axR.set_title("Revision moat: batch fills wander, CAFÉ is frozen", fontsize=9)
     axR.legend(fontsize=7.5, loc="upper left", frameon=False)
     # annotate CAFE flat-at-zero
-    axR.annotate("CAFE $\\equiv 0$ (truncation-invariant)",
+    axR.annotate("CAFÉ $\\equiv 0$ (truncation-invariant)",
                  xy=(Ls[len(Ls) // 2], revis["CAFE"][len(Ls) // 2]),
                  xytext=(Ls[len(Ls) // 2], 0.12 * max(revis["SoftImpute"].max(), 1e-3)),
                  fontsize=7, color=pal["blue"], ha="center",
@@ -301,7 +302,7 @@ def make_table(A, revis, Ls):
 
     lines = []
     lines.append(r"\begin{table}[t]\centering\small")
-    lines.append(r"\setlength{\tabcolsep}{4pt}")
+    lines.append(r"\setlength{\tabcolsep}{3pt}")
     lines.append(r"\caption{\textbf{Look-ahead optimism on ETTh1.} A ridge forecaster predicts "
                  r"the next-step target from imputed features under a strict temporal split "
                  r"($70/30$, $30\%$ contiguous block missingness). \emph{Reported} $R^2$ uses a "
@@ -315,17 +316,18 @@ def make_table(A, revis, Ls):
     lines.append(r"\label{tab:leakage}")
     lines.append(r"\begin{tabular}{@{}lccccc@{}}")
     lines.append(r"\toprule")
-    lines.append(r"Method & Causal? & Reported $R^2$ & Live $R^2$ & $\Delta_{R^2}\!\downarrow$ & Revision $\downarrow$ \\")
+    lines.append(r"Method & Causal? & Rep.\ $R^2$ & Live $R^2$ & $\Delta_{R^2}\!\downarrow$ & Rev.\ $\downarrow$ \\")
     lines.append(r"\midrule")
     for n in names:
         a = A[n]
         causal = r"\ding{51}" if a["causal"] else r"\ding{55}"
         gap = a["gap_r2"]
         rv = rev_final[n]
+        disp = r"\cafe{}" if n == "CAFE" else n
         bold = (lambda s: r"\textbf{" + s + "}") if n == "CAFE" else (lambda s: s)
         gap_s = "0.000" if (n == "CAFE" or abs(gap) < 5e-4) else f(gap)
         rv_s = "0.000" if (n == "CAFE" or rv < 5e-4) else f(rv)
-        lines.append(f"{bold(n)} & {causal} & {f(a['r2_rep'])} & {f(a['r2_live'])} & "
+        lines.append(f"{bold(disp)} & {causal} & {f(a['r2_rep'])} & {f(a['r2_live'])} & "
                      f"{bold(gap_s)} & {bold(rv_s)} \\\\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
