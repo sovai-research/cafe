@@ -1019,8 +1019,3 @@ def online_impute(X, meta):
         bad = ~np.isfinite(out)
         out[bad] = np.take(col, np.where(bad)[1])
     return out
-
-
-if __name__ == "__main__":
-    from causal import run_causal, summarize_causal
-    summarize_causal(run_causal("Unified_PenMF", online_impute))
