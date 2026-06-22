@@ -23,7 +23,7 @@ results = [
     ("Transformer", 0.158),
     ("BRITS",       0.153),
     ("SAITS",       0.137),
-    ("CAFÉ (ours)", 0.109),
+    ("CAFÉ (ours)", 0.108),
 ]
 
 # Sort worst -> best so best ends up at the top of a horizontal bar chart.

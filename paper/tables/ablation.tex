@@ -1,5 +1,5 @@
-\begin{table}[t]\centering\small
-\setlength{\tabcolsep}{5pt}
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{10pt}
 \caption{\textbf{Ablation: each learned dial earns its place.} Each dial is shown on the regime it is designed for, with the dial ON (full \cafe{}) vs OFF; MAE ($\downarrow$), $15\%$ missing, mean of 3 seeds. $\Delta$ is the cost of removing the dial---positive everywhere, so every dial pays for itself on its matched regime (season decisively on genuinely periodic data). Off its target a dial is near-inert; the full cross-regime matrix is Fig.~\ref{fig:ablation}.}
 \label{tab:ablation}
 \begin{tabular}{@{}llccc@{}}
@@ -13,4 +13,4 @@ Fourier season ($\beta$) & Seas-1D (periodic series) & $0.578$ & $1.371$ & $\mat
 Fourier season ($\beta$) & ETTh1 (daily/weekly cycle) & $0.235$ & $0.251$ & $\mathbf{+0.016}$ \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

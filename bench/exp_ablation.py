@@ -211,8 +211,8 @@ DIAG = [
 
 def write_table(mae, dnames, vnames, best):
     lines = []
-    lines.append(r"\begin{table}[t]\centering\small")
-    lines.append(r"\setlength{\tabcolsep}{5pt}")
+    lines.append(r"\begin{table*}[t]\centering\small")
+    lines.append(r"\setlength{\tabcolsep}{10pt}")
     lines.append(r"\caption{\textbf{Ablation: each learned dial earns its place.} "
                  r"Each dial is shown on the regime it is designed for, with the dial "
                  r"ON (full \cafe{}) vs OFF; MAE ($\downarrow$), $15\%$ missing, mean of "
@@ -234,7 +234,7 @@ def write_table(mae, dnames, vnames, best):
                      f"$\\mathbf{{+{d:.3f}}}$ \\\\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
-    lines.append(r"\end{table}")
+    lines.append(r"\end{table*}")
     out = "\n".join(lines) + "\n"
     tdir = os.path.join(ROOT, "paper", "tables")
     os.makedirs(tdir, exist_ok=True)
