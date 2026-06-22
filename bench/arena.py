@@ -27,7 +27,8 @@ import numpy as np
 from harness import DATASETS, MASKERS, metrics
 
 DATA = os.path.join(HERE, "..", "data")
-LEDGER = os.path.join(HERE, "arena_ledger.json")
+_FAST_ENV = os.environ.get("TIMARA_FAST", "") not in ("", "0", "false")
+LEDGER = os.path.join(HERE, "arena_ledger_fast.json" if _FAST_ENV else "arena_ledger.json")
 
 
 # --------------------------------------------------------------------------- #
@@ -61,16 +62,36 @@ def _load_real():
     return cases
 
 
-def build_suite():
+def _cap_case(clean, meta, cap, e_fast):
+    """Shrink a case for FAST iteration while preserving its structure/type."""
+    if meta and "entity_ids" in meta:                      # panel: keep first e_fast entities
+        eids = np.asarray(meta["entity_ids"])
+        keep = eids < e_fast
+        m2 = dict(meta)
+        for k in ("entity_ids", "time_ids"):
+            if k in meta:
+                m2[k] = np.asarray(meta[k])[keep]
+        m2["E"] = int(e_fast)
+        return clean[keep], m2
+    return clean[:cap], meta                                # 1d/2d: truncate time
+
+
+def build_suite(fast=False, cap=600, e_fast=8):
     suite = {}
     for n, (c, m, mech, rate) in DATASETS.items():
         grp = "panel" if m else ("1d" if c.shape[1] == 1 else "2d")
+        if fast:
+            c, m = _cap_case(c, m, cap, e_fast)
         suite[n] = (c, m, mech, rate, grp)
-    suite.update(_load_real())
+    for n, (c, m, mech, rate, grp) in _load_real().items():
+        if fast:
+            c, m = _cap_case(c, m, cap, e_fast)             # also caps temp/beijing rows
+        suite[n] = (c, m, mech, rate, grp)
     return suite
 
 
-SUITE = build_suite()
+FAST = os.environ.get("TIMARA_FAST", "") not in ("", "0", "false")
+SUITE = build_suite(fast=FAST)
 
 
 # --------------------------------------------------------------------------- #
@@ -112,29 +133,38 @@ def _save_ledger(L):
     json.dump(L, open(LEDGER, "w"), indent=1)
 
 
-def gate(champ, chal, maxdrop=0.03):
-    """Both-axes ratchet. Returns (accept: bool, reason: str)."""
+def gate(champ, chal, maxdrop=0.03, cost_budget=0.10):
+    """VALUE ratchet (user rule): accept an accuracy gain as long as the relative
+    TIME cost is small, and accept pure speed wins. Specifically accept iff:
+      - no single case regresses by more than `maxdrop`, AND
+      - EITHER  accuracy improves AND time grows <= cost_budget (default +10%)
+                AND the relative accuracy gain >= the relative time cost,
+        OR      faster-or-equal at no accuracy loss (pure speed/Pareto win).
+    Returns (accept, reason)."""
     if champ is None:
         return True, "no champion yet"
-    acc_ok = chal["agg"]["mean_corr"] >= champ["agg"]["mean_corr"] - 1e-9
-    spd_ok = chal["agg"]["total_time"] <= champ["agg"]["total_time"] + 1e-9
-    strict = (chal["agg"]["mean_corr"] > champ["agg"]["mean_corr"] + 1e-6) or \
-             (chal["agg"]["total_time"] < champ["agg"]["total_time"] - 1e-6)
+    c_acc, c_t = champ["agg"]["mean_corr"], champ["agg"]["total_time"]
+    n_acc, n_t = chal["agg"]["mean_corr"], chal["agg"]["total_time"]
+    d_acc = n_acc - c_acc
+    rel_cost = (n_t - c_t) / max(c_t, 1e-9)            # >0 means slower
+    rel_gain = d_acc / max(abs(c_acc), 1e-9)
     # per-case regression guard (stay leader everywhere)
     worst = 0.0
     for k, r in chal["rows"].items():
         cr = champ["rows"].get(k)
         if cr and r["ok"] and cr["ok"] and np.isfinite(r["corr"]) and np.isfinite(cr["corr"]):
             worst = max(worst, cr["corr"] - r["corr"])
-    if not acc_ok:
-        return False, f"accuracy regressed ({chal['agg']['mean_corr']:.4f} < {champ['agg']['mean_corr']:.4f})"
-    if not spd_ok:
-        return False, f"slower ({chal['agg']['total_time']:.2f}s > {champ['agg']['total_time']:.2f}s)"
     if worst > maxdrop:
-        return False, f"a case regressed by {worst:.3f} (> {maxdrop})"
-    if not strict:
-        return False, "no strict improvement on either axis"
-    return True, "PARETO-IMPROVES both axes"
+        return False, f"case regressed by {worst:.3f} (> {maxdrop})"
+    # pure speed/Pareto win: faster-or-equal with no accuracy loss
+    if d_acc >= -1e-9 and rel_cost < -1e-6:
+        return True, f"speed win (acc {d_acc:+.4f}, time {rel_cost*100:+.1f}%)"
+    # value win: any genuine accuracy gain for <= +10% time (user rule)
+    if d_acc > 1e-6 and rel_cost <= cost_budget:
+        return True, f"value win (acc {d_acc:+.4f}, cost {rel_cost*100:+.1f}%)"
+    if rel_cost > cost_budget:
+        return False, f"too slow ({rel_cost*100:+.1f}% > {cost_budget*100:.0f}% budget)"
+    return False, f"no accuracy gain (acc {d_acc:+.4f}, time {rel_cost*100:+.1f}%)"
 
 
 def _load_fn(spec):

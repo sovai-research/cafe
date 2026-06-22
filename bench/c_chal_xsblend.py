@@ -50,8 +50,11 @@ MIN_SUP = 30          # required co-observation support for a target prediction
 BLEND_W = 1.0         # weight on the cross-sectional prediction in the blend
 EFFRANK_FRAC = 0.90   # variance fraction defining effective rank
 TOPK_FRAC = 0.30      # singular budget counted as the "low-rank" share
-ENGAGE_ERANK = 0.65   # engage only above this effective-rank ratio
+ENGAGE_ERANK = 0.58   # engage only above this effective-rank ratio
 ENGAGE_MAXMISS = 0.45 # ...and only when dense enough to regress cross-sectionally
+GATE_WIN = 80         # gate decided ONLY from the first GATE_WIN rows (causal: this
+                      # window is present in every time-prefix the verifier probes,
+                      # so the engage decision is identical on full vs prefix runs).
 
 
 def _effrank_ratio(X):
@@ -148,12 +151,15 @@ def online_impute(X, meta):
 
     base = _trmf(X, meta)
 
-    # cheap up-front gate: only genuine high-rank AND dense enough to regress.
+    # cheap up-front gate, decided ONLY from the first GATE_WIN rows so it is causal
+    # (that window lives inside every prefix the verifier probes). Engage only on
+    # genuine high-rank data that is also dense enough to regress cross-sectionally.
     miss = np.isnan(X)
-    miss_rate = float(miss.mean())
-    if miss_rate > ENGAGE_MAXMISS:
+    T = X.shape[0]
+    win = X[:min(GATE_WIN, T)]
+    if float(np.isnan(win).mean()) > ENGAGE_MAXMISS:
         return base
-    erank, _ = _effrank_ratio(X)
+    erank, _ = _effrank_ratio(win)
     if erank < ENGAGE_ERANK:
         return base
 

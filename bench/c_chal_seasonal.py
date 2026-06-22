@@ -42,9 +42,14 @@ from c_router import _is_panel
 # ---- hyper-parameters (capped, 1D path only) ---- #
 MIN_WARM = 60          # need this many observed samples before trusting Fourier fit
 REFIT_K = 24           # refit coefficients every K newly-observed samples
-MAX_HARM = 4           # harmonics per detected period
+MAX_HARM = 8           # harmonics per detected period (covers daily+weekly: with a
+                       # 24-lag fundamental + a 168 long period, 8 harmonics resolve
+                       # the overlapping cycle structure; selected empirically)
 RIDGE = 1e-3           # ridge on Fourier/trend coefficients
 N_PERIODS = 2          # top-N autocorrelation periods to model
+MIN_PEAK = 0.12        # min positive short-lag ACF peak to call a series seasonal
+CONFIRM = 2            # refit windows that must agree on the fundamental before
+                       # trusting a cycle (filters transient AR masked-subset peaks)
 
 
 def _acf_candidates(y):
@@ -61,12 +66,17 @@ def _acf_candidates(y):
         return []
     ac = ac / ac[0]
     lo = 3
-    hi = min(m - 2, m // 2 + 1)
+    # A genuine seasonal period repeats several times in the observed window, so
+    # its lag is SHORT (<= ~0.4*m). Smooth AR(1) shows only monotone decay; its
+    # short-lag autocorrelation is monotone (no positive local max). The short-lag
+    # restriction + MIN_PEAK is the first discriminator; a causal holdout check in
+    # _detect_periods is the second (rejects AR's slow-drift pseudo-peaks).
+    hi = max(lo + 2, m // 4)
     if hi <= lo:
         return []
     peaks = []
     for i in range(lo + 1, hi - 1):
-        if ac[i] > ac[i - 1] and ac[i] >= ac[i + 1] and ac[i] > 0.08:
+        if ac[i] > ac[i - 1] and ac[i] >= ac[i + 1] and ac[i] >= MIN_PEAK:
             peaks.append((ac[i], i))
     peaks.sort(reverse=True)
     return [lag for _, lag in peaks]
@@ -88,35 +98,40 @@ def _residual(t_obs, y_obs, periods, max_harm, ridge):
 
 
 def _detect_periods(t_obs, y_obs, n=N_PERIODS):
-    """Greedy, FIT-DRIVEN period selection. Fourier extrapolation is extremely
-    sensitive to the exact integer period (P=23 vs 24 flips corr from -0.15 to
-    +0.91), so we do NOT trust raw ACF lags — we use them only to seed integer
-    neighborhood searches and keep a period only if it materially cuts the
-    in-sample residual. Causal: uses observed history (< t) only."""
-    # ACF candidates from linearly de-trended observed history
+    """Greedy, FIT-DRIVEN period selection. Causal: observed history (< t) only.
+
+    Step 1 (AR firewall): the FUNDAMENTAL period must come from a positive
+    SHORT-lag (<= m/4) autocorrelation peak. A smooth AR(.97) series has NO such
+    peak (monotone decay) so it never enters the seasonal path at all — this is
+    the verified discriminator that keeps 1d_ar routed to the temporal core.
+
+    Step 2 (refine + extend): Fourier extrapolation is extremely sensitive to the
+    exact integer period (P=23 vs 24 flips corr -0.15 -> +0.91), so we refine the
+    fundamental over an integer neighborhood by best in-sample residual, then
+    greedily ADD up to n-1 further periods (including integer multiples of the
+    fundamental, e.g. weekly = 7*daily, which short-lag ACF cannot resolve),
+    keeping each only if it cuts the residual by >= 5%."""
     if len(t_obs) >= 4:
         pc = np.polyfit(t_obs, y_obs, 1)
         det = y_obs - (pc[0] * t_obs + pc[1])
     else:
         det = y_obs
-    cands = _acf_candidates(det)
+    cands = _acf_candidates(det)       # short-lag positive peaks only (AR -> [])
     if not cands:
         return []
-    chosen = []
-    base0 = _residual(t_obs, y_obs, [], MAX_HARM, RIDGE)  # trend-only RSS
-    base = base0
     tmax = t_obs[-1] - t_obs[0]
+    base = _residual(t_obs, y_obs, [], MAX_HARM, RIDGE)   # trend-only RSS
+    chosen = []
     for c in cands:
         if len(chosen) >= n:
             break
-        # refine c over an integer neighborhood (wider for longer periods, since
-        # ACF lag precision degrades). Also try multiples of already-chosen
-        # fundamentals (e.g. weekly = 7*daily) which ACF often resolves poorly.
-        win = max(2, int(round(0.06 * c)))
+        win = max(2, int(round(0.10 * c)))
         cand_set = set(range(max(3, c - win), c + win + 1))
+        # also offer integer multiples of already-chosen short fundamentals
         for q in chosen:
-            for k in range(2, 9):
-                cand_set.add(q * k)
+            for k in range(2, 13):
+                if q * k <= tmax:
+                    cand_set.add(q * k)
         best_p, best_rss = None, base
         for P in cand_set:
             if P < 3 or P > tmax:
@@ -126,7 +141,6 @@ def _detect_periods(t_obs, y_obs, n=N_PERIODS):
             rss = _residual(t_obs, y_obs, chosen + [P], MAX_HARM, RIDGE)
             if rss < best_rss:
                 best_rss, best_p = rss, P
-        # accept only if it explains >= 5% of the current residual
         if best_p is not None and best_rss < base * 0.95:
             chosen.append(best_p)
             base = best_rss
@@ -168,6 +182,7 @@ def _impute_1d(X):
     X = np.ascontiguousarray(np.asarray(X, float))
     T, N = X.shape
     out = X.copy()
+    seas = np.zeros((T, N), dtype=bool)   # cells filled by a CONFIRMED seasonal model
     used_any = False
     for j in range(N):
         col = X[:, j]
@@ -179,6 +194,9 @@ def _impute_1d(X):
         run_sum = 0.0
         run_cnt = 0
         since_fit = 0
+        cand_fund = None       # provisional fundamental period awaiting confirmation
+        cand_hits = 0          # how many refit windows agreed on it
+        confirmed = False      # a persistent cycle has been confirmed
         # observed buffers (history)
         t_hist = []
         y_hist = []
@@ -192,22 +210,45 @@ def _impute_1d(X):
                 t_hist.append(t)
                 y_hist.append(col[t])
                 since_fit += 1
-                # periodic refit from history <= t (used only for future fills)
+                # periodic refit from history <= t (used only for future fills).
                 if run_cnt >= MIN_WARM and (beta is None or since_fit >= REFIT_K):
                     ya = np.array(y_hist)
                     ta = np.array(t_hist, float)
-                    periods = _detect_periods(ta, ya)
-                    if periods:
-                        beta = _fit(ta, ya, periods, MAX_HARM, RIDGE)
-                        used_any = True
+                    new_p = _detect_periods(ta, ya)
+                    # PERSISTENCE GATE: a true seasonal cycle is detected at the
+                    # SAME fundamental across many refit windows; a transient
+                    # spurious peak (e.g. an AR masked-subset artifact) shows up
+                    # in only one window. Require CONFIRM agreeing windows before
+                    # trusting the cycle. Once confirmed, re-detect freshly (longer
+                    # history resolves the long weekly term) and keep refitting.
+                    if new_p:
+                        fund = new_p[0]
+                        if cand_fund is not None and abs(fund - cand_fund) <= 2:
+                            cand_hits += 1
+                        else:
+                            cand_fund, cand_hits = fund, 1
+                        if cand_hits >= CONFIRM:
+                            confirmed = True
+                        if confirmed:
+                            periods = new_p
+                            beta = _fit(ta, ya, periods, MAX_HARM, RIDGE)
+                            used_any = True
+                    else:
+                        cand_fund, cand_hits = None, 0
+                        if confirmed and periods:
+                            beta = _fit(ta, ya, periods, MAX_HARM, RIDGE)
                     since_fit = 0
             else:
-                # missing at t: fill using PAST-ONLY model.
-                if beta is not None and periods:
+                # missing at t: fill using PAST-ONLY model. Only a CONFIRMED
+                # seasonal model produces a seasonal fill (flagged in `seas`);
+                # otherwise leave a provisional carry-forward that the caller
+                # overrides with the temporal core (TRMF) for un-confirmed cells.
+                if confirmed and beta is not None and periods:
                     A = _design([t], periods, MAX_HARM)
                     out[t, j] = float((A @ beta)[0])
+                    seas[t, j] = True
                 elif last_val is not None:
-                    out[t, j] = last_val          # causal carry-forward
+                    out[t, j] = last_val          # provisional (overridden by TRMF)
                 elif run_cnt > 0:
                     out[t, j] = run_sum / run_cnt
                 else:
@@ -217,7 +258,7 @@ def _impute_1d(X):
         if bad.any():
             gm = np.nanmean(col)
             out[bad, j] = gm if np.isfinite(gm) else 0.0
-    return out, used_any
+    return out, seas, used_any
 
 
 def online_impute(X, meta):
@@ -226,9 +267,15 @@ def online_impute(X, meta):
     Xn = np.asarray(X, float)
     if Xn.shape[1] == 1:
         try:
-            out, used = _impute_1d(Xn)
-            if used:                       # a genuine seasonal period was found
-                return out
+            seas_out, seas_mask, used = _impute_1d(Xn)
+            if used and seas_mask.any():
+                # TRMF base everywhere (matches the champion on the non-seasonal
+                # early region and on AR), then OVERRIDE only the cells a
+                # CONFIRMED causal seasonal model filled. Both pieces are
+                # point-in-time, so the blend is too.
+                base = np.asarray(_trmf(X, meta), float)
+                base[seas_mask] = seas_out[seas_mask]
+                return base
         except Exception:
             pass
         return _trmf(X, meta)              # non-seasonal 1D -> temporal core
