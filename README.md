@@ -63,10 +63,15 @@ in one frame. CAFÉ imputes **only the numeric columns**, passes everything else
 untouched, and preserves column order — so `cafe.impute(raw_df)` just works, no manual
 column selection.
 
-> **Tutorial:** [`notebooks/cafe_tutorial.ipynb`](notebooks/cafe_tutorial.ipynb) — a
-> runnable, polars-first walkthrough on the real ETTh1 dataset (the one-liner, the
-> no-look-ahead proof, accuracy, uncertainty, factors, anomalies, decomposition,
-> dependency network and forecasting).
+> **Notebooks** (all runnable, executed end-to-end):
+> - [`cafe_tutorial.ipynb`](notebooks/cafe_tutorial.ipynb) — polars-first deep dive on real
+>   ETTh1: the one-liner, the no-look-ahead proof, accuracy, calibrated + gap-widening
+>   uncertainty, factors, anomaly detection, exact decomposition, dependency net, forecast.
+> - [`cafe_it_just_works.ipynb`](notebooks/cafe_it_just_works.ipynb) — every container/shape
+>   (numpy/pandas/polars, 1D/2D/3D), five real datasets, the numpy-only proof, and the nasty
+>   edge cases — all via one call.
+> - [`cafe_benchmark.ipynb`](notebooks/cafe_benchmark.ipynb) — `cafe.benchmark()` vs causal
+>   and bidirectional baselines, with cited published SOTA.
 
 ### Benchmark in one line
 
