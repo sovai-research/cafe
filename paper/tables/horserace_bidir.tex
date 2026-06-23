@@ -1,0 +1,24 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Bidirectional leaderboard and the look-ahead gap.} Mean MAE over 5 real datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. \cafe{}'s $\Delta$ is $0$ by construction.}
+\label{tab:bidirrace}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & Bidir MAE & $\Delta$ look-ahead & Family \\
+\midrule
+LinearInterp & 0.121 & -- & classical \\
+LOCF & 0.186 & 0.000 & online \\
+\textbf{CAFE} & 0.190 & 0.000 & factor (ours) \\
+OnlineEWCov & 0.191 & 0.000 & online \\
+TRMF & 0.252 & -- & classical \\
+BayOTIDE & 0.268 & 0.000 & online* \\
+ImputeFormer & 0.484 & 0.030 & deep (right-edge) \\
+SAITS & 0.555 & 0.009 & deep (right-edge) \\
+gcimpute & 0.562 & 0.000 & online \\
+BRITS & 0.577 & 0.028 & deep (right-edge) \\
+Transformer & 0.597 & 0.011 & deep (right-edge) \\
+SoftImpute & 0.610 & -- & classical \\
+TimesNet & 0.670 & 0.030 & deep (right-edge) \\
+\bottomrule
+\end{tabular}
+\end{table}

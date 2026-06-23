@@ -17,3 +17,6 @@ temp/
 
 # OS
 .DS_Store
+
+.venv-bench/
+bench/deep_horserace_cache.json

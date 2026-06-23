@@ -79,6 +79,58 @@ def _run_fast(X):
     return out
 
 
+# Structural router threshold for joint-panel vs per-entity imputation.  Calibrated on a
+# random sweep of panel shapes (bench/tensor_probe/e6): the score below agrees with the
+# oracle engine ~84% of the time, and the mean MAE regret of following it is ~0.6% because
+# disagreements cluster where the two engines are near-tied.  The decision uses only the
+# data SHAPE (entities, typical series length, features, missing rate) -- never held-out
+# error -- so it never leaks look-ahead (cf. the causal-selection-leak rule).
+_ROUTER_THR = 3.25
+
+
+def _panel_engine(X, meta):
+    """Pick 'joint' (cross-entity bilinear borrowing) or 'per_entity' (independent 2D per
+    series).  Joint pays off in the data-starved corner -- few features, short history,
+    many entities, heavy missingness; per-entity wins when each series is rich enough to
+    model on its own."""
+    eids = np.asarray(meta["entity_ids"])
+    E = int(np.unique(eids).size)
+    F = int(X.shape[1])
+    counts = np.bincount(eids.astype(np.intp))
+    counts = counts[counts > 0]
+    T_typ = float(np.median(counts)) if counts.size else float(X.shape[0])
+    rate = float(np.isnan(np.asarray(X, float)).mean())
+    s = np.log(max(1.0 - rate, 1e-3) * T_typ * F / max(E, 1))
+    return "per_entity" if s >= _ROUTER_THR else "joint"
+
+
+def _impute_per_entity(X, meta):
+    """Impute each entity's series independently through the 2D core.  Rows are gathered
+    per entity and processed in time order (point-in-time preserved), then scattered back
+    to their original positions, so the stacked layout round-trips exactly."""
+    X = np.ascontiguousarray(np.asarray(X, float))
+    eids = np.asarray(meta["entity_ids"])
+    tids = np.asarray(meta["time_ids"])
+    out = X.copy()
+    for e in np.unique(eids):
+        idx = np.where(eids == e)[0]
+        rows = idx[np.argsort(tids[idx], kind="stable")]   # time-ordered for causality
+        out[rows] = _run_fast(X[rows])
+    return out
+
+
+def _impute_panel(X, meta, engine="auto"):
+    """Route panel imputation. ``engine``: 'auto' (structural router), 'joint' (force the
+    cross-entity bilinear core), or 'per_entity' (force independent 2D per series)."""
+    if engine == "auto":
+        engine = _panel_engine(X, meta)
+    if engine == "per_entity":
+        return _impute_per_entity(X, meta)
+    if engine == "joint":
+        return np.asarray(_core.online_impute(X, meta), float)
+    raise ValueError(f"engine must be 'auto', 'joint' or 'per_entity'; got {engine!r}")
+
+
 class CafeResult:
     """Everything CAFE produces in one causal pass over ``data``."""
 
@@ -329,9 +381,15 @@ class CAFE:
             raise NotImplementedError("CAFE is causal by design; non-causal smoothing TBD.")
         self.causal = causal
 
-    def run(self, data, meta=None) -> CafeResult:
-        """Full traced run -> a CafeResult exposing every capability. 1D/2D inputs."""
-        X, ctx = to_matrix(data)
+    def run(self, data, meta=None, panel=None) -> CafeResult:
+        """Full traced run -> a CafeResult exposing every capability. 1D/2D inputs.
+
+        ``panel=(time_col, entity_col)`` routes a long-format DataFrame through the panel
+        path; a 3D ``(entity, time, feature)`` array is detected automatically. Either way
+        the derived ``{entity_ids, time_ids}`` come from :func:`to_matrix`; an explicit
+        ``meta`` still wins if supplied."""
+        X, ctx = to_matrix(data, panel=panel)
+        meta = meta or ctx.panel_meta
         if _is_panel(meta):
             # panel: impute via the core's panel path (rich trace is 2D-only in v1)
             filled = _core.online_impute(X, meta)
@@ -341,7 +399,8 @@ class CAFE:
         filled, trace, core = _run_traced(X)
         return CafeResult(ctx, X, filled, trace, core)
 
-    def impute(self, data, meta=None, return_mask=False, missingness_kwargs=None):
+    def impute(self, data, meta=None, return_mask=False, missingness_kwargs=None,
+               panel=None, engine="joint"):
         """Return just the filled data in the original container type. Uses the lean
         forward path (no introspection trace) -- identical values, lighter + faster.
 
@@ -360,9 +419,10 @@ class CAFE:
             Extra keyword args forwarded to
             :func:`cafe.missingness.missingness_features`.
         """
-        X, ctx = to_matrix(data)
+        X, ctx = to_matrix(data, panel=panel)
+        meta = meta or ctx.panel_meta
         if _is_panel(meta):
-            filled = from_matrix(np.asarray(_core.online_impute(X, meta), float), ctx)
+            filled = from_matrix(_impute_panel(X, meta, engine=engine), ctx)
         else:
             filled = from_matrix(_run_fast(X), ctx)
         if not return_mask:
@@ -387,14 +447,23 @@ class CAFE:
         return from_matrix(fc, fctx)
 
 
-def impute(data, meta=None, return_mask=False, missingness_kwargs=None):
-    """Zero-config causal imputation. Accepts numpy / pandas / polars (1D or 2D),
-    returns the same container type with missing values filled, using only past +
-    contemporaneous information (no look-ahead).
+def impute(data, meta=None, return_mask=False, missingness_kwargs=None, panel=None,
+           engine="joint"):
+    """Zero-config causal imputation. Accepts numpy / pandas / polars (1D or 2D), a 3D
+    ``(entity, time, feature)`` array, or a long-format DataFrame with ``panel=(time_col,
+    entity_col)``. Returns the same container type with missing values filled, using only
+    past + contemporaneous information (no look-ahead).
+
+    For panel data, ``engine`` selects the imputation strategy: ``'joint'`` (default,
+    the validated cross-entity bilinear core), ``'per_entity'`` (independent 2D per
+    series -- better when each series is long/wide/lightly-missing enough to model on its
+    own), or ``'auto'`` (a causal-clean, shape-only structural router between the two).
+    ``'auto'`` is opt-in: it helps on sparse/short/few-feature panels but is not yet
+    calibrated across all data types, so the default stays on the validated ``'joint'``.
 
     With ``return_mask=True`` also returns causal missingness-as-signal features for the
     original missing pattern as ``(filled, features)`` (see :meth:`CAFE.impute`); the
     default single-value return is unchanged.
     """
     return CAFE().impute(data, meta, return_mask=return_mask,
-                         missingness_kwargs=missingness_kwargs)
+                         missingness_kwargs=missingness_kwargs, panel=panel, engine=engine)

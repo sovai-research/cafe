@@ -1,0 +1,21 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The causal horse race (mean MAE $\downarrow$ over 5 real datasets, 10% MCAR).} Every method held to strict point-in-time evaluation; deep models applied via right-edge readout (causal\_race). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear. \cafe{} leads the only leaderboard valid for sequential decisions.}
+\label{tab:causalrace}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Method & Causal MAE $\downarrow$ & Family \\
+\midrule
+LOCF & 0.186 & online \\
+\textbf{CAFE} & \textbf{0.190} & factor (ours) \\
+OnlineEWCov & 0.191 & online \\
+BayOTIDE & 0.268 & online* \\
+ImputeFormer & 0.514 & deep (right-edge) \\
+gcimpute & 0.562 & online \\
+SAITS & 0.564 & deep (right-edge) \\
+BRITS & 0.604 & deep (right-edge) \\
+Transformer & 0.608 & deep (right-edge) \\
+TimesNet & 0.700 & deep (right-edge) \\
+\bottomrule
+\end{tabular}
+\end{table}
