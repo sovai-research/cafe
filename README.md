@@ -12,7 +12,7 @@ with uncertainty, factors, anomalies and forecasts from a single forward pass.</
 </p>
 
 <p align="center">
-<b>Derek Snow</b> &nbsp;·&nbsp; Matthew Lyberg &nbsp;·&nbsp; Eeshaan Asodekar<br>
+Derek Snow &nbsp;·&nbsp; Matthew Lyberg &nbsp;·&nbsp; Eeshaan Asodekar<br>
 <sub><a href="https://github.com/sovai-research">Sovai Research</a></sub>
 </p>
 
