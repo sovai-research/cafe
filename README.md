@@ -12,8 +12,7 @@ with uncertainty, factors, anomalies and forecasts from a single forward pass.</
 </p>
 
 <p align="center">
-Derek Snow &nbsp;·&nbsp; Matthew Lyberg &nbsp;·&nbsp; Eeshaan Asodekar<br>
-<sub><a href="https://github.com/sovai-research">Sovai Research</a></sub>
+Derek Snow &nbsp;·&nbsp; Matthew Lyberg &nbsp;·&nbsp; Eeshaan Asodekar
 </p>
 
 > **CAFÉ** is the model formerly developed in this repo under the name **TIMARA**.
@@ -382,7 +381,7 @@ If you use CAFÉ in your research, please cite the paper ([`paper/cafe.pdf`](pap
 }
 ```
 
-Questions or issues: [d.snow@sov.ai](mailto:d.snow@sov.ai) or open an issue.
+Questions or issues: please [open an issue](https://github.com/sovai-research/cafe/issues).
 
 ## License
 
