@@ -14,6 +14,7 @@
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,backgrounds,fit,calc}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{caption}  % \captionof for non-floating gallery figures (load after hyperref)
 \usepackage{authblk}
 
 \definecolor{cafeblue}{HTML}{2B6CB0}
@@ -279,6 +280,7 @@ is the learned default. No quantity in \eqref{eq:obj} is a constant fit to a
 benchmark.
 
 \begin{table}[t]\centering\small
+\setlength{\tabcolsep}{3pt}
 \caption{Classical imputers as special cases of \cafe{}, reached by its learned
 continuous parameters (no hard-coding).}
 \label{tab:special}
@@ -696,117 +698,115 @@ synthetic data and read straight from its internal state---no quantity is illust
 Together they show that a single causal estimator delivers a portfolio of capabilities
 that normally require separate tools.
 
-\begin{figure}[h]\centering
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=0.86\textwidth]{figures/causal_moat.pdf}
-\caption{\textbf{The moat: no look-ahead.} For a fixed early missing cell, we re-impute
+\captionof{figure}{\textbf{The moat: no look-ahead.} For a fixed early missing cell, we re-impute
 on growing time-prefixes. \cafe{}'s estimate is \emph{frozen} the moment its time passes
 (flat line), so a backtest cannot be contaminated; the non-causal batch method's ``past''
 estimate keeps changing as the future is revealed. This is what makes \cafe{} safe for
 sequential decision-making.}
 \label{fig:moat}
-\end{figure}
+\end{minipage}\end{center}
 
-\begin{figure}[h]\centering
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=\textwidth]{figures/decomposition.pdf}
-\caption{\textbf{Interpretability.} The imputed value is the sum of human-readable
+\captionof{figure}{\textbf{Interpretability.} The imputed value is the sum of human-readable
 parts---level, season, shared factors, idiosyncratic carry---read from the trace, not a
 black box. Each term can be inspected, audited, or used on its own.}
 \label{fig:decomp}
-\end{figure}
+\end{minipage}\end{center}
 
-\begin{multicols}{2}
-% tighten the vertical gaps between the stacked [H] panels in these columns
-\setlength{\floatsep}{7pt}
-\setlength{\textfloatsep}{7pt}
-\setlength{\intextsep}{7pt}
-\begin{figure}[H]\centering
+% Two-up galleries as non-floating, unbreakable minipage rows: figures stay in
+% reading order, cannot overflow the column, and captions cannot detach.
+\par\medskip\noindent
+\begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/uncertainty.pdf}
-\caption{\textbf{Conservative uncertainty.} Every fill carries a posterior band that widens
+\captionof{figure}{\textbf{Conservative uncertainty.} Every fill carries a posterior band that widens
 inside long gaps (less information). The bands are \emph{predominantly over-conservative}---they
 over-cover at most levels (a safe failure mode for decision-making), with only marginal
 undershoots at the tightest levels---and enable confidence intervals, error propagation, and
 multiple imputation. Scored by CRPS / coverage / sharpness (Table~\ref{tab:calibcrps}).}
 \label{fig:unc}
-\end{figure}
-
-\begin{figure}[H]\centering
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/factors.pdf}
-\caption{\textbf{Latent factors \& learned rank.} The common factors $z_t$ (a streaming
+\captionof{figure}{\textbf{Latent factors \& learned rank.} The common factors $z_t$ (a streaming
 robust DFM); ARD prunes the rest, so the effective rank is discovered, not set.}
 \label{fig:fac}
-\end{figure}
-\end{multicols}
+\end{minipage}
 
-\begin{multicols}{2}
-\begin{figure}[H]\centering
+\par\medskip\noindent
+\begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/dependency_net.pdf}
-\caption{\textbf{Dependency network.} The residual covariance recovers the cross-sectional
+\captionof{figure}{\textbf{Dependency network.} The residual covariance recovers the cross-sectional
 correlation structure between series---useful as features and for contagion analysis.}
 \label{fig:net}
-\end{figure}
-
-\begin{figure}[H]\centering
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/anomaly.pdf}
-\caption{\textbf{Anomaly detection (free).} The Student-$t$ weights drop exactly on injected
+\captionof{figure}{\textbf{Anomaly detection (free).} The Student-$t$ weights drop exactly on injected
 outliers---a point-in-time data-quality / fault score from the same pass.}
 \label{fig:anom}
-\end{figure}
-\end{multicols}
+\end{minipage}
 
-\begin{multicols}{2}
-\begin{figure}[H]\centering
+\par\medskip\noindent
+\begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/adaptation.pdf}
-\caption{\textbf{Self-tuning dials.} The tails ($\nu$), memory ($a$) and effective rank
+\captionof{figure}{\textbf{Self-tuning dials.} The tails ($\nu$), memory ($a$) and effective rank
 adapt online from the data---no hyperparameters.}
 \label{fig:adapt}
-\end{figure}
-
-\begin{figure}[H]\centering
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/forecasting.pdf}
-\caption{\textbf{Forecasting = imputation.} Masking the last rows and imputing them yields a
+\captionof{figure}{\textbf{Forecasting = imputation.} Masking the last rows and imputing them yields a
 forecast via the AR/Kalman state---one model for fill, forecast and nowcast.}
 \label{fig:fc}
-\end{figure}
-\end{multicols}
+\end{minipage}
 
-\begin{multicols}{2}
-\begin{figure}[H]\centering
+\par\medskip
+\begin{center}
+\begin{minipage}{0.66\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/benchmark.pdf}
-\caption{\textbf{Accuracy.} \cafe{}'s MAE on the named Beijing Air-Quality slice
+\captionof{figure}{\textbf{Accuracy.} \cafe{}'s MAE on the named Beijing Air-Quality slice
 ($10\%$ point/MCAR, standardised, $3$ seeds) lands in the band of GPU-trained
 bidirectional deep models---\emph{at far less information and compute, and while
 remaining causal}. Published deep numbers (different protocols) are context, not a
 head-to-head ranking; see Table~\ref{tab:publishedrefs}.}
 \label{fig:bench}
-\end{figure}
-\end{multicols}
+\end{minipage}
+\end{center}
 
 \section{Experimental figures}\label{sec:expfigs}
 These panels accompany the experiments of \S\ref{sec:exp}; every number is from a
 real run on the stated data.
 
 
-\begin{figure}[h]\centering
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=0.74\textwidth]{figures/longgap.pdf}
-\caption{\textbf{Graceful degradation under long gaps (Table~\ref{tab:longgap}).}
+\captionof{figure}{\textbf{Graceful degradation under long gaps (Table~\ref{tab:longgap}).}
 Imputation MAE as a single contiguous gap grows to $40\%$ of the series. Local
 causal methods (LOCF, linear) saturate near the unconditional error; \cafe{}
 stays bounded and beats even the non-causal SoftImpute reference at every length.}
 \label{fig:longgap}
-\end{figure}
+\end{minipage}\end{center}
 
-\begin{figure}[h]\centering
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=0.92\textwidth]{figures/scaling.pdf}
-\caption{\textbf{Scaling (Table~\ref{tab:runtime}).} Wall-clock vs.\ series
+\captionof{figure}{\textbf{Scaling (Table~\ref{tab:runtime}).} Wall-clock vs.\ series
 length $T$ (near-linear, log-log slope $\approx\!1$) and vs.\ width $N$ (strongly
 sub-linear): each row uses only rank-$R$ Cholesky solves, never an $N\times N$
 inverse.}
 \label{fig:scaling}
-\end{figure}
+\end{minipage}\end{center}
 
-\begin{figure}[h]\centering
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=0.92\textwidth]{figures/calibration.pdf}
-\caption{\textbf{Calibration (Table~\ref{tab:calibcrps}).}
+\captionof{figure}{\textbf{Calibration (Table~\ref{tab:calibcrps}).}
 \emph{(a)} Reliability diagram: empirical vs.\ nominal coverage---curves sit
 \emph{on or above} the diagonal at most levels (predominantly over-covering), with
 only marginal undershoots at the tightest levels. \emph{(b)} PIT histograms: a
@@ -814,17 +814,18 @@ flat profile would be sharply calibrated; \cafe{}'s are centre-peaked, the
 signature of conservative (over-dispersed) intervals---safe, but loose, on the
 smoother panels.}
 \label{fig:calib}
-\end{figure}
+\end{minipage}\end{center}
 
-\begin{figure}[h]\centering
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=0.92\textwidth]{figures/ablation.pdf}
-\caption{\textbf{Full ablation matrix (Table~\ref{tab:ablation}).} Cost of
+\captionof{figure}{\textbf{Full ablation matrix (Table~\ref{tab:ablation}).} Cost of
 removing each dial ($\Delta$MAE vs.\ full \cafe{}) across all eight regimes. Each
 dial spikes on the regime it targets and is near-inert---small, often slightly
 negative---elsewhere, the price of empirical-Bayes priors that shrink an
 unsupported dial toward off rather than exactly to it.}
 \label{fig:ablation}
-\end{figure}
+\end{minipage}\end{center}
 
 \twocolumn
 

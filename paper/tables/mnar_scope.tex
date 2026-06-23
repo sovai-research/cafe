@@ -1,4 +1,4 @@
-\begin{table}[t]\centering\small
+\begin{table}[!htbp]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{MNAR scope: empirical degradation and the censoring bias.} MAE ($\downarrow$) under MCAR vs.\ self-masking MNAR at a \emph{matched} $20\%$ missing rate (averaged over Beijing, ETTh1 and a synthetic low-rank panel; 3 seeds). Under MNAR each cell's drop probability rises with its own value ($p\!\sim\!\sigma(z-1)$), so the high tail censors itself. $\Delta$ is the relative MAE increase MCAR$\to$MNAR. \emph{Bias} is the mean signed error (pred$-$true) on masked cells under MNAR: a negative bias is the diagnostic MNAR signature -- the method under-predicts the removed high tail. MNAR is non-identifiable in general (Ma \& Zhang, NeurIPS'21); CAFE recovers self-censored values only insofar as the contemporaneous cross-section or recent past still carry information about them, never by modelling the missingness mechanism. \cafe{} and LOCF are strictly causal (point-in-time); LinInterp and SoftImpute are non-causal references (\emph{italic}). Bold $=$ best \emph{causal} method per MAE column.}
 \label{tab:mnarscope}
