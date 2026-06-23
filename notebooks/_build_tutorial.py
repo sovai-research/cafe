@@ -141,6 +141,15 @@ model naturally yields. Grab the rich result with `CAFE().run(...)`."""))
 cells.append(code(r"""res = cafe.CAFE().run(gappy)
 res.params       # the four dials CAFÉ learned from the data (not set by you)"""))
 
+cells.append(md(r"""**The 10-second tour.** Every capability is a one-liner — `res.plot(kind)`. Here are all
+five at once; the rest of this section then *proves* each one is real, not decorative."""))
+cells.append(code(r"""fig, axs = plt.subplots(2, 3, figsize=(13, 6))
+for a, kind in zip(axs.ravel(),
+                   ["uncertainty", "factors", "anomaly", "decomposition", "dependency"]):
+    res.plot(kind, ax=a)
+axs.ravel()[-1].axis("off")
+plt.tight_layout(); plt.show()"""))
+
 cells.append(md(r"""**Per-cell uncertainty.** CAFÉ reports a posterior std for every filled cell. We hold it
 to two tests: it should (1) *widen the deeper you are inside a gap*, and (2) be *honest* —
 larger where the fill is actually more wrong."""))
