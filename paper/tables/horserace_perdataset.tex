@@ -1,0 +1,20 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Causal horse race, per dataset (block-missing, causal MAE $\downarrow$).} Strictly point-in-time evaluation on five real datasets. \cafe{} is the best causal imputer on every dataset with genuine factor structure (macro, air-quality, energy, Beijing); on the near-random-walk FX series a last-value / Kalman model is correctly better (a factor prior is the wrong model there). Deep imputers, trained on history and applied strictly point-in-time, collapse throughout. Best per column in \textbf{bold}.}
+\label{tab:horseraceperds}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method (causal) & AirQual & Applnce & Beijing & Exchange & FRED-MD \\
+\midrule
+\textbf{CAFE} & \textbf{0.304} & \textbf{0.417} & \textbf{0.247} & 0.762 & \textbf{0.227} \\
+BayOTIDE & 0.376 & 0.432 & 0.299 & 0.261 & 0.242 \\
+OnlineEWCov & 0.338 & 0.507 & 0.444 & 0.282 & 0.457 \\
+KalmanLL & 0.802 & 0.515 & 0.552 & \textbf{0.158} & 0.310 \\
+LOCF & 0.936 & 0.508 & 0.578 & 0.164 & 0.273 \\
+\midrule
+SAITS$^\dagger$ & 0.432 & 0.702 & 0.708 & 1.390 & 1.120 \\
+ImputeFormer$^\dagger$ & 0.654 & 0.708 & 0.766 & 0.967 & 0.844 \\
+\bottomrule
+\end{tabular}
+ \\[2pt]{\footnotesize $^\dagger$deep models, applied strictly point-in-time (right-edge readout).}
+\end{table}

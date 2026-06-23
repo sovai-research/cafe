@@ -20,3 +20,4 @@ temp/
 
 .venv-bench/
 bench/deep_horserace_cache.json
+bench/horserace_cache_block.json

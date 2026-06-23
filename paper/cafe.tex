@@ -202,6 +202,13 @@ but not competitive with that deep SOTA. \cafe{} is, to our knowledge, the first
 method that is simultaneously causal/point-in-time, CPU-only, \emph{and}
 competitive with bidirectional deep SOTA on point missingness---the defensible
 contribution of this paper.
+\item \textbf{The first causal leaderboard.} We run the strongest deep imputers
+ourselves on five real datasets under a strict point-in-time protocol (via
+right-edge readout, \S\ref{sec:exp}), not just published numbers. Held to
+causality, the deep models collapse and the non-causal cheap baselines that win
+the standard leaderboard vanish; \cafe{} is the best causal imputer on every
+dataset with genuine factor structure (Fig.~\ref{fig:causalrace},
+Table~\ref{tab:horseraceperds}).
 \end{enumerate}
 
 \paragraph{In plain terms.} \cafe{} reads a value as
@@ -368,6 +375,59 @@ CSDI reports $.102$. We make no protocol-independent ``lowest MAE'' claim. The
 defensible statement is the two-of-three: \cafe{}'s $0.108$ lands in the deep-SOTA
 band \emph{while being causal and CPU-only}, which no published deep model is.
 \input{tables/published_refs}
+
+\paragraph{The causal horse race (we run the deep models ourselves).}
+Rather than rely on published numbers, we run the strongest deep imputers
+(SAITS, BRITS, Transformer, TimesNet, ImputeFormer, via PyPOTS) \emph{ourselves},
+on the same five real datasets, same masks, same held-out cells, on one CPU core
+--- and, for the first time to our knowledge, under a strict \emph{causal}
+protocol as well as the usual bidirectional one. Each method is scored two ways:
+\emph{(i)} \textbf{bidirectional}, the field's standard, in which a fill may use
+the future (deep models trained transductively, full-window readout); and
+\emph{(ii)} \textbf{causal}, strictly point-in-time, in which deep models are
+trained on history only and applied by \emph{right-edge readout} (to fill time
+$t$ we feed the trailing window $[t{-}L{+}1,\dots,t]$ and trust only its last
+position, which depends on data $\le t$ --- a bidirectional architecture run
+honestly as a filter, verified truncation-invariant). The gap
+$\Delta=\text{causal}-\text{bidirectional}$ is the accuracy a method silently
+borrows from the future; \cafe{} and the online baselines have $\Delta=0$ by
+construction. Datasets span macro (FRED-MD), finance (FX), air-quality, energy
+and Beijing; we also race the full suite of cheap causal baselines (LOCF,
+expanding mean, rolling mean/median, EWMA, drift, a Kalman local level,
+cross-sectional mean, GROUSE, online Gaussian copula and the online Bayesian
+imputer BayOTIDE).
+
+Three results (Fig.~\ref{fig:causalrace}, Tables~\ref{tab:horseraceperds},
+\ref{tab:bidirrace}). \emph{(1) The deep imputers collapse when the future is
+withheld:} competitive bidirectionally (MAE $\approx0.36$), their causal MAE
+roughly doubles-to-triples (e.g.\ $0.79$--$1.14$ on block gaps), dropping them to
+the bottom of the causal board. \emph{(2) The bidirectional winner is a
+non-causal cheap baseline} (linear interpolation, MAE $0.13$ on point gaps) that
+\emph{cannot be made causal at all} and simply vanishes from the causal
+leaderboard. \emph{(3) Among causal methods, \cafe{} wins where structure exists:}
+on block-missing data it is the best causal imputer on every dataset with genuine
+factor structure (FRED-MD, air-quality, energy, Beijing; Table~\ref{tab:horseraceperds}),
+and is beaten only on the near-random-walk FX series, where a last-value/Kalman
+model is correctly the right prior --- an honest limitation, not a bug. The
+online Bayesian imputer BayOTIDE is the one competitive causal rival (it edges
+\cafe{} on the FX-inflated \emph{average}), at far higher per-fill cost and
+without \cafe{}'s by-product outputs. Under scattered point missingness the
+simplest causal methods (LOCF, cross-sectional mean) are hard to beat---the
+known small-gap effect---and \cafe{} sits among them, well ahead of every deep
+model.
+\input{tables/horserace_perdataset}
+\input{tables/horserace_bidir}
+
+\begin{figure}[t]\centering
+\includegraphics[width=\columnwidth]{figures/causal_race_flip.pdf}
+\caption{\textbf{The leaderboard flips when you forbid the future.} Each line is a
+method; left rank is by bidirectional MAE (the standard game), right rank by
+causal (strict point-in-time) MAE on five real datasets. Non-causal winners
+(linear interpolation, TRMF) cannot compete causally; the deep imputers plunge;
+\cafe{} and the causal baselines rise. The causal column is the only one valid for
+a backtest.}
+\label{fig:causalrace}
+\end{figure}
 
 \paragraph{Relation to prior work.} The closest published rival to \cafe{}'s
 low-rank core is ImputeFormer~\cite{nie2024imputeformer} (KDD'24), which also
