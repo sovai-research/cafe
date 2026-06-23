@@ -27,13 +27,17 @@ def _is_panel(meta):
         and len(np.unique(meta["entity_ids"])) > 1
 
 
-def _run_traced(X):
-    """Forward-run the real core with tracing on a 2D matrix; return (filled, trace, core)."""
+def _forward(X, record):
+    """Forward-run the core over a 2D matrix; return (filled, core). With ``record=False``
+    (the lean path used by ``impute``/``forecast``) the per-row introspection trace and the
+    predictive-band stats are skipped entirely -- the imputed values are bit-identical, but
+    we avoid building ~T dicts of arrays, so it is a touch faster and far lighter in memory.
+    ``run`` uses ``record=True`` to expose uncertainty/factors/decomposition/etc."""
     X = np.ascontiguousarray(np.asarray(X, float))
     T, N = X.shape
     periods = _core._fourier_periods(T)
     core = _core._UnifiedCore(N, periods, E=1)
-    core.record = True
+    core.record = record
     out = X.copy()
     z_prev = None
     for t in range(T):
@@ -45,7 +49,19 @@ def _run_traced(X):
         gm = core._mu(0)
         idx = np.where(np.isnan(out))
         out[idx] = np.take(gm, idx[1])
+    return out, core
+
+
+def _run_traced(X):
+    """Forward-run with tracing (rich path); return (filled, trace, core)."""
+    out, core = _forward(X, record=True)
     return out, core.rows_trace, core
+
+
+def _run_fast(X):
+    """Forward-run without tracing (lean path); return just the filled matrix."""
+    out, _ = _forward(X, record=False)
+    return out
 
 
 class CafeResult:
@@ -157,6 +173,56 @@ class CafeResult:
         return dict(nu=float(C["nu"][-1]), ar=float(C["a"][-1]),
                     effective_rank=self.effective_rank())
 
+    # ---- one-line plotting (sovai-style: pick the view with a string) ----
+    def plot(self, kind="uncertainty", col=0, ax=None):
+        """Plot any capability in one line. ``kind`` is one of:
+        ``'uncertainty'`` (fill ± 95% band for one column), ``'factors'`` (latent factor
+        paths), ``'anomaly'`` (per-time outlier score), ``'decomposition'``
+        (level/season/factor/residual for one column), ``'dependency'`` (network heatmap).
+        ``col`` selects the column (int index or name)."""
+        import matplotlib.pyplot as plt
+        if ax is None:
+            _, ax = plt.subplots(figsize=(10, 3.2) if kind != "dependency" else (5.2, 4.4))
+        names = self._ctx.columns
+        j = (names.index(col) if (isinstance(col, str) and names) else
+             (col if isinstance(col, int) else 0))
+        label = col if isinstance(col, str) else (names[j] if names else f"series {j}")
+
+        if kind == "factors":
+            Z = self.factors()
+            for r in range(Z.shape[1]):
+                ax.plot(Z[:, r], lw=1.0, label=f"factor {r + 1}")
+            ax.legend(ncol=4, fontsize=8); ax.set_title("latent factor paths $z_t$")
+        elif kind == "anomaly":
+            ax.plot(np.asarray(self.anomaly_scores()), lw=0.8, color="C3")
+            ax.set_ylim(0, 1.02); ax.set_title("anomaly score (0 = fit, 1 = outlier)")
+        elif kind in ("decomposition", "decompose"):
+            C = self._comp()
+            resid = self._filled - (C["level"] + C["season"] + C["factor"])
+            parts = {"level": C["level"], "season": C["season"],
+                     "factor": C["factor"], "residual": resid}
+            for nm, M in parts.items():
+                ax.plot(M[:, j], lw=1.0, label=nm)
+            ax.legend(ncol=4, fontsize=8); ax.set_title(f"{label}: additive decomposition")
+        elif kind in ("dependency", "network"):
+            net = self.dependency_network()
+            im = ax.imshow(net, cmap="RdBu_r", vmin=-1, vmax=1)
+            if names:
+                ax.set_xticks(range(len(names))); ax.set_xticklabels(names, rotation=90, fontsize=7)
+                ax.set_yticks(range(len(names))); ax.set_yticklabels(names, fontsize=7)
+            ax.figure.colorbar(im, ax=ax, fraction=0.046); ax.set_title("dependency network")
+            ax.grid(False)
+        else:  # uncertainty
+            sd = np.sqrt(self._comp()["cvar"][:, j])
+            f = self._filled[:, j]
+            t = np.arange(len(f))
+            ax.fill_between(t, f - 1.96 * sd, f + 1.96 * sd, alpha=0.25, color="C0", label="95% band")
+            ax.plot(t, f, color="C0", lw=1.0, label="filled")
+            obs = ~np.isnan(self._X[:, j])
+            ax.scatter(t[obs], self._X[obs, j], s=6, color="0.35", label="observed", zorder=3)
+            ax.legend(fontsize=8); ax.set_title(f"{label}: imputation ± uncertainty")
+        return ax
+
 
 class CAFE:
     """Causal Adaptive Factor Estimation imputer.
@@ -185,11 +251,12 @@ class CAFE:
         return CafeResult(ctx, X, filled, trace, core)
 
     def impute(self, data, meta=None):
-        """Return just the filled data in the original container type."""
+        """Return just the filled data in the original container type. Uses the lean
+        forward path (no introspection trace) -- identical values, lighter + faster."""
+        X, ctx = to_matrix(data)
         if _is_panel(meta):
-            X, ctx = to_matrix(data)
             return from_matrix(np.asarray(_core.online_impute(X, meta), float), ctx)
-        return self.run(data, meta).imputed
+        return from_matrix(_run_fast(X), ctx)
 
     def forecast(self, data, horizon: int):
         """Forecast ``horizon`` steps ahead by imputing appended all-missing rows
@@ -198,8 +265,7 @@ class CAFE:
         X, ctx = to_matrix(data)
         T, N = X.shape
         Xf = np.vstack([X, np.full((horizon, N), np.nan)])
-        filled, _, _ = _run_traced(Xf)
-        fc = filled[T:]
+        fc = _run_fast(Xf)[T:]
         # rebuild a container for just the forecast rows
         fctx = Ctx(ctx.kind, ctx.was_1d, None, ctx.columns, ctx.name, ctx.dtypes, ctx.schema)
         return from_matrix(fc, fctx)

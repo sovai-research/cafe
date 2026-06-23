@@ -653,9 +653,11 @@ class _UnifiedCore:
             self.psi_sum[oi] = lam * self.psi_sum[oi] + r2v
             self.psi_cnt[oi] = lam * self.psi_cnt[oi] + 1.0
             self.psi = self.psi_sum / np.maximum(self.psi_cnt, 1e-3)
-            # EW factor-contribution variance E[lr^2] per feature (band-only, see __init__)
-            self.lrc_sum[oi] = lam * self.lrc_sum[oi] + lr_o * lr_o
-            self.lrc_cnt[oi] = lam * self.lrc_cnt[oi] + 1.0
+            # EW factor-contribution variance E[lr^2] per feature (band-only, see __init__).
+            # Only needed for the recorded predictive band -> skip on the lean impute path.
+            if getattr(self, "record", False):
+                self.lrc_sum[oi] = lam * self.lrc_sum[oi] + lr_o * lr_o
+                self.lrc_cnt[oi] = lam * self.lrc_cnt[oi] + 1.0
             # idiosyncratic AR(1): autocorrelation of the idio residual (resid_c - lr).
             prev = self.idio_last[oi]
             fresh = self.idio_age[oi] <= 1.5             # consecutive obs only

@@ -129,6 +129,23 @@ def test_forecast():
     assert np.asarray(out).shape[0] == 12 and np.isfinite(np.asarray(out)).all()
 
 
+def test_result_plot_one_liner():
+    import matplotlib
+    matplotlib.use("Agg")
+    res = cafe.CAFE().run(_data(T=120, N=5))
+    for kind in ("uncertainty", "factors", "anomaly", "decomposition", "dependency"):
+        ax = res.plot(kind)
+        assert ax is not None
+
+
+def test_impute_matches_run_imputed():
+    """The lean impute path returns exactly what the traced run path fills."""
+    X = _data(T=150, N=6)
+    a = np.asarray(cafe.impute(X))
+    b = np.asarray(cafe.CAFE().run(X).imputed)
+    assert np.allclose(a, b, equal_nan=True)
+
+
 def test_benchmark_one_liner():
     """cafe.benchmark() runs out of the box and CAFÉ wins among causal methods."""
     res = cafe.benchmark(missing=0.1, seed=0, verbose=False)   # synthetic, self-contained
