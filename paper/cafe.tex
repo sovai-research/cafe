@@ -360,25 +360,8 @@ baseline---under scattered point missingness a gap is flanked by observed
 neighbours, so a straight line between them is hard to beat---but it is
 \emph{non-causal} (it reads the next observed value), whereas \cafe{} is causal.
 
-\paragraph{Where the deep numbers sit (context, not a head-to-head).} Published
-deep imputers report Beijing MAE in roughly the same range---e.g.\
-SAITS~\cite{du2023}, BRITS~\cite{cao2018}, the Transformer~\cite{vaswani2017},
-GP-VAE~\cite{fortuin2020}, M-RNN~\cite{yoon2019}, CSDI~\cite{tashiro2021},
-FGTI~\cite{fgti2024} ($0.149$), ImputeFormer~\cite{nie2024imputeformer}---but
-\emph{all under a different (windowed, train/val/test, possibly different span and
-preprocessing) protocol}, all bidirectional, and all GPU-trained. We therefore do
-\textbf{not} rank \cafe{} against them in one table. Their published values, with
-sources, are collected in Table~\ref{tab:publishedrefs}, which also surfaces a
-caveat that matters: the two most-cited registries \emph{disagree} on every
-shared method (e.g.\ SAITS $.137$~\cite{du2023} vs.\ $.155$~\cite{du2024tsibench},
-BRITS $.153$ vs.\ $.127$), and under the TSI-Bench~\cite{du2024tsibench} source
-CSDI reports $.102$. We make no protocol-independent ``lowest MAE'' claim. The
-defensible statement is the two-of-three: \cafe{}'s $0.108$ lands in the deep-SOTA
-band \emph{while being causal and CPU-only}, which no published deep model is.
-\input{tables/published_refs}
-
 \paragraph{The causal horse race (we run the deep models ourselves).}
-Rather than rely on published numbers, we run the strongest deep imputers
+Beyond any published number, we run the strongest deep imputers
 (SAITS, BRITS, Transformer, TimesNet, ImputeFormer, via PyPOTS) \emph{ourselves},
 on the same eight structured real datasets (plus an FX control), same masks, same
 held-out cells, on one CPU core
@@ -441,9 +424,6 @@ online prior is wanted, BayOTIDE is the strongest such rival. Crucially you do n
 have to guess: \cafe{} reports its own effective rank as a by-product, so a learned
 rank that collapses toward zero is itself the signal that the structure assumption
 does not hold and a random-walk prior should take over.
-\input{tables/horserace_perdataset}
-\input{tables/horserace_bidir}
-
 \begin{figure*}[t]\centering
 \includegraphics[width=\textwidth]{figures/causal_race_flip.pdf}
 \caption{\textbf{Forbid the future and the board collapses.} Each line is a
@@ -459,6 +439,26 @@ and rises to \#1 on the causal side even though TRMF edges it bidirectionally by
 reading the future. The causal column is the only one valid for a backtest.}
 \label{fig:causalrace}
 \end{figure*}
+\input{tables/horserace_perdataset}
+\input{tables/horserace_bidir}
+
+\paragraph{How this sits against published numbers (context, not a head-to-head).}
+Stepping back from our own runs, published deep imputers report Beijing MAE in
+roughly the same range as \cafe{}'s $0.108$---e.g.\ SAITS~\cite{du2023},
+BRITS~\cite{cao2018}, the Transformer~\cite{vaswani2017}, GP-VAE~\cite{fortuin2020},
+M-RNN~\cite{yoon2019}, CSDI~\cite{tashiro2021}, FGTI~\cite{fgti2024} ($0.149$),
+ImputeFormer~\cite{nie2024imputeformer}---but \emph{all under a different (windowed,
+train/val/test, possibly different span and preprocessing) protocol}, all
+bidirectional, and all GPU-trained. We therefore do \textbf{not} rank \cafe{}
+against them in one table; their published values, with sources, are collected in
+Table~\ref{tab:publishedrefs}, which also surfaces a caveat that matters: the two
+most-cited registries \emph{disagree} on every shared method (e.g.\ SAITS
+$.137$~\cite{du2023} vs.\ $.155$~\cite{du2024tsibench}, BRITS $.153$ vs.\ $.127$),
+and under the TSI-Bench~\cite{du2024tsibench} source CSDI reports $.102$. We make no
+protocol-independent ``lowest MAE'' claim. The defensible statement is the
+two-of-three: \cafe{}'s $0.108$ lands in the deep-SOTA band \emph{while being causal
+and CPU-only}, which no published deep model is.
+\input{tables/published_refs}
 
 \paragraph{Relation to prior work.} The closest published rival to \cafe{}'s
 low-rank core is ImputeFormer~\cite{nie2024imputeformer} (KDD'24), which also
