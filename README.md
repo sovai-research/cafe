@@ -67,6 +67,23 @@ column selection.
 > no-look-ahead proof, accuracy, uncertainty, factors, anomalies, decomposition,
 > dependency network and forecasting).
 
+### Benchmark in one line
+
+```python
+cafe.benchmark()                 # synthetic data, CAFÉ vs baselines, printed table
+cafe.benchmark(df)               # your data, scored honestly (causal vs bidirectional)
+cafe.benchmark("beijing")        # real data + cited published SOTA reference rows
+```
+
+On the **Beijing Multi-Site Air-Quality** benchmark (17,117 × 132, 10% missing,
+standardised), CAFÉ — *causal, CPU-only, no training* — reaches **MAE ≈ 0.11**, beating the
+published **bidirectional** SAITS (0.137), BRITS (0.153) and Transformer (0.158), and
+within reach of diffusion-based CSDI (0.102). Every competing method uses the *future* to
+fill the past (a smoothing task, and forbidden look-ahead bias in a backtest); CAFÉ does
+not. The benchmark runs the simple baselines *live* on the same mask and shows the deep
+numbers as clearly-labelled, cited references — see
+[`notebooks/cafe_benchmark.ipynb`](notebooks/cafe_benchmark.ipynb).
+
 ### Everything from one causal pass
 
 ```python

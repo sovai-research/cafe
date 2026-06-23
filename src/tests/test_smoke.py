@@ -129,6 +129,27 @@ def test_forecast():
     assert np.asarray(out).shape[0] == 12 and np.isfinite(np.asarray(out)).all()
 
 
+def test_benchmark_one_liner():
+    """cafe.benchmark() runs out of the box and CAFÉ wins among causal methods."""
+    res = cafe.benchmark(missing=0.1, seed=0, verbose=False)   # synthetic, self-contained
+    methods = {r["method"]: r for r in res.rows}
+    assert methods["CAFÉ"]["ok"] and methods["CAFÉ"]["mae"] < 1.0
+    # CAFÉ should beat the trivial predict-the-mean baseline by a wide margin
+    assert methods["CAFÉ"]["mae"] < 0.5 * methods["global mean"]["mae"]
+    # and be the best *causal* method
+    assert res.best_causal["method"] == "CAFÉ"
+
+
+def test_benchmark_on_dataframe():
+    import pandas as pd
+    X = _data(T=200, N=6)
+    X[np.isnan(X)] = 0.0                                        # give it a clean-ish frame
+    df = pd.DataFrame(X, columns=[f"s{i}" for i in range(6)])
+    res = cafe.benchmark(df, missing=0.15, seed=1, verbose=False)
+    assert any(r["method"] == "CAFÉ" and r["ok"] for r in res.rows)
+    assert res.to_pandas().shape[0] == len(res.rows)
+
+
 def test_causality_no_lookahead():
     """Imputations at early cells must not change when future rows are appended."""
     X = _data(T=100)
