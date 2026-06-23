@@ -11,6 +11,11 @@ with uncertainty, factors, anomalies and forecasts from a single forward pass.</
 <img src="https://img.shields.io/badge/no-GPU%20%7C%20no%20training-success.svg" alt="cpu">
 </p>
 
+<p align="center">
+<b>Derek Snow</b> &nbsp;·&nbsp; Matthew Lyberg &nbsp;·&nbsp; Eeshaan Asodekar<br>
+<sub><a href="https://github.com/sovai-research">Sovai Research</a></sub>
+</p>
+
 > **CAFÉ** is the model formerly developed in this repo under the name **TIMARA**.
 > It is a *mechanistic statistical model — not a neural network*: one penalised
 > objective whose learned parameters make SoftImpute, TRMF, the Kalman filter,
