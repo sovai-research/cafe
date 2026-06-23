@@ -6,10 +6,13 @@
 leaderboard.} Every value below is taken \emph{verbatim from the cited paper};
 we never re-run competitor deep models. \textbf{These numbers were produced under
 DIFFERENT data variants, masks, and (windowed train/val/test) protocols from
-\cafe{}'s full-series causal online imputation, so they are NOT like-for-like and
-\cafe{} is deliberately \emph{not} ranked into this table.} All listed deep
+\cafe{}'s full-series causal online imputation, so they are NOT like-for-like.}
+\cafe{}'s own measured number is shown only in a \emph{separate causal block}
+(top, HW${=}$CPU) for reference---it is \emph{not} merged into a single ranking
+with the bidirectional rows below, which would compare across mismatched protocols.
+All listed deep
 methods are \emph{bidirectional} (each fill sees the whole series) and GPU-trained;
-no prior method here is causal/point-in-time, which is the gap \cafe{} fills. Where
+\cafe{} is the only causal/point-in-time entry, which is the gap it fills. Where
 two sources report different values for the same cell, BOTH are listed with their
 source (e.g.\ Beijing SAITS .137 vs .155, BRITS .153 vs .127) --- under the
 TSI-Bench source CSDI (.102) is the strongest Beijing MAE, so no single ``lowest
@@ -20,7 +23,9 @@ marked \textit{unver.}\ rather than guessed.}
 \toprule
 Method & Dataset & Metric & Rate & Value$\downarrow$ & Source & HW \\
 \midrule
-  \multicolumn{7}{@{}l}{\emph{Causal / point-in-time (no future access) --- none published (this is the CAFE moat)}}\\
+  \multicolumn{7}{@{}l}{\textbf{Causal / point-in-time (no future access)}}\\
+  \midrule
+  \cafe{} (ours) & Beijing Air-Quality & MAE & 0.10 & 0.108 & ours & CPU \\
   \midrule
   \multicolumn{7}{@{}l}{\textbf{Bidirectional (each fill sees the whole series; GPU)}}\\
   \midrule
@@ -53,5 +58,5 @@ Method & Dataset & Metric & Rate & Value$\downarrow$ & Source & HW \\
 \end{tabular}
 \vspace{2pt}
 
-{\footnotesize\emph{Sources.} \textbf{csdi2021}: CSDI, NeurIPS'21, arXiv:2107.03502; \textbf{du2023}: Du et al. 2023, SAITS (ESWA), Table 2; \textbf{fgti2024}: FGTI, NeurIPS'24 (frequency-domain diffusion); \textbf{impf2024}: ImputeFormer, KDD'24, arXiv:2312.01728; \textbf{pristi2023}: PriSTI, ICDE'23; \textbf{tsibench}: TSI-Bench, arXiv:2406.12747 (NeurIPS'24 D\&B; withdrawn from ICLR'25)}
+{\footnotesize\emph{Sources.} \textbf{csdi2021}: CSDI, NeurIPS'21, arXiv:2107.03502; \textbf{du2023}: Du et al. 2023, SAITS (ESWA), Table 2; \textbf{fgti2024}: FGTI, NeurIPS'24 (frequency-domain diffusion); \textbf{impf2024}: ImputeFormer, KDD'24, arXiv:2312.01728; \textbf{ours}: this paper --- \cafe{} full-series causal online, 1 CPU core; \textbf{pristi2023}: PriSTI, ICDE'23; \textbf{tsibench}: TSI-Bench, arXiv:2406.12747 (NeurIPS'24 D\&B; withdrawn from ICLR'25)}
 \end{table*}

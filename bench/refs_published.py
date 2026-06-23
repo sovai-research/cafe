@@ -64,6 +64,7 @@ SOURCES: dict[str, str] = {
     "impf2024":    "ImputeFormer, KDD'24, arXiv:2312.01728",
     "gpvae2020":   "GP-VAE, AISTATS'20 (as reported by CSDI/SAITS)",
     "unverified":  "UNVERIFIED — not pinned to a specific paper/table",
+    "ours":        r"this paper --- \cafe{} full-series causal online, 1 CPU core",
 }
 
 
@@ -105,6 +106,15 @@ class Ref:
 # online impute. Hence: context column, never a ranked board with CAFE inside.
 # --------------------------------------------------------------------------- #
 REFS: list[Ref] = [
+    # ---- OUR method, the sole CAUSAL/point-in-time entry ----
+    # Kept in its OWN causal block (separate HW=CPU, full-series causal online),
+    # not merged into a cross-protocol ranking with the bidirectional GPU rows.
+    # This is our own measured number under the named Beijing protocol (S.exp),
+    # shown for reference so the otherwise-empty causal block is not blank.
+    Ref(r"\cafe{} (ours)", "Beijing Air-Quality", "full-series causal online",
+        "mcar-point", 0.10, "MAE", 0.108, "ours", "CPU",
+        causal=True, bidirectional=False,
+        note="our measured number; strictly point-in-time, single CPU core"),
     # ---- Beijing Air-Quality, MAE @ 10% MCAR-point ----
     # Two sources disagree on every shared method: record BOTH (du2023 vs tsibench).
     Ref("SAITS", "Beijing Air-Quality", "windowed train/val/test", "mcar-point", 0.10,
@@ -283,10 +293,13 @@ def render_latex(path: str = TAB_OUT) -> str:
 leaderboard.} Every value below is taken \emph{verbatim from the cited paper};
 we never re-run competitor deep models. \textbf{These numbers were produced under
 DIFFERENT data variants, masks, and (windowed train/val/test) protocols from
-\cafe{}'s full-series causal online imputation, so they are NOT like-for-like and
-\cafe{} is deliberately \emph{not} ranked into this table.} All listed deep
+\cafe{}'s full-series causal online imputation, so they are NOT like-for-like.}
+\cafe{}'s own measured number is shown only in a \emph{separate causal block}
+(top, HW${=}$CPU) for reference---it is \emph{not} merged into a single ranking
+with the bidirectional rows below, which would compare across mismatched protocols.
+All listed deep
 methods are \emph{bidirectional} (each fill sees the whole series) and GPU-trained;
-no prior method here is causal/point-in-time, which is the gap \cafe{} fills. Where
+\cafe{} is the only causal/point-in-time entry, which is the gap it fills. Where
 two sources report different values for the same cell, BOTH are listed with their
 source (e.g.\ Beijing SAITS .137 vs .155, BRITS .153 vs .127) --- under the
 TSI-Bench source CSDI (.102) is the strongest Beijing MAE, so no single ``lowest

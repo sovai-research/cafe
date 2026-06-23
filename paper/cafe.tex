@@ -53,6 +53,7 @@ imputes missing values \emph{and} forecasts, and from the \emph{same} pass reads
 out per-cell uncertainty, the latent common factors, a streaming anomaly score,
 an additive level/season/factor decomposition, and a cross-sectional dependency
 network---capabilities normally split across half a dozen separate tools.}
+
 Imputation of missing values in time series and panel data is dominated by a
 \emph{zoo} of specialised estimators---low-rank matrix factorisation, temporal
 regularised factorisation, Kalman/state-space smoothers, matrix completion with
@@ -72,7 +73,9 @@ continuous parameters
 ---an automatic-relevance-determination (ARD) rank, a learned autoregressive
 coefficient, a learned Student-$t$ degrees-of-freedom, and shrinkage seasonal
 coefficients---are estimated from the data itself by empirical Bayes, never by a
-threshold tuned to a dataset. SoftImpute, TRMF, the Kalman filter, MC-NNM and
+threshold tuned to a dataset.
+
+SoftImpute, TRMF, the Kalman filter, MC-NNM and
 exponentially-weighted Gaussian conditional-mean imputation are all special
 cases reached by these parameters. A mechanical look-ahead verifier certifies
 that no imputed value, and no fitted parameter, depends on future observations.
@@ -124,8 +127,10 @@ alternative to deep imputation models that a practitioner can read line by line.
     \scriptsize\emph{dials learned from data:}\;
     \textcolor{caferred}{$\nu$\,tails}\, \textcolor{cafeamber}{$a$\,memory}\,
     \textcolor{cafeamber}{ARD\,rank}\, \textcolor{cafeteal}{$\beta$\,season}};
+% start the connector BELOW the point-in-time text and timeline so it does not
+% cross over the words of the "no look-ahead" line (esp. "parameter")
 \draw[-{Stealth[length=5pt]}, cafeteal, line width=1pt]
-   (eq.south) -- (obj.north -| eq.south);
+   (6.1,-1.78) -- (obj.north -| eq.south);
 \node[anchor=west, font=\scriptsize\itshape, cafeslate, align=left, fill=white,
       inner sep=1.5pt] at (6.5,-2.35)
    {the four terms are\\ \emph{fit jointly} (one $\mathcal{L}$)};
@@ -160,7 +165,10 @@ structure, MC-NNM~\cite{athey2021} for panels, $k$NN or MICE for tabular blocks,
 or a deep model (BRITS~\cite{cao2018}, SAITS~\cite{du2023}, CSDI~\cite{tashiro2021},
 GRIN~\cite{cini2022}) when accuracy dominates compute. This has two costs. First,
 \emph{method selection}: the practitioner must diagnose the regime and tune the
-estimator, and a wrong choice fails silently. Second, and more insidiously,
+estimator on a held-out validation set, a wrong choice fails silently, and that
+validation set---carved from the same series to pick the method and its
+hyperparameters---is itself a channel for look-ahead bias. Second, and more
+insidiously,
 \emph{look-ahead leakage}: nearly every estimator above fills $x_t$ using all
 rows, so the imputation at $t$ depends on observations at times $>t$. When the
 imputed features feed a sequential model---a trading backtest, an online
@@ -597,7 +605,7 @@ sequential decision-making.}
 \end{figure}
 
 \begin{figure}[h]\centering
-\includegraphics[width=0.86\textwidth]{figures/decomposition.pdf}
+\includegraphics[width=\textwidth]{figures/decomposition.pdf}
 \caption{\textbf{Interpretability.} The imputed value is the sum of human-readable
 parts---level, season, shared factors, idiosyncratic carry---read from the trace, not a
 black box. Each term can be inspected, audited, or used on its own.}
@@ -605,6 +613,10 @@ black box. Each term can be inspected, audited, or used on its own.}
 \end{figure}
 
 \begin{multicols}{2}
+% tighten the vertical gaps between the stacked [H] panels in these columns
+\setlength{\floatsep}{7pt}
+\setlength{\textfloatsep}{7pt}
+\setlength{\intextsep}{7pt}
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/uncertainty.pdf}
 \caption{\textbf{Conservative uncertainty.} Every fill carries a posterior band that widens
