@@ -255,15 +255,49 @@ def write_figure(mae, dnames, vnames):
     w = 0.8 / len(abls)
     fig, ax = plt.subplots(figsize=(8.5, 3.2))
     colors = ["#d1495b", "#edae49", "#00798c", "#66a182"]
+    # track the tallest bar and its (group, variant) so we can give it headroom
+    # and annotate it (it is the largest effect in the paper).
+    tallest = {"val": -np.inf, "xpos": None}
     for i, v in enumerate(abls):
-        ax.bar(x + (i - (len(abls) - 1) / 2) * w, deltas[i], w,
-               label=v, color=colors[i % len(colors)])
+        xpos = x + (i - (len(abls) - 1) / 2) * w
+        ax.bar(xpos, deltas[i], w, label=v, color=colors[i % len(colors)])
+        imax = int(np.argmax(deltas[i]))
+        if deltas[i][imax] > tallest["val"]:
+            tallest = {"val": float(deltas[i][imax]), "xpos": float(xpos[imax])}
     ax.axhline(0, color="black", lw=0.8)
     ax.set_xticks(x)
     ax.set_xticklabels([COLHEAD[d] for d in dnames], rotation=0, fontsize=8)
     ax.set_ylabel(r"$\Delta$MAE vs Full")
     ax.set_title("Cost of removing each dial, per regime "
                  "(positive on its matched regime; near-inert off-target)")
+
+    # --- headroom so the tallest bar (HeavyT -tails, the largest effect) is not
+    #     clipped flush against the title; ~15% of the bar height as clear space. ---
+    ymax = float(np.nanmax(deltas))
+    ymin = float(np.nanmin(deltas))
+    top = ymax * 1.15 if ymax > 0 else 0.05
+    bottom = min(ymin * 1.10, 0.0)
+    ax.set_ylim(bottom, top)
+    # annotate the tallest bar with its value, just above the bar (inside headroom)
+    if tallest["xpos"] is not None:
+        ax.annotate(f"+{tallest['val']:.2f}",
+                    xy=(tallest["xpos"], tallest["val"]),
+                    xytext=(7, -1), textcoords="offset points",
+                    ha="left", va="top", fontsize=8, fontweight="bold")
+
+    # --- flag groups whose every dial is ~0 (e.g. Beijing): otherwise the absence
+    #     of visible bars reads as missing data rather than "intentionally inert". ---
+    near_zero_tol = 0.01 * max(ymax, 1e-9)
+    for j, dn in enumerate(dnames):
+        col = deltas[:, j]
+        if np.all(np.abs(col) <= max(near_zero_tol, 5e-4)):
+            ax.annotate(r"$\approx$0 (off-target dial," + "\n" + "correctly inert)",
+                        xy=(x[j], 0), xytext=(0, 16), textcoords="offset points",
+                        ha="center", va="bottom", fontsize=6.5, style="italic",
+                        color="0.45",
+                        arrowprops=dict(arrowstyle="-", color="0.6", lw=0.6,
+                                        shrinkA=0, shrinkB=2))
+
     ax.legend(ncol=4, fontsize=8, frameon=False, loc="upper left")
     fig.tight_layout()
     fdir = os.path.join(ROOT, "paper", "figures")

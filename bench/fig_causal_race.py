@@ -205,39 +205,61 @@ def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
     causal = {r["method"]: r["causal_mae"] for r in agg}
     fam = {r["method"]: r["family"] for r in agg}
 
-    rb = _rank(bidir)                       # 1 = best bidir MAE
-    rc = _rank(causal)                      # 1 = best causal MAE
+    rb = _rank(bidir)                       # 1 = best bidir MAE (over ALL methods)
+    rc = _rank(causal)                      # 1 = best causal MAE (over ALL methods)
     methods = [m for m in bidir if m in rb]  # need at least a bidir number
     if not methods:
         raise ValueError("no method has a bidirectional MAE to plot")
 
+    # ---- thin the crowded tail ------------------------------------------- #
+    # The lowest-scoring causal baselines (trivial fills / blow-ups) pile up in
+    # the bottom band and add clutter without telling the reader anything new.
+    # We RANK every method (the ranks above are over the full field, so #1..#N
+    # are honest) but only DRAW the leaders, dropping the worst `n_drop` causal
+    # performers. The number omitted is reported in a single margin note (and the
+    # paper caption). Methods with no causal number are always kept (they tell the
+    # "no causal variant" half of the story).
+    # Only TRIVIAL causal baselines are eligible to be dropped -- never CAFE and
+    # never a deep model, because the deep models collapsing is the whole story.
+    def _droppable(m):
+        return not _is_cafe(m) and str(fam[m]).strip().lower() != "deep"
+    KEEP_BEST = 18                          # keep this many best by causal MAE
+    causal_ranked = sorted((m for m in methods if math.isfinite(causal[m])),
+                           key=lambda m: causal[m])
+    dropped = [m for m in causal_ranked[KEEP_BEST:] if _droppable(m)]
+    drop_set = set(dropped)
+    draw_methods = [m for m in methods if m not in drop_set]
+    n_drop = len(dropped)
+
     # ---- shared value axis ------------------------------------------------- #
-    # Cap the visible range so a single blow-up method (e.g. Drift ~2.8) does not
+    # Cap the visible range so a single blow-up method (e.g. Drift ~7) does not
     # crush everyone into the bottom strip. Points above the cap are clipped to a
-    # dashed exit line + annotation.
-    finite_vals = [v for v in list(bidir.values()) + list(causal.values())
-                   if math.isfinite(v)]
+    # dashed exit line. The axis is built from the DRAWN methods only.
+    finite_vals = [v for m in draw_methods
+                   for v in (bidir[m], causal[m]) if math.isfinite(v)]
     vlo = min(finite_vals)
-    # robust cap: keep the dense band, clip the long tail
-    body = sorted(v for v in finite_vals if math.isfinite(v))
-    q_hi = body[int(0.92 * (len(body) - 1))] if len(body) > 1 else body[0]
-    vcap = max(q_hi * 1.06, vlo + 0.15)
+    # robust cap: keep the dense band, clip any residual long tail
+    body = sorted(finite_vals)
+    q_hi = body[int(0.96 * (len(body) - 1))] if len(body) > 1 else body[0]
+    vcap = max(q_hi * 1.04, vlo + 0.15)
     has_clip = any(v > vcap for v in finite_vals)
     pad = 0.05 * (vcap - vlo)
-    ytop, ybot = vlo - pad, vcap + pad      # data coords (pre-inversion)
+    # extra headroom at the BOTTOM: the dense lower stack of right-side labels is
+    # de-collided downward, so give it slack to land inside the axis.
+    ytop, ybot = vlo - pad, vcap + 3.4 * pad   # data coords (pre-inversion)
 
     def _y(v):
         """Map a value to plotted y, clipping above the cap."""
         return min(v, vcap)
 
     x_left, x_right = 0.0, 1.0
-    fig, ax = plt.subplots(figsize=(9.6, 5.4), constrained_layout=True)
+    fig, ax = plt.subplots(figsize=(9.6, 6.0), constrained_layout=True)
 
     # Collect label requests per side so we can de-collide them vertically
     # (many methods tie within rounding, e.g. 0.545, and would overprint).
     left_lbls, right_lbls = [], []   # each: [y, text, color, fontsize, bold]
 
-    for m in methods:
+    for m in draw_methods:
         cafe = _is_cafe(m)
         col = PALETTE["teal"] if cafe else _fam_color(fam[m])
         flat = _is_flat_family(fam[m]) or cafe
@@ -265,7 +287,7 @@ def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
             ax.plot([x_left + 0.18, x_left + 0.34], [y0, y0], color=col,
                     lw=lw, alpha=0.8, ls=(0, (2, 2)), zorder=zbase)
 
-        fs = 8.4 if cafe else 7.3
+        fs = 8.4 if cafe else 6.8
         rl = rb.get(m)
         left_lbls.append([y0, (f"{m}  ·{rl}" if rl else m), col, fs, cafe])
         if has_causal:
@@ -279,19 +301,38 @@ def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
                     alpha=0.9, zorder=8)
 
     # ---- de-collide labels vertically (greedy, in data coords) ------------- #
+    # The right (causal) stack is the dense one: most methods land in the lower
+    # MAE band. We size the minimum gap to the label font (so it can never
+    # overlap) and, after pushing apart, recentre the whole stack and clamp it
+    # inside the axis so the de-collision pass leaves no overflow and no overlap.
     span = abs(ybot - ytop)
-    min_gap = 0.020 * span               # minimum vertical separation
+    # one text line at fs=6.8 needs ~0.028*span here; use that as the floor.
+    min_gap = 0.0285 * span
 
     def _place(lbls, x, ha):
-        # sort by y ascending in *data* coords; ytop<ybot here may be inverted,
-        # so sort by raw value then enforce spacing in display order.
+        if not lbls:
+            return
+        # sort by y ascending in *data* coords (axis is inverted at draw time).
         order = sorted(range(len(lbls)), key=lambda i: lbls[i][0])
         ys = [lbls[i][0] for i in order]
-        # push apart so neighbours differ by >= min_gap
+        # forward pass: push each label below its predecessor by >= min_gap
         for k in range(1, len(ys)):
             if ys[k] - ys[k - 1] < min_gap:
                 ys[k] = ys[k - 1] + min_gap
-        # gentle back-pass to keep the cluster near its origin (cosmetic)
+        # if the pushed stack overran the bottom, slide the whole block up so it
+        # fits, then re-resolve any collisions this introduced at the top.
+        # Inset by half a gap so va="center" text is never clipped by the frame.
+        lo = min(ytop, ybot) + 0.5 * min_gap
+        hi = max(ytop, ybot) - 0.5 * min_gap
+        if ys[-1] > hi:
+            shift = ys[-1] - hi
+            ys = [y - shift for y in ys]
+        if ys[0] < lo:
+            ys[0] = lo
+            for k in range(1, len(ys)):
+                if ys[k] - ys[k - 1] < min_gap:
+                    ys[k] = ys[k - 1] + min_gap
+        # gentle back-pass to keep clusters near their origin where there is slack
         for k in range(len(ys) - 2, -1, -1):
             if ys[k + 1] - ys[k] < min_gap:
                 ys[k] = ys[k + 1] - min_gap
@@ -319,13 +360,21 @@ def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
     ax.spines["left"].set_alpha(0.4)
     ax.grid(True, axis="y", alpha=0.13, lw=0.6)
 
-    # mark the clip cap so a clipped (e.g. Drift) line reads as "off the chart"
+    # mark the clip cap only if a DRAWN line still exits the top of the band.
     if has_clip:
         ax.axhline(vcap, color=PALETTE["grey"], lw=0.8, ls=(0, (2, 3)),
-                   alpha=0.6, zorder=1)
-        ax.text(0.5, vcap, "worse-scoring methods clipped above this line",
-                ha="center", va="bottom", fontsize=6.6, color=PALETTE["grey"],
-                style="italic", zorder=8)
+                   alpha=0.5, zorder=1)
+
+    # Single, unobtrusive note about the omitted tail, placed in the bottom
+    # margin BELOW the data area (in axes-fraction coords) so it never crosses a
+    # method line. Names the dropped baselines so the caption can match.
+    if n_drop:
+        shown = ", ".join(dropped[:4]) + ("…" if n_drop > 4 else "")
+        ax.text(0.5, -0.135,
+                f"{n_drop} lowest-scoring causal baselines omitted for "
+                f"clarity ({shown})",
+                transform=ax.transAxes, ha="center", va="top",
+                fontsize=6.4, color=PALETTE["grey"], style="italic", zorder=8)
 
     # subtle column guide lines
     for xc in (x_left, x_right):
