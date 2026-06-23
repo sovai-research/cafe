@@ -3,7 +3,7 @@ for v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR
     os.environ[v] = "2"
 
 import sys
-sys.path.insert(0, "/Users/dereksnow/Sovai/Github/TIMARA/bench")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from harness import run_method, summarize
 
 import numpy as np

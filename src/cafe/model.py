@@ -42,6 +42,12 @@ def _forward(X, record):
     we avoid building ~T dicts of arrays, so it is a touch faster and far lighter in memory.
     ``run`` uses ``record=True`` to expose uncertainty/factors/decomposition/etc."""
     X = np.ascontiguousarray(np.asarray(X, float))
+    # Robustness parity with _core.online_impute: +/-Inf are not valid observations, so
+    # treat any non-finite input cell as missing -- otherwise an Inf would propagate into
+    # the solver and out into the result. (The lean run/impute path bypasses
+    # online_impute, so the guard must live here too.)
+    if not np.all(np.isfinite(X)):
+        X = np.where(np.isfinite(X), X, np.nan)
     T, N = X.shape
     periods = _core._fourier_periods(T)
     core = _core._UnifiedCore(N, periods, E=1)
@@ -53,9 +59,10 @@ def _forward(X, record):
         filled, z_t = core.process_row(X[t], t, z_prev, ft, eid=0)
         out[t] = filled
         z_prev = z_t
-    if np.isnan(out).any():                       # final safety net
+    if not np.all(np.isfinite(out)):              # final safety net: never emit NaN/Inf
         gm = core._mu(0)
-        idx = np.where(np.isnan(out))
+        gm = np.where(np.isfinite(gm), gm, 0.0)
+        idx = np.where(~np.isfinite(out))
         out[idx] = np.take(gm, idx[1])
     return out, core
 
