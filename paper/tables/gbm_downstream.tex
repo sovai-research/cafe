@@ -1,0 +1,36 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{Do GBMs that handle NaN natively still benefit from \cafe{} on structured panels?} Next-step forecasting of a held-out panel target (the column best explained by the cross-section, chosen on \emph{train} only) from the other columns. Missingness (29\% of feature cells, 60\% as contiguous blocks $+$ MCAR) is injected into the FEATURE columns only; the target is never imputed. Each gradient-boosted model is trained four ways: \textbf{RAW NaN} passed straight to the tree (native default-direction handling, the honest baseline), \textbf{LOCF} causal forward-fill, \textbf{\cafe{}} causal point-in-time fill (ours), and \textbf{Oracle} on the clean un-masked features (causal upper bound). Strict temporal 70/30 split; the feature scaler is fit on the \emph{train} segment only (no test leakage); held-out test $R^2\uparrow$ / RMSE$\downarrow$, mean$\pm$std over 4 missingness seeds. \textbf{Bold} $=$ best causal (non-oracle) $R^2$ per model$\times$dataset. \cafe{} is strictly point-in-time (causal by construction). \textbf{Finding:} across 12 model$\times$dataset cells, \cafe{} is the best causal feature-prep in 9 (LOCF in 0, raw NaN in 3); on average \cafe{} gains 0.016 test $R^2$ over feeding raw NaN to the tree, showing that even NaN-tolerant GBMs recover cross-sectional information from \cafe{}'s causal fill on structured panels.}
+\label{tab:gbm_downstream}
+\begin{tabular}{@{}l c c c c c c@{}}
+\toprule
+Feature prep & \multicolumn{2}{c}{XGBoost} & \multicolumn{2}{c}{LightGBM} & \multicolumn{2}{c}{CatBoost} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+ & $R^2\uparrow$ & RMSE$\downarrow$ & $R^2\uparrow$ & RMSE$\downarrow$ & $R^2\uparrow$ & RMSE$\downarrow$ \\
+\midrule
+\multicolumn{7}{@{}l}{\emph{Beijing}} \\
+RAW NaN (native) & $0.768${\scriptsize$\pm0.008$} & $0.111${\scriptsize$\pm0.002$} & $0.735${\scriptsize$\pm0.009$} & $0.119${\scriptsize$\pm0.002$} & $\mathbf{0.753}${\scriptsize$\pm0.005$} & $0.115${\scriptsize$\pm0.001$} \\
+LOCF (causal) & $0.745${\scriptsize$\pm0.025$} & $0.117${\scriptsize$\pm0.006$} & $0.737${\scriptsize$\pm0.012$} & $0.119${\scriptsize$\pm0.003$} & $0.662${\scriptsize$\pm0.020$} & $0.134${\scriptsize$\pm0.004$} \\
+\cafe{} (ours) & $\mathbf{0.778}${\scriptsize$\pm0.010$} & $0.109${\scriptsize$\pm0.002$} & $\mathbf{0.776}${\scriptsize$\pm0.009$} & $0.109${\scriptsize$\pm0.002$} & $0.700${\scriptsize$\pm0.032$} & $0.126${\scriptsize$\pm0.007$} \\
+\emph{Oracle (clean)} & $0.795${\scriptsize$\pm0.000$} & $0.105${\scriptsize$\pm0.000$} & $0.765${\scriptsize$\pm0.000$} & $0.112${\scriptsize$\pm0.000$} & $0.736${\scriptsize$\pm0.000$} & $0.119${\scriptsize$\pm0.000$} \\
+\midrule
+\multicolumn{7}{@{}l}{\emph{Solar}} \\
+RAW NaN (native) & $0.928${\scriptsize$\pm0.004$} & $0.262${\scriptsize$\pm0.007$} & $0.932${\scriptsize$\pm0.005$} & $0.253${\scriptsize$\pm0.009$} & $0.923${\scriptsize$\pm0.001$} & $0.271${\scriptsize$\pm0.002$} \\
+LOCF (causal) & $0.878${\scriptsize$\pm0.022$} & $0.340${\scriptsize$\pm0.030$} & $0.891${\scriptsize$\pm0.017$} & $0.322${\scriptsize$\pm0.026$} & $0.893${\scriptsize$\pm0.019$} & $0.318${\scriptsize$\pm0.027$} \\
+\cafe{} (ours) & $\mathbf{0.941}${\scriptsize$\pm0.005$} & $0.237${\scriptsize$\pm0.011$} & $\mathbf{0.941}${\scriptsize$\pm0.004$} & $0.237${\scriptsize$\pm0.009$} & $\mathbf{0.938}${\scriptsize$\pm0.004$} & $0.242${\scriptsize$\pm0.008$} \\
+\emph{Oracle (clean)} & $0.952${\scriptsize$\pm0.000$} & $0.213${\scriptsize$\pm0.000$} & $0.952${\scriptsize$\pm0.000$} & $0.214${\scriptsize$\pm0.000$} & $0.950${\scriptsize$\pm0.000$} & $0.217${\scriptsize$\pm0.000$} \\
+\midrule
+\multicolumn{7}{@{}l}{\emph{Traffic}} \\
+RAW NaN (native) & $0.796${\scriptsize$\pm0.010$} & $0.457${\scriptsize$\pm0.012$} & $0.785${\scriptsize$\pm0.016$} & $0.469${\scriptsize$\pm0.017$} & $0.797${\scriptsize$\pm0.012$} & $0.456${\scriptsize$\pm0.014$} \\
+LOCF (causal) & $0.769${\scriptsize$\pm0.015$} & $0.486${\scriptsize$\pm0.016$} & $0.758${\scriptsize$\pm0.027$} & $0.497${\scriptsize$\pm0.028$} & $0.760${\scriptsize$\pm0.021$} & $0.496${\scriptsize$\pm0.022$} \\
+\cafe{} (ours) & $\mathbf{0.860}${\scriptsize$\pm0.005$} & $0.379${\scriptsize$\pm0.007$} & $\mathbf{0.857}${\scriptsize$\pm0.006$} & $0.383${\scriptsize$\pm0.008$} & $\mathbf{0.864}${\scriptsize$\pm0.009$} & $0.372${\scriptsize$\pm0.012$} \\
+\emph{Oracle (clean)} & $0.881${\scriptsize$\pm0.000$} & $0.349${\scriptsize$\pm0.000$} & $0.897${\scriptsize$\pm0.000$} & $0.325${\scriptsize$\pm0.000$} & $0.879${\scriptsize$\pm0.000$} & $0.352${\scriptsize$\pm0.000$} \\
+\midrule
+\multicolumn{7}{@{}l}{\emph{Electricity}} \\
+RAW NaN (native) & $\mathbf{0.816}${\scriptsize$\pm0.011$} & $0.404${\scriptsize$\pm0.012$} & $\mathbf{0.813}${\scriptsize$\pm0.015$} & $0.408${\scriptsize$\pm0.016$} & $0.807${\scriptsize$\pm0.008$} & $0.414${\scriptsize$\pm0.009$} \\
+LOCF (causal) & $0.793${\scriptsize$\pm0.020$} & $0.429${\scriptsize$\pm0.021$} & $0.790${\scriptsize$\pm0.020$} & $0.431${\scriptsize$\pm0.020$} & $0.761${\scriptsize$\pm0.033$} & $0.460${\scriptsize$\pm0.032$} \\
+\cafe{} (ours) & $0.796${\scriptsize$\pm0.028$} & $0.426${\scriptsize$\pm0.029$} & $0.784${\scriptsize$\pm0.028$} & $0.438${\scriptsize$\pm0.028$} & $\mathbf{0.809}${\scriptsize$\pm0.008$} & $0.413${\scriptsize$\pm0.008$} \\
+\emph{Oracle (clean)} & $0.742${\scriptsize$\pm0.000$} & $0.479${\scriptsize$\pm0.000$} & $0.717${\scriptsize$\pm0.000$} & $0.502${\scriptsize$\pm0.000$} & $0.755${\scriptsize$\pm0.000$} & $0.467${\scriptsize$\pm0.000$} \\
+\bottomrule
+\end{tabular}
+\end{table*}

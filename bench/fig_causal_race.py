@@ -55,12 +55,18 @@ DEFAULT_CACHE = os.path.join(HERE, "horserace_cache.json")
 # Family -> colour. CAFE (the causal family) is the highlighted teal; deep models
 # are amber (the ones that collapse); classical baselines are a muted slate.
 FAMILY_COLOR = {
-    "causal": PALETTE["teal"],
-    "deep": PALETTE["amber"],
-    "classical": PALETTE["slate"],
+    "cafe": PALETTE["teal"],       # CAFE itself
+    "causal": PALETTE["teal"],     # causal-native baselines (also Delta=0)
+    "online": PALETTE["teal"],     # online/causal-native (also Delta=0)
+    "deep": PALETTE["amber"],      # the deep models that collapse
+    "classical": PALETTE["slate"], # batch classical (no causal variant)
 }
 DEFAULT_COLOR = PALETTE["grey"]
 CAFE_NAMES = {"cafe", "café", "cafe (ours)", "café (ours)"}
+
+# Families that are causal-native: their causal MAE EQUALS their bidir MAE
+# (Delta = 0). On the value axis these render as perfectly horizontal lines.
+FLAT_FAMILIES = {"cafe", "causal", "online"}
 
 
 def _is_cafe(method: str) -> bool:
@@ -175,83 +181,178 @@ def _rank(vals: dict) -> dict:
 # ---------------------------------------------------------------------------- #
 # Figure 1: the leaderboard flip (slope / bump chart)
 # ---------------------------------------------------------------------------- #
-def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
-    """Slope chart: left = rank by bidirectional MAE, right = rank by causal MAE.
+def _is_flat_family(family: str) -> bool:
+    """True for causal-native families whose causal MAE == bidir MAE (Delta=0)."""
+    return str(family).strip().lower() in FLAT_FAMILIES
 
-    One line per method connecting its two ranks, coloured by family, CAFE bold.
-    The story: deep/classical lines plunge from the top (bidir) toward the bottom
-    (causal); CAFE climbs to #1."""
+
+def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
+    """Value-anchored slope chart: y = MAE on a *shared* scale for both protocols.
+
+    Left column = methods placed by their BIDIRECTIONAL MAE; right column = placed
+    by their CAUSAL MAE. Because the y-axis is the actual MAE value (not an integer
+    rank), a method whose score is unchanged by the protocol (Delta = causal-bidir
+    = 0; every causal-native / CAFE / online method) draws as a PERFECTLY
+    HORIZONTAL line. Deep models slope upward (their MAE worsens left->right) and
+    visibly cross above CAFE -- the "flip" reads as honest line crossings. The
+    crowded 1..24 integer-rank axis disappears; small rank numbers survive as
+    endpoint annotations. Lower MAE = better, so the axis is inverted (best on top).
+
+    Methods lacking a causal number (batch classical: TRMF/LinearInterp/SoftImpute)
+    enter from the left and stub off with a "no causal variant" note. CAFE stays
+    bold teal and on top either way."""
     bidir = {r["method"]: r["bidir_mae"] for r in agg}
     causal = {r["method"]: r["causal_mae"] for r in agg}
     fam = {r["method"]: r["family"] for r in agg}
 
-    rb = _rank(bidir)
-    rc = _rank(causal)
-    methods = [m for m in bidir if m in rb and m in rc]
+    rb = _rank(bidir)                       # 1 = best bidir MAE
+    rc = _rank(causal)                      # 1 = best causal MAE
+    methods = [m for m in bidir if m in rb]  # need at least a bidir number
     if not methods:
-        raise ValueError("no method has both a bidir and a causal rank")
+        raise ValueError("no method has a bidirectional MAE to plot")
 
-    kb, kc = len(rb), len(rc)  # rows may differ if some lack a number
-    fig, ax = plt.subplots(figsize=(5.2, 3.4), constrained_layout=True)
+    # ---- shared value axis ------------------------------------------------- #
+    # Cap the visible range so a single blow-up method (e.g. Drift ~2.8) does not
+    # crush everyone into the bottom strip. Points above the cap are clipped to a
+    # dashed exit line + annotation.
+    finite_vals = [v for v in list(bidir.values()) + list(causal.values())
+                   if math.isfinite(v)]
+    vlo = min(finite_vals)
+    # robust cap: keep the dense band, clip the long tail
+    body = sorted(v for v in finite_vals if math.isfinite(v))
+    q_hi = body[int(0.92 * (len(body) - 1))] if len(body) > 1 else body[0]
+    vcap = max(q_hi * 1.06, vlo + 0.15)
+    has_clip = any(v > vcap for v in finite_vals)
+    pad = 0.05 * (vcap - vlo)
+    ytop, ybot = vlo - pad, vcap + pad      # data coords (pre-inversion)
+
+    def _y(v):
+        """Map a value to plotted y, clipping above the cap."""
+        return min(v, vcap)
 
     x_left, x_right = 0.0, 1.0
-    for m in methods:
-        col = PALETTE["teal"] if _is_cafe(m) else _fam_color(fam[m])
-        cafe = _is_cafe(m)
-        y0, y1 = rb[m], rc[m]
-        ax.plot([x_left, x_right], [y0, y1],
-                color=col, lw=3.0 if cafe else 1.6,
-                alpha=0.95 if cafe else 0.7,
-                solid_capstyle="round",
-                zorder=5 if cafe else 3)
-        ax.scatter([x_left, x_right], [y0, y1], s=46 if cafe else 26,
-                   color=col, zorder=6 if cafe else 4,
-                   edgecolor="white", linewidth=0.6)
-        # left label (bidir rank) + right label (causal rank)
-        b, c = bidir[m], causal[m]
-        ax.text(x_left - 0.03, y0,
-                f"{m}  {b:.2f}" if math.isfinite(b) else m,
-                ha="right", va="center",
-                fontsize=8.0 if cafe else 7.4, color=col,
-                fontweight="bold" if cafe else "normal", zorder=7)
-        ax.text(x_right + 0.03, y1,
-                f"{c:.2f}  {m}" if math.isfinite(c) else m,
-                ha="left", va="center",
-                fontsize=8.0 if cafe else 7.4, color=col,
-                fontweight="bold" if cafe else "normal", zorder=7)
+    fig, ax = plt.subplots(figsize=(9.6, 5.4), constrained_layout=True)
 
-    nmax = max(kb, kc)
-    ax.set_ylim(nmax + 0.6, 0.4)            # rank 1 at the top
-    ax.set_xlim(-0.55, 1.55)
+    # Collect label requests per side so we can de-collide them vertically
+    # (many methods tie within rounding, e.g. 0.545, and would overprint).
+    left_lbls, right_lbls = [], []   # each: [y, text, color, fontsize, bold]
+
+    for m in methods:
+        cafe = _is_cafe(m)
+        col = PALETTE["teal"] if cafe else _fam_color(fam[m])
+        flat = _is_flat_family(fam[m]) or cafe
+        b, c = bidir[m], causal[m]
+        has_causal = math.isfinite(c)
+        y0 = _y(b)
+
+        lw = 3.4 if cafe else (1.8 if has_causal and not flat else 1.5)
+        alpha = 0.97 if cafe else (0.85 if not flat else 0.55)
+        zbase = 6 if cafe else (4 if not flat else 3)
+
+        if has_causal:
+            y1 = _y(c)
+            ax.plot([x_left, x_right], [y0, y1], color=col, lw=lw, alpha=alpha,
+                    solid_capstyle="round", zorder=zbase)
+            ax.scatter([x_left, x_right], [y0, y1], s=52 if cafe else 24,
+                       color=col, zorder=zbase + 2, edgecolor="white",
+                       linewidth=0.7)
+        else:
+            # no causal variant: short dashed stub leaving the left column
+            ax.plot([x_left, x_left + 0.18], [y0, y0], color=col, lw=lw,
+                    alpha=0.8, solid_capstyle="round", zorder=zbase)
+            ax.scatter([x_left], [y0], s=24, color=col, zorder=zbase + 2,
+                       edgecolor="white", linewidth=0.7)
+            ax.plot([x_left + 0.18, x_left + 0.34], [y0, y0], color=col,
+                    lw=lw, alpha=0.8, ls=(0, (2, 2)), zorder=zbase)
+
+        fs = 8.4 if cafe else 7.3
+        rl = rb.get(m)
+        left_lbls.append([y0, (f"{m}  ·{rl}" if rl else m), col, fs, cafe])
+        if has_causal:
+            rr = rc.get(m)
+            right_lbls.append([_y(c), (f"·{rr}  {m}" if rr else m),
+                               col, fs, cafe])
+        else:
+            # stub annotation rides with the left side but offset to the right
+            ax.text(x_left + 0.36, y0, "no causal variant", ha="left",
+                    va="center", fontsize=6.6, color=col, style="italic",
+                    alpha=0.9, zorder=8)
+
+    # ---- de-collide labels vertically (greedy, in data coords) ------------- #
+    span = abs(ybot - ytop)
+    min_gap = 0.020 * span               # minimum vertical separation
+
+    def _place(lbls, x, ha):
+        # sort by y ascending in *data* coords; ytop<ybot here may be inverted,
+        # so sort by raw value then enforce spacing in display order.
+        order = sorted(range(len(lbls)), key=lambda i: lbls[i][0])
+        ys = [lbls[i][0] for i in order]
+        # push apart so neighbours differ by >= min_gap
+        for k in range(1, len(ys)):
+            if ys[k] - ys[k - 1] < min_gap:
+                ys[k] = ys[k - 1] + min_gap
+        # gentle back-pass to keep the cluster near its origin (cosmetic)
+        for k in range(len(ys) - 2, -1, -1):
+            if ys[k + 1] - ys[k] < min_gap:
+                ys[k] = ys[k + 1] - min_gap
+        for slot, k in enumerate(order):
+            y, text, col, fs, bold = lbls[k]
+            ax.text(x, ys[slot], text, ha=ha, va="center", fontsize=fs,
+                    color=col, fontweight="bold" if bold else "normal",
+                    zorder=8)
+
+    _place(left_lbls, x_left - 0.025, "right")
+    _place(right_lbls, x_right + 0.025, "left")
+
+    # ---- axes -------------------------------------------------------------- #
+    ax.set_ylim(ybot, ytop)                 # inverted: best (low MAE) on top
+    ax.set_xlim(-0.62, 1.62)
     ax.set_xticks([x_left, x_right])
     ax.set_xticklabels(["BIDIRECTIONAL\n(uses the future)",
-                        "CAUSAL\n(point-in-time)"], fontsize=9)
-    ax.set_yticks(range(1, nmax + 1))
-    ax.set_ylabel("leaderboard rank  (1 = best MAE)", fontsize=8.5)
-    for s in ("top", "right", "left"):
+                        "CAUSAL\n(point-in-time)"], fontsize=11)
+    ax.tick_params(axis="x", length=0, pad=8)
+    ax.set_ylabel("imputation error  (mean absolute error · lower is better)",
+                  fontsize=10)
+    ax.tick_params(axis="y", labelsize=8.5)
+    for s in ("top", "right"):
         ax.spines[s].set_visible(False)
-    ax.tick_params(axis="y", length=0)
-    ax.grid(True, axis="y", alpha=0.15, lw=0.6)
+    ax.spines["left"].set_alpha(0.4)
+    ax.grid(True, axis="y", alpha=0.13, lw=0.6)
 
-    ax.set_title("Forbid the future and the board collapses:\n"
+    # mark the clip cap so a clipped (e.g. Drift) line reads as "off the chart"
+    if has_clip:
+        ax.axhline(vcap, color=PALETTE["grey"], lw=0.8, ls=(0, (2, 3)),
+                   alpha=0.6, zorder=1)
+        ax.text(0.5, vcap, "worse-scoring methods clipped above this line",
+                ha="center", va="bottom", fontsize=6.6, color=PALETTE["grey"],
+                style="italic", zorder=8)
+
+    # subtle column guide lines
+    for xc in (x_left, x_right):
+        ax.axvline(xc, color=PALETTE["grey"], lw=0.6, alpha=0.18, zorder=0)
+
+    ax.set_title("Forbid the future and the board collapses:  "
                  "deep & interpolation methods fall, CAFÉ (causal) leads either way",
-                 fontsize=9.6, fontweight="bold", pad=8)
+                 fontsize=12, fontweight="bold", pad=30)
 
-    # legend by family (only families actually present)
+    # ---- legend: horizontal, under the title, clear of the x tick labels --- #
     present = []
-    for famkey, lab in (("deep", "deep (PyPOTS)"),
-                        ("classical", "classical"),
-                        ("causal", "CAFÉ (causal)")):
-        if any(str(r["family"]).strip().lower() == famkey for r in agg):
+    for famkey, lab in (("deep", "deep models (PyPOTS) — borrow the future"),
+                        ("classical", "batch classical — no causal variant"),
+                        ("causal", "CAFÉ & causal-native — score unchanged (flat)")):
+        if any(str(r["family"]).strip().lower() in (
+                ({"causal", "cafe", "online"} if famkey == "causal" else {famkey}))
+               for r in agg):
             present.append(plt.Line2D([0], [0], color=FAMILY_COLOR[famkey],
-                                      lw=2.4, label=lab))
+                                      lw=3.0, label=lab))
     if present:
-        ax.legend(handles=present, fontsize=7.4, loc="lower center",
+        ax.legend(handles=present, fontsize=8.6, loc="lower center",
                   ncol=len(present), frameon=False,
-                  bbox_to_anchor=(0.5, -0.16))
+                  bbox_to_anchor=(0.5, 1.005), handlelength=1.6,
+                  columnspacing=1.6)
 
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.04)
+    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.06)
     plt.close(fig)
     return out_path
 
