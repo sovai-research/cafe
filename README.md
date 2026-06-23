@@ -6,7 +6,7 @@ with uncertainty, factors, anomalies and forecasts from a single forward pass.</
 <p align="center">
 <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT">
 <img src="https://img.shields.io/badge/python-%E2%89%A53.9-blue.svg" alt="py">
-<img src="https://img.shields.io/badge/deps-numpy%20%2B%20scipy-informational.svg" alt="deps">
+<img src="https://img.shields.io/badge/deps-numpy--only-informational.svg" alt="deps">
 <img src="https://img.shields.io/badge/no-GPU%20%7C%20no%20training-success.svg" alt="cpu">
 </p>
 
@@ -30,7 +30,8 @@ the future arrives. It is:
 - **Causal / point-in-time** — backtest-safe by construction (the moat).
 - **Zero-config** — `cafe.impute(data)`; rank, memory, tail-robustness and seasonality
   are learned from the data (ARD / empirical-Bayes / EM), not set by you.
-- **CPU-first** — pure `numpy`/`scipy`, no GPU, no training run. Runs the full
+- **CPU-first, `numpy`-only** — the entire estimator runs on `numpy` alone (no `scipy`,
+  no compiled extension), no GPU, no training run. Installs in seconds. Runs the full
   benchmark suite in ~1 s.
 - **Container-native** — `numpy`, `pandas`, `polars`, 1D or 2D, dtype/labels preserved.
 - **More than imputation** — the same pass yields per-cell uncertainty, latent
@@ -44,7 +45,7 @@ bidirectional and GPU-trained). See [`paper/cafe.pdf`](paper/cafe.pdf).
 ## Install
 
 ```bash
-pip install -e .            # core (numpy + scipy)
+pip install -e .            # core (numpy only)
 pip install -e ".[all]"     # + pandas, polars, matplotlib
 ```
 

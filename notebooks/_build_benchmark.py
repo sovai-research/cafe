@@ -42,29 +42,35 @@ against five baselines, same held-out cells, same seed, scored identically. That
 entire API."""))
 cells.append(code(r"""cafe.benchmark()"""))
 
-cells.append(md(r"""Read the `kind` column: **causal** methods (CAFÉ, mean-of-past, LOCF) use only the past;
-**bidir** methods (linear interpolation, SoftImpute, global mean) use the whole series.
-CAFÉ wins outright — *and it's the only top method that's backtest-safe*. The `global mean`
-row is the **predict-the-mean trap** detector: anything near it has no real skill."""))
+cells.append(md(r"""The table is **grouped by kind** — causal methods first, bidirectional below — each block
+sorted best-first. CAFÉ tops the causal block (★) and the whole table; the `global mean`
+row is the **predict-the-mean trap** detector (anything near it has no real skill). Note
+the baselines themselves are numpy-only, matching the library."""))
 
 cells.append(md(r"""## 2 · The headline — real data, vs the published SOTA
 
-`cafe.benchmark("beijing")` runs on the **Beijing Multi-Site Air-Quality** dataset
-(17,117 × 132) — the exact dataset SAITS/BRITS/CSDI report on. The live baselines are run
-here; the published deep-learning numbers are shown as **clearly-labelled, cited
-reference rows** (all bidirectional, not re-run)."""))
+`cafe.benchmark("beijing")` runs on **Beijing Multi-Site Air-Quality** (17,117 × 132) — the
+dataset SAITS/CSDI/BRITS report on. Live baselines run here; the published deep-learning
+numbers are a **clearly-labelled, single-source (TSI-Bench) reference**, not re-run.
+
+**One honest caveat, stated up front:** the published numbers use the standard *windowed*
+protocol (24-step windows). CAFÉ's row here imputes the **full series causally** — a
+*different, strictly-online* setting. So this is not a like-for-like leaderboard; it shows
+that CAFÉ's causal score lands *in the published bidirectional band*."""))
 cells.append(code(r"""beijing = cafe.benchmark("beijing")"""))
 
-cells.append(md(r"""**Look at what just happened.** CAFÉ — *causal, CPU-only, ~6 s, no training* — lands
-**below SAITS (0.137), BRITS (0.153), Transformer (0.158) and GP-VAE (0.268)**, every one
-of which is a GPU-trained bidirectional model that gets to peek at the future. Only CSDI
-(0.102), a diffusion model that also sees the future, edges it. CAFÉ is the **only causal
-method in the entire comparison**, and it's competitive with the bidirectional ceiling."""))
+cells.append(md(r"""**What this shows.** CAFÉ — *causal, numpy-only, ~7 s on one CPU core, no training* —
+beats every **live** bidirectional baseline (linear interp, SoftImpute, SVDImpute, NOCB),
+and its MAE (~0.114) lands *inside the published bidirectional band*: below TSI-Bench's own
+SAITS (0.155), Transformer (0.142) and BRITS (0.127), with only the diffusion model CSDI
+(0.102) and iTransformer (0.123) ahead — both of which **see the future**. CAFÉ is the
+**only causal method in the comparison**. (Different protocol, so read it as "in the band,"
+not a head-to-head win — see the caveat above.)"""))
 cells.append(code(r"""beijing.plot(); plt.tight_layout(); plt.show()"""))
 
-cells.append(md(r"""The dashed red line is the best *bidirectional* published score — the look-ahead ceiling.
-CAFÉ (blue, causal) sits right at it, while every other causal-safe option (grey for the
-bidirectional baselines, blue for causal) trails far behind."""))
+cells.append(md(r"""Blue = causal (top block), grey = bidirectional (below the dotted divider). The dashed red
+line is the best *bidirectional* published score (CSDI 0.102) — the look-ahead ceiling.
+CAFÉ sits just to its right while being the only backtest-safe option."""))
 
 cells.append(md(r"""## 3 · The honest hard case — contiguous gaps
 

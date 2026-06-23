@@ -455,10 +455,14 @@ $\sim$1000$\times$ less compute}.
 
 \appendix
 \section{Using the \texttt{cafe} library}\label{sec:lib}
-\cafe{} ships as a small, dependency-light Python package (\texttt{numpy}\,+\,\texttt{scipy};
-\texttt{pandas}/\texttt{polars} optional). It is zero-configuration and container-native---a
-\texttt{numpy} array, \texttt{pandas} or \texttt{polars} frame (1D or 2D) goes in, the same
-type comes back with gaps filled and no look-ahead:
+\cafe{} ships as a \emph{single-dependency} Python package: the entire estimator---the
+online filter, the rank-$R$ factor solves, the cross-sectional Gaussian conditioning, the
+robust scale and the seasonal RLS---runs on \texttt{numpy} alone (SPD systems via
+\texttt{np.linalg.solve}; no \texttt{scipy}, no compiled extension, no GPU, no training
+phase). \texttt{pandas}/\texttt{polars}/\texttt{matplotlib} are optional and lazily
+imported only if the caller passes one of their objects. It is zero-configuration and
+container-native---a \texttt{numpy} array, \texttt{pandas} or \texttt{polars} frame (1D or
+2D) goes in, the same type comes back with gaps filled and no look-ahead:
 \begin{lstlisting}[style=cafepy]
 import cafe
 filled = cafe.impute(df)   # same container type back;

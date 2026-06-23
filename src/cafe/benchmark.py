@@ -4,25 +4,24 @@
     cafe.benchmark()                 # synthetic data, CAFÉ vs baselines, printed table
     cafe.benchmark(df)               # your DataFrame (numpy/pandas/polars)
     cafe.benchmark("beijing")        # a named local dataset + published SOTA references
-    r = cafe.benchmark(df); r.plot() # bar chart of MAE by method
+    r = cafe.benchmark(df); r.plot() # grouped bar chart (causal vs bidirectional)
 
 Design principles (grounded in the imputation-benchmark literature):
 
-* **Real, not asserted.** Every baseline here is *run live* on the same masked data
-  with the same seed, and scored on the same held-out cells -- so the comparison is
-  apples-to-apples. Published deep-learning numbers (SAITS, BRITS, CSDI, ...) are shown
-  only as clearly-labelled **reference rows with a citation**; they are never silently
-  mixed with the live results.
-* **Causal vs bidirectional is a hard separation.** Almost all published SOTA imputers
-  (SAITS, BRITS, CSDI, TimesNet, ImputeFormer, foundation models) impute X[t] using the
-  *whole window incl. the future* -- a smoothing task. CAFÉ and the causal baselines use
-  only data <= t (filtering). A bidirectional method has a structural information
-  advantage, so the table marks each method ``causal`` or ``bidir`` and never ranks them
-  as if equal.
-* **The predict-the-mean trap.** A `global mean` baseline is always included; if a method
-  barely beats it, its low error is the trap, not skill.
-* Standardised (z-score, **fit on the train portion only**) so MAE/RMSE are comparable to
-  the published tables, which all standardise.
+* **Real, not asserted.** Every baseline here is *run live* on the same masked data with
+  the same seed and scored on the same held-out cells — apples-to-apples. Published
+  deep-learning numbers appear only as clearly-labelled **reference rows with a citation**,
+  from a single source per dataset (never mixing protocols), and are never silently merged
+  with the live results.
+* **Causal vs bidirectional is a hard separation.** Causal methods fill X[t] from data
+  ≤ t (filtering, backtest-safe, deployable online); bidirectional methods use the whole
+  series incl. the future (smoothing — forbidden look-ahead bias in a backtest). The table
+  is grouped into the two tiers and sorted within each; they are never ranked as equals.
+* **The predict-the-mean trap.** A `global mean` baseline is always included; a method that
+  barely beats it has no real skill.
+* Standardised (z-score, fit on the train portion only) so MAE/RMSE are comparable to the
+  published tables, which all standardise.
+* numpy-only (the baselines too) — matching the library's zero-heavy-deps promise.
 """
 from __future__ import annotations
 
@@ -47,25 +46,22 @@ def _inject(X, rate, pattern, seed):
     if pattern == "block":                       # contiguous per-column gaps (harder)
         T, N = X.shape
         M = np.zeros(X.shape, bool)
-        target, placed = int(rate * obs.sum()), 0
-        guard = 0
+        target, placed, guard = int(rate * obs.sum()), 0, 0
         while placed < target and guard < 100000:
             guard += 1
             j = int(rng.integers(N))
             blen = int(rng.integers(max(2, T // 50), max(3, T // 8)))
             s = int(rng.integers(0, max(1, T - blen)))
             seg = slice(s, s + blen)
-            newly = int((obs[seg, j] & ~M[seg, j]).sum())
+            placed += int((obs[seg, j] & ~M[seg, j]).sum())
             M[seg, j] = True
-            placed += newly
         return M & obs
     raise ValueError(f"pattern must be 'mcar'/'point' or 'block'; got {pattern!r}")
 
 
 def _scaler(X, train_frac):
     """z-score stats from the first ``train_frac`` of rows only (no leakage)."""
-    T = X.shape[0]
-    tr = X[: max(1, int(train_frac * T))]
+    tr = X[: max(1, int(train_frac * X.shape[0]))]
     mu = np.nanmean(tr, 0)
     sd = np.nanstd(tr, 0)
     mu = np.where(np.isfinite(mu), mu, 0.0)
@@ -74,12 +70,11 @@ def _scaler(X, train_frac):
 
 
 # --------------------------------------------------------------------------- #
-# Baselines -- pure numpy, each takes a (T,N) array with NaNs and returns it filled.
+# Baselines — pure numpy. Each takes a (T,N) array with NaNs, returns it filled.
 # `causal=True` means the fill at t uses only data <= t.
 # --------------------------------------------------------------------------- #
-def _b_global_mean(X):                            # bidirectional (uses whole column)
-    col = np.nanmean(X, 0)
-    col = np.where(np.isfinite(col), col, 0.0)
+def _b_global_mean(X):                            # bidirectional (whole column)
+    col = np.where(np.isfinite(np.nanmean(X, 0)), np.nanmean(X, 0), 0.0)
     out = X.copy()
     idx = np.where(np.isnan(out))
     out[idx] = np.take(col, idx[1])
@@ -88,31 +83,36 @@ def _b_global_mean(X):                            # bidirectional (uses whole co
 
 def _b_mean_past(X):                              # causal expanding mean
     obs = ~np.isnan(X)
-    vals = np.where(obs, X, 0.0)
-    run = np.cumsum(vals, 0) / np.maximum(np.cumsum(obs, 0), 1)
+    run = np.cumsum(np.where(obs, X, 0.0), 0) / np.maximum(np.cumsum(obs, 0), 1)
     out = np.where(obs, X, run)
-    out[np.cumsum(obs, 0) == 0] = 0.0             # leading gap -> mean (0 in z-space)
+    out[np.cumsum(obs, 0) == 0] = 0.0
     return out
 
 
-def _b_locf(X):                                   # causal last-observation-carried-forward
+def _b_locf(X):                                   # causal last-obs-carried-forward
     T = X.shape[0]
     obs = ~np.isnan(X)
     last = np.where(obs, np.arange(T)[:, None], -1)
     np.maximum.accumulate(last, axis=0, out=last)
-    safe = np.where(last < 0, 0, last)
-    out = np.take_along_axis(np.where(obs, X, 0.0), safe, axis=0)
+    out = np.take_along_axis(np.where(obs, X, 0.0), np.where(last < 0, 0, last), axis=0)
     out[last < 0] = 0.0
     return out
 
 
-def _b_linear(X):                                 # bidirectional (interpolates to future point)
+def _b_nocb(X):                                   # bidirectional next-obs-carried-backward
+    bwd = _b_locf(X[::-1])[::-1]                   # next future observation
+    out = X.copy()
+    nan = np.isnan(out)
+    out[nan] = bwd[nan]
+    return out
+
+
+def _b_linear(X):                                 # bidirectional linear interpolation
     T, N = X.shape
     xs = np.arange(T)
     out = X.copy()
     for j in range(N):
-        c = X[:, j]
-        o = ~np.isnan(c)
+        c = X[:, j]; o = ~np.isnan(c)
         if o.sum() == 0:
             out[:, j] = 0.0
         elif o.sum() == 1:
@@ -122,22 +122,80 @@ def _b_linear(X):                                 # bidirectional (interpolates 
     return out
 
 
-def _b_softimpute(X, n_iter=50, tol=1e-3):        # bidirectional low-rank matrix completion
+def _b_holt(X, alpha=0.4, beta=0.1, cap=10.0):    # causal double-exponential (level+trend)
+    T, N = X.shape
+    out = X.copy()
+    lev = np.zeros(N); tr = np.zeros(N); age = np.zeros(N); started = np.zeros(N, bool)
+    rsum = np.zeros(N); rcnt = np.zeros(N)
+    for t in range(T):
+        row = X[t]; obs = ~np.isnan(row); miss = ~obs
+        if miss.any():
+            fb = np.where(rcnt > 0, rsum / np.maximum(rcnt, 1), 0.0)
+            fc = lev + np.minimum(age + 1.0, cap) * tr
+            fill = np.where(started, fc, fb)
+            out[t, miss] = fill[miss]
+        if obs.any():
+            o = obs
+            prev = lev[o]
+            nl = np.where(started[o], alpha * row[o] + (1 - alpha) * (prev + tr[o]), row[o])
+            nb = np.where(started[o], beta * (nl - prev) + (1 - beta) * tr[o], 0.0)
+            lev[o] = nl; tr[o] = nb; age[o] = 0.0; started[o] = True
+            rsum[o] += row[o]; rcnt[o] += 1
+        age += 1.0
+    return np.where(np.isnan(out), 0.0, out)
+
+
+def _b_kalman(X, q=1e-2, r=1.0):                  # causal local-level Kalman FILTER (no smoother)
+    T, N = X.shape
+    out = X.copy()
+    mu = np.zeros(N); P = np.full(N, 1e3); started = np.zeros(N, bool)
+    rsum = np.zeros(N); rcnt = np.zeros(N)
+    for t in range(T):
+        row = X[t]; obs = ~np.isnan(row); miss = ~obs
+        if miss.any():
+            fb = np.where(rcnt > 0, rsum / np.maximum(rcnt, 1), 0.0)
+            out[t, miss] = np.where(started, mu, fb)[miss]
+        if obs.any():
+            o = obs
+            Pm = P[o] + q
+            fresh = ~started[o]
+            K = np.where(fresh, 1.0, Pm / (Pm + r))
+            mu[o] = np.where(fresh, row[o], mu[o] + K * (row[o] - mu[o]))
+            P[o] = np.where(fresh, r, (1.0 - K) * Pm)
+            started[o] = True
+            rsum[o] += row[o]; rcnt[o] += 1
+    return np.where(np.isnan(out), 0.0, out)
+
+
+def _b_svdimpute(X, rank=10, n_iter=25, tol=1e-4):  # bidirectional fixed-rank iterative SVD
     obs = ~np.isnan(X)
-    col = np.nanmean(X, 0)
-    col = np.where(np.isfinite(col), col, 0.0)
-    filled = np.where(obs, X, col)
+    col = np.where(np.isfinite(np.nanmean(X, 0)), np.nanmean(X, 0), 0.0)
+    F = np.where(obs, X, col)
+    r = max(1, min(rank, min(X.shape) - 1))
+    for _ in range(n_iter):
+        U, s, Vt = np.linalg.svd(F, full_matrices=False)
+        rec = (U[:, :r] * s[:r]) @ Vt[:r]
+        new = np.where(obs, X, rec)
+        if np.linalg.norm(new - F) / (np.linalg.norm(F) + 1e-9) < tol:
+            return new
+        F = new
+    return F
+
+
+def _b_softimpute(X, n_iter=50, tol=1e-3):        # bidirectional nuclear-norm matrix completion
+    obs = ~np.isnan(X)
+    col = np.where(np.isfinite(np.nanmean(X, 0)), np.nanmean(X, 0), 0.0)
+    F = np.where(obs, X, col)
     lam = None
     for _ in range(n_iter):
-        U, s, Vt = np.linalg.svd(filled, full_matrices=False)
+        U, s, Vt = np.linalg.svd(F, full_matrices=False)
         if lam is None:
-            lam = 0.05 * s[0]                     # shrinkage from the spectrum scale
-        low = (U * np.maximum(s - lam, 0.0)) @ Vt
-        new = np.where(obs, X, low)
-        if np.linalg.norm(new - filled) / (np.linalg.norm(filled) + 1e-9) < tol:
+            lam = 0.05 * s[0]
+        new = np.where(obs, X, (U * np.maximum(s - lam, 0.0)) @ Vt)
+        if np.linalg.norm(new - F) / (np.linalg.norm(F) + 1e-9) < tol:
             return new
-        filled = new
-    return filled
+        F = new
+    return F
 
 
 # (name, fn, causal)
@@ -145,39 +203,47 @@ _BASELINES = [
     ("CAFÉ",          lambda Xo: np.asarray(_cafe_impute(Xo), float), True),
     ("mean-of-past",  _b_mean_past,  True),
     ("LOCF",          _b_locf,       True),
+    ("Holt (lvl+tr)", _b_holt,       True),
+    ("Kalman filter", _b_kalman,     True),
     ("global mean",   _b_global_mean, False),
+    ("NOCB",          _b_nocb,       False),
     ("linear interp", _b_linear,     False),
+    ("SVDImpute",     _b_svdimpute,  False),
     ("SoftImpute",    _b_softimpute, False),
 ]
 
 
 # --------------------------------------------------------------------------- #
-# Published reference numbers (standardised MAE @ 10% point/MCAR). ALL bidirectional.
-# Cited, never re-run, shown only as context. Sources verified from the papers.
+# Published reference numbers — ONE source per dataset (never mixing protocols).
+# All BIDIRECTIONAL. Standardised MAE @ 10% point/MCAR. Verified from the papers.
+# IMPORTANT: these use a WINDOWED protocol (e.g. 24-step windows w/ train/val/test
+# split); CAFÉ's live rows above impute the FULL series causally — a different,
+# strictly-online setting. Shown for context, not as a like-for-like leaderboard.
 # --------------------------------------------------------------------------- #
 _PUBLISHED = {
-    "beijing": [
-        ("CSDI",        0.102, "TSI-Bench 2024 (arXiv:2406.12747)"),
-        ("SAITS",       0.137, "Du+2023 ESWA, Table 2"),
-        ("BRITS",       0.153, "Du+2023 ESWA, Table 2"),
-        ("Transformer", 0.158, "Du+2023 ESWA, Table 2"),
-        ("GP-VAE",      0.268, "Du+2023 ESWA, Table 2"),
-    ],
-    "physionet": [
-        ("SAITS",       0.186, "Du+2023 ESWA, Table 2"),
-        ("Transformer", 0.190, "Du+2023 ESWA, Table 2"),
-        ("CSDI",        0.217, "Tashiro+2021 NeurIPS, Table 3"),
-        ("BRITS",       0.256, "Du+2023 ESWA, Table 2"),
-    ],
-    "electricity": [
-        ("SSSD",        0.345, "Alcaraz+2022 TMLR, Table 3"),
-        ("SAITS",       0.735, "Du+2023 ESWA, Table 2"),
-        ("Transformer", 0.823, "Du+2023 ESWA, Table 2"),
-        ("BRITS",       0.847, "Du+2023 ESWA, Table 2"),
-    ],
+    # Beijing Multi-Site Air-Quality — single source: TSI-Bench (one coherent table).
+    "beijing": ("TSI-Bench (arXiv:2406.12747, preprint)", [
+        ("CSDI",         0.102),
+        ("iTransformer", 0.123),
+        ("BRITS",        0.127),
+        ("Transformer",  0.142),
+        ("SAITS",        0.155),
+    ]),
+    # PhysioNet-2012 — single source: SAITS paper (Du+2023 ESWA, Table 2).
+    "physionet": ("Du+2023 ESWA (SAITS), Table 2", [
+        ("SAITS",        0.186),
+        ("Transformer",  0.190),
+        ("BRITS",        0.256),
+        ("M-RNN",        0.533),
+    ]),
+    # Electricity — single source: SAITS paper (Du+2023 ESWA, Table 2).
+    "electricity": ("Du+2023 ESWA (SAITS), Table 2", [
+        ("SAITS",        0.735),
+        ("Transformer",  0.823),
+        ("BRITS",        0.847),
+    ]),
 }
 
-# local files (dev convenience) — name -> (filename, loader)
 _LOCAL = {
     "beijing":  ("beijing_clean.npy", "npy"),
     "etth1":    ("ETTh1_clean.npy",   "npy"),
@@ -188,8 +254,6 @@ _LOCAL = {
 
 
 def _synthetic(T=600, N=20, seed=0):
-    """A self-contained low-rank + AR + seasonal + noise matrix (so the zero-arg call
-    always works, anywhere, with no data files)."""
     rng = np.random.default_rng(seed)
     L = 4
     Z = np.zeros((T, L)); Z[0] = rng.standard_normal(L)
@@ -202,7 +266,6 @@ def _synthetic(T=600, N=20, seed=0):
 
 
 def _resolve(data):
-    """Return (clean_matrix, name, published_key)."""
     if data is None:
         return _synthetic(), "synthetic", None
     if isinstance(data, str):
@@ -219,8 +282,8 @@ def _resolve(data):
                 X = np.load(p) if kind == "npy" else np.loadtxt(p)
                 return np.asarray(X, float), key, (key if key in _PUBLISHED else None)
         raise FileNotFoundError(
-            f"dataset {data!r} ({fn}) not found under ./data or ../data. "
-            "Named datasets are a dev convenience; pass your own DataFrame instead."
+            f"dataset {data!r} ({fn}) not found under ./data or ../data. Named datasets "
+            "are a dev convenience; pass your own DataFrame instead."
         )
     X, _ = to_matrix(data)
     return np.asarray(X, float), "data", None
@@ -239,12 +302,14 @@ def _score(truth, pred, M):
 
 
 class BenchmarkResult:
-    """The outcome of :func:`benchmark`. Prints as a ranked table; ``.plot()`` charts it;
-    ``.to_pandas()`` returns the rows; ``.published`` holds the cited reference rows."""
+    """Outcome of :func:`benchmark`. Prints grouped by kind (causal first, then
+    bidirectional), each sorted by MAE. ``.plot()`` charts it; ``.to_pandas()`` returns
+    the rows; ``.published`` holds the cited reference (source, rows)."""
 
     def __init__(self, name, rows, published, meta):
+        # causal block first, bidir block second; within each, best MAE first; failures last
+        self.rows = sorted(rows, key=lambda r: (not r["ok"], not r["causal"], r["mae"]))
         self.name = name
-        self.rows = sorted(rows, key=lambda r: (not r["ok"], r["mae"]))
         self.published = published
         self.meta = meta
 
@@ -259,51 +324,60 @@ class BenchmarkResult:
 
     def __repr__(self):
         m = self.meta
+        best = self.best_causal
         L = [f"CAFÉ benchmark — {self.name}  "
              f"({m['shape'][0]}×{m['shape'][1]}, {int(m['missing']*100)}% {m['pattern']} "
-             f"missing, seed {m['seed']}, standardised)",
-             f"{'method':16s} {'kind':6s} {'MAE':>8s} {'RMSE':>8s} {'MRE':>7s} {'time':>8s}",
-             "-" * 56]
-        best = self.best_causal
+             f"missing, seed {m['seed']}, standardised)"]
+        hdr = f"  {'method':16s} {'MAE':>8s} {'RMSE':>8s} {'MRE':>7s} {'time':>8s}"
+        last_kind = None
         for r in self.rows:
-            star = "  ★" if (best and r["method"] == best["method"]) else ""
-            kind = "causal" if r["causal"] else "bidir"
+            if r["causal"] != last_kind:
+                last_kind = r["causal"]
+                L += ["", "CAUSAL  (online / point-in-time, X[t] from data ≤ t — backtest-safe)"
+                      if r["causal"] else
+                      "BIDIRECTIONAL  (uses the whole series incl. the future — smoothing)", hdr]
+            star = " ★" if (best and r["method"] == best["method"]) else ""
             if r["ok"]:
-                L.append(f"{r['method']:16s} {kind:6s} {r['mae']:8.3f} {r['rmse']:8.3f} "
+                L.append(f"  {r['method']:16s} {r['mae']:8.3f} {r['rmse']:8.3f} "
                          f"{r['mre']*100:6.1f}% {r['time_s']:7.2f}s{star}")
             else:
-                L.append(f"{r['method']:16s} {kind:6s} {'FAILED':>8s} ({r.get('err','')[:24]})")
+                L.append(f"  {r['method']:16s} {'FAILED':>8s}  ({r.get('err','')[:28]})")
         if self.published:
-            L += ["", "published reference (all BIDIRECTIONAL — use future context; "
-                  "not run here, cited for context):",
-                  f"{'method':16s} {'kind':6s} {'MAE':>8s}   source"]
-            for nm, mae, src in self.published:
-                L.append(f"{nm:16s} {'bidir':6s} {mae:8.3f}   {src}")
-        L += ["", "causal = fills X[t] from data ≤ t only (backtest-safe); "
-              "bidir = uses the whole window incl. the future.",
-              "★ = best causal method."]
+            src, prows = self.published
+            L += ["", f"PUBLISHED reference — BIDIRECTIONAL, windowed protocol [{src}].",
+                  "  (Not run here. CAFÉ above runs the FULL series causally — a different,",
+                  "   strictly-online setting; shown for context, not a like-for-like board.)",
+                  f"  {'method':16s} {'MAE':>8s}"]
+            for nm, mae in prows:
+                L.append(f"  {nm:16s} {mae:8.3f}")
+        L += ["", "★ = best causal method."]
         return "\n".join(L)
 
     def plot(self, ax=None):
         import matplotlib.pyplot as plt
         ok = [r for r in self.rows if r["ok"]]
         if ax is None:
-            _, ax = plt.subplots(figsize=(8, 0.5 * len(ok) + 1))
-        names = [r["method"] for r in ok]
+            _, ax = plt.subplots(figsize=(8, 0.46 * len(ok) + 1.2))
+        y = np.arange(len(ok))[::-1]
         maes = [r["mae"] for r in ok]
         colors = ["#2c7fb8" if r["causal"] else "#bdbdbd" for r in ok]
-        y = np.arange(len(ok))[::-1]
         ax.barh(y, maes, color=colors)
-        ax.set_yticks(y); ax.set_yticklabels(names)
+        ax.set_yticks(y)
+        ax.set_yticklabels([("★ " if (self.best_causal and r["method"] == self.best_causal["method"])
+                             else "") + r["method"] for r in ok])
         for yi, v in zip(y, maes):
             ax.text(v, yi, f" {v:.3f}", va="center", fontsize=9)
+        # divider between the causal block (top) and bidirectional block (bottom)
+        n_causal = sum(r["causal"] for r in ok)
+        if 0 < n_causal < len(ok):
+            ax.axhline(len(ok) - n_causal - 0.5, color="0.3", lw=0.8, ls=":")
         if self.published:
-            best_pub = min(p[1] for p in self.published)
-            ax.axvline(best_pub, color="C3", ls="--", lw=1)
-            ax.text(best_pub, 0.15, "  best published\n  (bidirectional)",
-                    color="C3", fontsize=8, va="bottom", ha="left")
+            ceil = min(v for _, v in self.published[1])
+            ax.axvline(ceil, color="C3", ls="--", lw=1)
+            ax.text(ceil, 0.1, "  published\n  ceiling (bidir)", color="C3",
+                    fontsize=8, va="bottom", ha="left")
         ax.set_xlabel("MAE (standardised, lower = better)")
-        ax.set_title(f"{self.name}: imputation MAE  (blue = causal, grey = bidirectional)")
+        ax.set_title(f"{self.name}: causal (blue, top) vs bidirectional (grey, bottom)")
         return ax
 
 
@@ -332,15 +406,14 @@ def benchmark(data=None, *, missing=0.1, pattern="mcar", seed=0, train_frac=0.6,
         Z = X.astype(float).copy()
     M = _inject(Z, missing, pattern, seed)
     if not M.any():
-        raise ValueError("no cells were held out — increase `missing` or check the data has observed values")
+        raise ValueError("no cells held out — increase `missing` or check the data has observed values")
     Xo = Z.copy(); Xo[M] = np.nan
 
     rows = []
     for nm, fn, causal in (methods or _BASELINES):
         t0 = time.perf_counter()
         try:
-            pred = np.asarray(fn(Xo.copy()), float)
-            sc = _score(Z, pred, M)
+            sc = _score(Z, np.asarray(fn(Xo.copy()), float), M)
             sc.update(method=nm, causal=causal, time_s=time.perf_counter() - t0, ok=True)
         except Exception as e:                                            # noqa: BLE001
             sc = dict(mae=float("inf"), rmse=float("inf"), mre=float("inf"),

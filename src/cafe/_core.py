@@ -45,9 +45,9 @@ CAUSALITY (verified by causal.py):
   imputation. Panel: latent state z is reset per entity; W/a/nu/scales POOLED across
   entities (estimated from all rows <= tau, any entity).
 
-Speed: numpy/scipy only. cho_solve everywhere (never inv/pinv). Woodbury-free because
-the per-row systems are rank-sized (<=R). Column factors W refit on a trailing window
-only every REFIT_EVERY steps; each row solves its own rank-R factor against current W.
+Speed: numpy only (no scipy). SPD systems solved with np.linalg.solve (never inv/pinv).
+Woodbury-free because the per-row systems are rank-sized (<=R). Column factors W refit on
+a trailing window only every REFIT_EVERY steps; each row solves its rank-R factor vs W.
 """
 from __future__ import annotations
 
@@ -60,7 +60,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
-from scipy.linalg import cho_factor, cho_solve
 
 # ---- principled constants (NOT fit to any dataset; standard priors/defaults) ----
 R_MAX        = 8         # max latent factors offered; ARD shrinks the unused ones
@@ -402,15 +401,18 @@ class _UnifiedCore:
         Smo = cov[np.ix_(m, o)]
         xo = resid[o] - mean[o]
         try:
-            c = cho_factor(Soo, lower=True, check_finite=False)
-            sol = cho_solve(c, xo, check_finite=False)
+            # SPD conditional solve, numpy-only (no scipy). Soo is regularised SPD, so a
+            # single LU solve over the stacked RHS [xo | Smoᵀ] gives both the conditional
+            # mean coefficients and the variance reduction in one factorisation.
+            S = np.linalg.solve(Soo, np.column_stack([xo, Smo.T]))   # (o, 1+m)
+            sol = S[:, 0]
+            B = S[:, 1:]                                              # (o, m)
             cmean = mean[m] + Smo @ sol
             # conditional variance per missing cell: diag(cov_mm) - Smo Soo^-1 Smo^T
-            B = cho_solve(c, Smo.T, check_finite=False)        # (o, m)
             cvar = np.diag(cov)[m] - np.einsum("om,om->m", Smo.T, B)
             cvar = np.maximum(cvar, EPS)
             return cmean, cvar
-        except Exception:
+        except np.linalg.LinAlgError:
             return None, None
 
     # -- UNIFIED Gaussian conditional-mean update (the RDFM filter step) --
