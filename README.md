@@ -17,7 +17,11 @@ with uncertainty, factors, anomalies and forecasts from a single forward pass.</
 > MC-NNM and Gaussian conditional-mean imputation all **special cases**.
 
 <p align="center">
-<img src="docs/figures/hero.png" alt="CAFÉ in one picture" width="820"><br>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/figures/hero-dark.png">
+  <img src="docs/figures/hero.png" alt="CAFÉ in one picture" width="820">
+</picture>
+<br>
 <sub><b>CAFÉ in one picture.</b> Every value is the sum of four interpretable parts — a per-series
 level, a Fourier season, a few shared low-rank factors and heavy-tailed noise — filled using
 <b>only data up to its own time</b> <i>t</i> (a mechanical verifier certifies no look-ahead). One
