@@ -1,6 +1,9 @@
-\begin{table}[!htbp]\centering\small
+% Non-floating so it sits inline at its reference instead of being deferred to a
+% near-empty float page before the appendix \onecolumn break.
+\par\medskip\noindent
+\begin{minipage}{\linewidth}\centering\small
 \setlength{\tabcolsep}{4pt}
-\caption{\textbf{MNAR scope: empirical degradation and the censoring bias.} MAE ($\downarrow$) under MCAR vs.\ self-masking MNAR at a \emph{matched} $20\%$ missing rate (averaged over Beijing, ETTh1 and a synthetic low-rank panel; 3 seeds). Under MNAR each cell's drop probability rises with its own value ($p\!\sim\!\sigma(z-1)$), so the high tail censors itself. $\Delta$ is the relative MAE increase MCAR$\to$MNAR. \emph{Bias} is the mean signed error (pred$-$true) on masked cells under MNAR: a negative bias is the diagnostic MNAR signature -- the method under-predicts the removed high tail. MNAR is non-identifiable in general (Ma \& Zhang, NeurIPS'21); CAFE recovers self-censored values only insofar as the contemporaneous cross-section or recent past still carry information about them, never by modelling the missingness mechanism. \cafe{} and LOCF are strictly causal (point-in-time); LinInterp and SoftImpute are non-causal references (\emph{italic}). Bold $=$ best \emph{causal} method per MAE column.}
+\captionof{table}{\textbf{MNAR scope: empirical degradation and the censoring bias.} MAE ($\downarrow$) under MCAR vs.\ self-masking MNAR at a \emph{matched} $20\%$ missing rate (averaged over Beijing, ETTh1 and a synthetic low-rank panel; 3 seeds). Under MNAR each cell's drop probability rises with its own value ($p\!\sim\!\sigma(z-1)$), so the high tail censors itself. $\Delta$ is the relative MAE increase MCAR$\to$MNAR. \emph{Bias} is the mean signed error (pred$-$true) on masked cells under MNAR: a negative bias is the diagnostic MNAR signature -- the method under-predicts the removed high tail. MNAR is non-identifiable in general (Ma \& Zhang, NeurIPS'21); CAFE recovers self-censored values only insofar as the contemporaneous cross-section or recent past still carry information about them, never by modelling the missingness mechanism. \cafe{} and LOCF are strictly causal (point-in-time); LinInterp and SoftImpute are non-causal references (\emph{italic}). Bold $=$ best \emph{causal} method per MAE column.}
 \label{tab:mnarscope}
 \begin{tabular}{@{}lcccc@{}}
 \toprule
@@ -12,4 +15,5 @@ LOCF & 0.362 & 0.415 & +15\% & -0.106 \\
 \textit{SoftImpute} & \textit{0.951} & \textit{1.217} & +28\% & -0.936 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{minipage}
+\par\medskip
