@@ -61,6 +61,8 @@ at all. Published numbers come from one reconciled registry
 ## Install
 
 ```bash
+git clone https://github.com/sovai-research/cafe.git
+cd cafe
 pip install -e .            # core (numpy only)
 pip install -e ".[all]"     # + pandas, polars, matplotlib
 ```
@@ -219,6 +221,21 @@ history); `src/cafe/` is the packaged product. Both share the same estimator.
   time-prefix verifier across the benchmark suite.
 - **Robustness** — `bench/robustness.py` checks finite, same-shape output on every edge
   input (all-NaN, 1×1, constant, Inf, huge/tiny, wide/tall, single entity/time).
+
+## Citation
+
+If you use CAFÉ in your research, please cite the paper ([`paper/cafe.pdf`](paper/cafe.pdf)):
+
+```bibtex
+@misc{snow2026cafe,
+  title  = {CAF\'E: Causal Adaptive Factor Estimation for Point-in-Time Imputation},
+  author = {Snow, Derek},
+  year   = {2026},
+  note   = {https://github.com/sovai-research/cafe}
+}
+```
+
+Questions or issues: [d.snow@sov.ai](mailto:d.snow@sov.ai) or open an issue.
 
 ## License
 
