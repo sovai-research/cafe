@@ -79,7 +79,7 @@ pip install cafe-impute            # core (numpy only)
 pip install "cafe-impute[all]"     # + pandas, polars, matplotlib
 ```
 
-<details><summary>…or from source</summary>
+<details open><summary>…or from source</summary>
 
 ```bash
 git clone https://github.com/sovai-research/cafe.git
@@ -280,7 +280,7 @@ the non-causal batch method's “past” estimate keeps drifting as the future i
 windowed train/val/test protocol, so they are cited <i>context, not a ranked board</i> (see “Why CAFÉ” above).</sub>
 </p>
 
-<details>
+<details open>
 <summary><b>📊 The deployable (causal) leaderboard</b> — ranked by the score that survives deployment, not the look-ahead-inflated one</summary>
 
 Mean MAE over 8 structured datasets. Methods are ranked by **causal** (strict point-in-time) MAE — the number
@@ -319,7 +319,7 @@ honest off-regime limitation, kept out of the headline mean.
 
 </details>
 
-<details>
+<details open>
 <summary><b>🎯 Does it help a real downstream model?</b> — online forecasting utility, strictly point-in-time</summary>
 
 When the downstream model **cannot tolerate NaN** (e.g. a ridge regression), imputation is mandatory and the only
@@ -342,7 +342,7 @@ structured panels (full tables in [`paper/cafe.pdf`](paper/cafe.pdf)).
 
 </details>
 
-<details>
+<details open>
 <summary><b>🖼️ Everything from one causal pass</b> — the full output gallery</summary>
 
 Every panel is read straight from the same forward run — no quantity is illustrative.
