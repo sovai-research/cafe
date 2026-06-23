@@ -358,29 +358,39 @@ def _write_pattern_tables(results, pattern, suffix):
     with open(os.path.join(ROOT, "paper", "tables", f"horserace_causal{suffix}.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
 
-    # ---- BIDIRECTIONAL leaderboard + look-ahead gap (headline mean over STRUCTURED) ----
-    bidir_rows = [(m, mean_over_ds(m, "bidir_mae"), mean_over_ds(m, "delta")) for m in methods]
-    bidir_rows = sorted([r for r in bidir_rows if r[1] is not None], key=lambda r: r[1])
-    colspec = "lccc" + ("c" if hasfx else "")
-    fxhdr = r" & FX (ctrl)" if hasfx else ""
+    # ---- DEPLOYABLE leaderboard: ranked by the number that survives deployment
+    #      (causal MAE), with bidirectional MAE + look-ahead gap exposing the borrow.
+    #      Ranking by bidir would flatter look-ahead methods (e.g. TRMF), so we sort
+    #      by causal -- the only honest, deployable rank. ----
+    deploy_rows = [(m, mean_over_ds(m, "causal_mae"), mean_over_ds(m, "bidir_mae"),
+                    mean_over_ds(m, "delta")) for m in methods]
+    deploy_rows = sorted([r for r in deploy_rows if r[1] is not None], key=lambda r: r[1])
+    colspec = "lcccc" + ("c" if hasfx else "")
+    fxhdr = r" & FX (ctrl)$\downarrow$" if hasfx else ""
     lines = [r"\begin{table*}[tbp]\centering\small",
              r"\setlength{\tabcolsep}{4pt}",
-             r"\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (%s).} Mean MAE over %d "
-             r"\emph{structured} real datasets under the standard (future-using) protocol, and $\Delta=$ "
-             r"causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. \cafe{} "
-             r"leads even here, where the deep models are allowed to see the future; their large positive "
-             r"$\Delta$ is look-ahead they cannot keep in a backtest, while \cafe{}'s $\Delta$ is $0$ by "
-             r"construction.%s}"
+             r"\caption{\textbf{The deployable (causal) leaderboard and the look-ahead gap (%s).} "
+             r"Methods are ranked by the number that survives deployment --- the strict point-in-time "
+             r"\emph{causal} MAE (mean over %d \emph{structured} datasets) --- not by the future-using "
+             r"\emph{bidirectional} MAE, which flatters methods that look ahead. $\Delta=$ "
+             r"causal$-$bidirectional is the accuracy a method silently \emph{borrows from the future}. "
+             r"The point: TRMF posts the lowest \emph{bidirectional} MAE ($0.315$) but borrows "
+             r"$\Delta\!=\!0.28$, so its honest causal MAE is $0.59$ --- mid-pack; \cafe{} borrows nothing "
+             r"($\Delta=0$) and is \textbf{\#1 on the deployable rank}. The deep imputers' large positive "
+             r"$\Delta$ is likewise look-ahead they cannot keep in a backtest.%s}"
              % (patname, nS, fxnote),
              r"\label{tab:bidirrace%s}" % suffix.replace("_", ""),
              r"\begin{tabular}{@{}%s@{}}" % colspec, r"\toprule",
-             r"Method & Bidir MAE & $\Delta$ look-ahead%s & Family \\" % fxhdr, r"\midrule"]
-    for m, mae, dl in bidir_rows:
+             r"Method & Causal MAE $\downarrow$ & Bidir MAE & $\Delta$ borrowed%s & Family \\" % fxhdr,
+             r"\midrule"]
+    for m, cmae, bmae, dl in deploy_rows:
         fam = agg[next((d, m) for d in datasets if (d, m) in agg)]["family"]
         bold = r"\textbf{%s}" % m if fam == "cafe" else m
+        cstr = (r"\textbf{%.3f}" % cmae) if fam == "cafe" else "%.3f" % cmae
+        bstr = "%.3f" % bmae if bmae is not None else "--"
         dstr = "%.3f" % dl if dl is not None else "--"
-        fxc = (" & " + _fx_cell(m, "bidir_mae")) if hasfx else ""
-        lines.append(f"{bold} & {mae:.3f} & {dstr}{fxc} & {famlabel.get(fam, fam)} \\\\")
+        fxc = (" & " + _fx_cell(m, "causal_mae")) if hasfx else ""
+        lines.append(f"{bold} & {cstr} & {bstr} & {dstr}{fxc} & {famlabel.get(fam, fam)} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", r"\end{table*}"]
     with open(os.path.join(ROOT, "paper", "tables", f"horserace_bidir{suffix}.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")

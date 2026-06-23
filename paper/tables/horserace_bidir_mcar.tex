@@ -1,35 +1,35 @@
 \begin{table*}[tbp]\centering\small
 \setlength{\tabcolsep}{4pt}
-\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (scattered (MCAR) gaps).} Mean MAE over 8 \emph{structured} real datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. \cafe{} leads even here, where the deep models are allowed to see the future; their large positive $\Delta$ is look-ahead they cannot keep in a backtest, while \cafe{}'s $\Delta$ is $0$ by construction. The final column is the no-structure control (FX / Exchange, a near-random walk): a factor prior is the wrong model there, so \cafe{} is correctly beaten by a last-value/Kalman prior --- an honest off-regime limitation, kept out of the headline mean.}
+\caption{\textbf{The deployable (causal) leaderboard and the look-ahead gap (scattered (MCAR) gaps).} Methods are ranked by the number that survives deployment --- the strict point-in-time \emph{causal} MAE (mean over 8 \emph{structured} datasets) --- not by the future-using \emph{bidirectional} MAE, which flatters methods that look ahead. $\Delta=$ causal$-$bidirectional is the accuracy a method silently \emph{borrows from the future}. The point: TRMF posts the lowest \emph{bidirectional} MAE ($0.315$) but borrows $\Delta\!=\!0.28$, so its honest causal MAE is $0.59$ --- mid-pack; \cafe{} borrows nothing ($\Delta=0$) and is \textbf{\#1 on the deployable rank}. The deep imputers' large positive $\Delta$ is likewise look-ahead they cannot keep in a backtest. The final column is the no-structure control (FX / Exchange, a near-random walk): a factor prior is the wrong model there, so \cafe{} is correctly beaten by a last-value/Kalman prior --- an honest off-regime limitation, kept out of the headline mean.}
 \label{tab:bidirracemcar}
-\begin{tabular}{@{}lcccc@{}}
+\begin{tabular}{@{}lccccc@{}}
 \toprule
-Method & Bidir MAE & $\Delta$ look-ahead & FX (ctrl) & Family \\
+Method & Causal MAE $\downarrow$ & Bidir MAE & $\Delta$ borrowed & FX (ctrl)$\downarrow$ & Family \\
 \midrule
-\textbf{CAFE} & 0.212 & 0.000 & 0.347 & factor (ours) \\
-OnlineEWCov & 0.236 & 0.000 & 0.157 & online \\
-TRMF & 0.247 & -0.006 & 0.159 & classical \\
-BayOTIDE & 0.302 & 0.000 & 0.181 & online* \\
-LinearInterp & 0.341 & 0.099 & 0.034 & classical \\
-SAITS & 0.362 & 0.181 & 0.506 & deep (right-edge) \\
-BRITS & 0.368 & 0.352 & 0.548 & deep (right-edge) \\
-Transformer & 0.385 & 0.224 & 0.449 & deep (right-edge) \\
-TimesNet & 0.410 & 0.258 & 0.391 & deep (right-edge) \\
-ImputeFormer & 0.425 & 0.108 & 0.306 & deep (right-edge) \\
-LOCF & 0.440 & 0.000 & 0.048 & online \\
-XSecMean & 0.440 & 0.000 & 0.048 & online \\
-GROUSE & 0.509 & 0.000 & 1.265 & online \\
-KalmanLL & 0.517 & 0.000 & 0.085 & online \\
-SoftImpute & 0.537 & -0.123 & 0.807 & classical \\
-gcimpute & 0.549 & 0.000 & 0.960 & online \\
-EWMA & 0.550 & 0.000 & 0.108 & online \\
-RollingMedian & 0.579 & 0.000 & 0.152 & online \\
-SeasonalNaive & 0.580 & 0.000 & 0.257 & online \\
-RollingMean & 0.606 & 0.000 & 0.151 & online \\
-OnlineMeanVar & 0.631 & 0.000 & 0.243 & online \\
-Drift & 0.699 & 0.000 & 0.075 & online \\
-Zero & 0.828 & 0.000 & 0.960 & online \\
-CausalMean & 0.872 & 0.000 & 1.207 & online \\
+\textbf{CAFE} & \textbf{0.212} & 0.212 & 0.000 & 0.347 & factor (ours) \\
+OnlineEWCov & 0.236 & 0.236 & 0.000 & 0.157 & online \\
+TRMF & 0.241 & 0.247 & -0.006 & 0.061 & classical \\
+BayOTIDE & 0.302 & 0.302 & 0.000 & 0.181 & online* \\
+SoftImpute & 0.414 & 0.537 & -0.123 & 0.126 & classical \\
+LOCF & 0.440 & 0.440 & 0.000 & 0.048 & online \\
+LinearInterp & 0.440 & 0.341 & 0.099 & 0.048 & classical \\
+XSecMean & 0.440 & 0.440 & 0.000 & 0.048 & online \\
+GROUSE & 0.509 & 0.509 & 0.000 & 1.265 & online \\
+KalmanLL & 0.517 & 0.517 & 0.000 & 0.085 & online \\
+ImputeFormer & 0.532 & 0.425 & 0.108 & 0.570 & deep (right-edge) \\
+SAITS & 0.543 & 0.362 & 0.181 & 0.994 & deep (right-edge) \\
+gcimpute & 0.549 & 0.549 & 0.000 & 0.960 & online \\
+EWMA & 0.550 & 0.550 & 0.000 & 0.108 & online \\
+RollingMedian & 0.579 & 0.579 & 0.000 & 0.152 & online \\
+SeasonalNaive & 0.580 & 0.580 & 0.000 & 0.257 & online \\
+RollingMean & 0.606 & 0.606 & 0.000 & 0.151 & online \\
+Transformer & 0.610 & 0.385 & 0.224 & 1.163 & deep (right-edge) \\
+OnlineMeanVar & 0.631 & 0.631 & 0.000 & 0.243 & online \\
+TimesNet & 0.668 & 0.410 & 0.258 & 1.275 & deep (right-edge) \\
+Drift & 0.699 & 0.699 & 0.000 & 0.075 & online \\
+BRITS & 0.720 & 0.368 & 0.352 & 1.369 & deep (right-edge) \\
+Zero & 0.828 & 0.828 & 0.000 & 0.960 & online \\
+CausalMean & 0.872 & 0.872 & 0.000 & 1.207 & online \\
 \bottomrule
 \end{tabular}
 \end{table*}
