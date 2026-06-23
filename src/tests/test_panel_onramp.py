@@ -100,9 +100,9 @@ def test_panel_excludes_index_columns_from_features():
 
 
 def test_engine_options_all_fill():
-    # all three engines must fully impute a panel and leave observed cells untouched
+    # both engines must fully impute a panel and leave observed cells untouched
     X, Xm, m = _tensor(seed=8)
-    for engine in ("joint", "per_entity", "auto"):
+    for engine in ("joint", "per_entity"):
         out = cafe.impute(Xm, engine=engine)
         assert out.shape == Xm.shape, engine
         assert not np.isnan(out).any(), engine

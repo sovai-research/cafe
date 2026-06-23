@@ -1,0 +1,32 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The causal horse race --- scattered (MCAR) gaps (mean MAE $\downarrow$ over 5 real datasets, 10%).} Every method held to strict point-in-time evaluation (deep models trained on history only and applied via right-edge readout, causal in both parameters and inference). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear; the deep imputers collapse once the future is withheld. This is the only leaderboard valid for sequential decisions.}
+\label{tab:causalracemcar}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Method & Causal MAE $\downarrow$ & Family \\
+\midrule
+LOCF & 0.183 & online \\
+XSecMean & 0.183 & online \\
+OnlineEWCov & 0.188 & online \\
+\textbf{CAFE} & \textbf{0.217} & factor (ours) \\
+Drift & 0.252 & online \\
+BayOTIDE & 0.266 & online* \\
+KalmanLL & 0.294 & online \\
+EWMA & 0.329 & online \\
+RollingMean & 0.387 & online \\
+RollingMedian & 0.389 & online \\
+OnlineMeanVar & 0.446 & online \\
+GROUSE & 0.515 & online \\
+ImputeFormer & 0.583 & deep (right-edge) \\
+gcimpute & 0.588 & online \\
+SeasonalNaive & 0.593 & online \\
+SAITS & 0.783 & deep (right-edge) \\
+Transformer & 0.784 & deep (right-edge) \\
+TimesNet & 0.839 & deep (right-edge) \\
+Zero & 0.857 & online \\
+CausalMean & 0.973 & online \\
+BRITS & 1.026 & deep (right-edge) \\
+\bottomrule
+\end{tabular}
+\end{table}

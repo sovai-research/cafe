@@ -79,31 +79,6 @@ def _run_fast(X):
     return out
 
 
-# Structural router threshold for joint-panel vs per-entity imputation.  Calibrated on a
-# random sweep of panel shapes (bench/tensor_probe/e6): the score below agrees with the
-# oracle engine ~84% of the time, and the mean MAE regret of following it is ~0.6% because
-# disagreements cluster where the two engines are near-tied.  The decision uses only the
-# data SHAPE (entities, typical series length, features, missing rate) -- never held-out
-# error -- so it never leaks look-ahead (cf. the causal-selection-leak rule).
-_ROUTER_THR = 3.25
-
-
-def _panel_engine(X, meta):
-    """Pick 'joint' (cross-entity bilinear borrowing) or 'per_entity' (independent 2D per
-    series).  Joint pays off in the data-starved corner -- few features, short history,
-    many entities, heavy missingness; per-entity wins when each series is rich enough to
-    model on its own."""
-    eids = np.asarray(meta["entity_ids"])
-    E = int(np.unique(eids).size)
-    F = int(X.shape[1])
-    counts = np.bincount(eids.astype(np.intp))
-    counts = counts[counts > 0]
-    T_typ = float(np.median(counts)) if counts.size else float(X.shape[0])
-    rate = float(np.isnan(np.asarray(X, float)).mean())
-    s = np.log(max(1.0 - rate, 1e-3) * T_typ * F / max(E, 1))
-    return "per_entity" if s >= _ROUTER_THR else "joint"
-
-
 def _impute_per_entity(X, meta):
     """Impute each entity's series independently through the 2D core.  Rows are gathered
     per entity and processed in time order (point-in-time preserved), then scattered back
@@ -119,16 +94,23 @@ def _impute_per_entity(X, meta):
     return out
 
 
-def _impute_panel(X, meta, engine="auto"):
-    """Route panel imputation. ``engine``: 'auto' (structural router), 'joint' (force the
-    cross-entity bilinear core), or 'per_entity' (force independent 2D per series)."""
-    if engine == "auto":
-        engine = _panel_engine(X, meta)
-    if engine == "per_entity":
-        return _impute_per_entity(X, meta)
+def _impute_panel(X, meta, engine="joint"):
+    """Run panel imputation with the chosen ``engine``: 'joint' (the validated cross-entity
+    bilinear core -- pools the contemporaneous cross-section, the right default whenever
+    entities share structure) or 'per_entity' (independent 2D per series -- better only
+    when each series is rich enough that the cross-section adds nothing).
+
+    There is deliberately no auto-router: which engine wins is a property of the data-
+    generating process (is the cross-section informative?), not of data shape, and it
+    cannot be read off shape or availability without either guessing wrong on a whole class
+    of panels or peeking at held-out error (which would leak look-ahead). See
+    bench/tensor_probe/e6,e7 for the evidence. So the user picks; the default is the
+    always-safe 'joint'."""
     if engine == "joint":
         return np.asarray(_core.online_impute(X, meta), float)
-    raise ValueError(f"engine must be 'auto', 'joint' or 'per_entity'; got {engine!r}")
+    if engine == "per_entity":
+        return _impute_per_entity(X, meta)
+    raise ValueError(f"engine must be 'joint' or 'per_entity'; got {engine!r}")
 
 
 class CafeResult:
@@ -454,12 +436,10 @@ def impute(data, meta=None, return_mask=False, missingness_kwargs=None, panel=No
     entity_col)``. Returns the same container type with missing values filled, using only
     past + contemporaneous information (no look-ahead).
 
-    For panel data, ``engine`` selects the imputation strategy: ``'joint'`` (default,
-    the validated cross-entity bilinear core), ``'per_entity'`` (independent 2D per
-    series -- better when each series is long/wide/lightly-missing enough to model on its
-    own), or ``'auto'`` (a causal-clean, shape-only structural router between the two).
-    ``'auto'`` is opt-in: it helps on sparse/short/few-feature panels but is not yet
-    calibrated across all data types, so the default stays on the validated ``'joint'``.
+    For panel data, ``engine`` selects the imputation strategy: ``'joint'`` (default, the
+    validated cross-entity bilinear core -- pools the contemporaneous cross-section) or
+    ``'per_entity'`` (independent 2D per series -- opt in when each series is rich enough
+    that the cross-section adds nothing, e.g. long history with many features).
 
     With ``return_mask=True`` also returns causal missingness-as-signal features for the
     original missing pattern as ``(filled, features)`` (see :meth:`CAFE.impute`); the

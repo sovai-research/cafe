@@ -855,13 +855,19 @@ def _impute_2d(X, meta):
 # is the panel instance of the one model -- not a different technique, and chosen by the
 # meta structure (entity_ids), not by any data-driven detector.
 # --------------------------------------------------------------------------- #
-def _impute_panel(X, meta):
+def _impute_panel(X, meta, recon_out=None):
     X = np.ascontiguousarray(np.asarray(X, float))
     eids = np.asarray(meta["entity_ids"])
     tids = np.asarray(meta["time_ids"])
     T_rows, N = X.shape
     E = int(eids.max()) + 1
     out = X.copy()
+    # Optional: when ``recon_out`` is a dict, expose the model's structural reconstruction
+    # (entity_FE + time_FE + low-rank) at EVERY cell -- observed included -- under key
+    # 'recon'. This is the shared-component fit; X - recon is the residual a second,
+    # idiosyncratic stage can model (common + idiosyncratic backfitting). Default None is
+    # a no-op, so the standard fill path is byte-for-byte unchanged.
+    recon_full = np.full_like(X, np.nan) if recon_out is not None else None
 
     uniq_t = np.unique(tids)
     rows_at = {t: np.where(tids == t)[0] for t in uniq_t}
@@ -999,6 +1005,8 @@ def _impute_panel(X, meta):
                 except Exception:
                     A[e] = np.linalg.lstsq(Gk, rhs, rcond=None)[0]
         recon = (A[ent_t] * g_t[None, :]) @ Wt.T           # (n_e, N)
+        if recon_full is not None:                          # structural fit at all cells
+            recon_full[rs] = efe + time_fe[None, :] + recon
 
         # fill missing cells: entity FE + time FE + low-rank recon + idiosyncratic carry.
         # The carry = decayed last idiosyncratic residual (resid - recon) of THAT
@@ -1093,6 +1101,8 @@ def _impute_panel(X, meta):
     if np.isnan(out).any():
         gfe = np.where(g_cnt > 0, g_sum / np.maximum(g_cnt, 1), 0.0)
         idx = np.where(np.isnan(out)); out[idx] = np.take(gfe, idx[1])
+    if recon_out is not None:
+        recon_out["recon"] = recon_full
     return out
 
 

@@ -1,21 +1,32 @@
 \begin{table}[t]\centering\small
 \setlength{\tabcolsep}{4pt}
-\caption{\textbf{The causal horse race (mean MAE $\downarrow$ over 5 real datasets, 10% MCAR).} Every method held to strict point-in-time evaluation; deep models applied via right-edge readout (causal\_race). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear. \cafe{} leads the only leaderboard valid for sequential decisions.}
+\caption{\textbf{The causal horse race --- contiguous block gaps (mean MAE $\downarrow$ over 5 real datasets, 10%).} Every method held to strict point-in-time evaluation (deep models trained on history only and applied via right-edge readout, causal in both parameters and inference). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear; the deep imputers collapse once the future is withheld. This is the only leaderboard valid for sequential decisions.}
 \label{tab:causalrace}
 \begin{tabular}{@{}lcc@{}}
 \toprule
 Method & Causal MAE $\downarrow$ & Family \\
 \midrule
-LOCF & 0.186 & online \\
-\textbf{CAFE} & \textbf{0.190} & factor (ours) \\
-OnlineEWCov & 0.191 & online \\
-BayOTIDE & 0.268 & online* \\
-ImputeFormer & 0.514 & deep (right-edge) \\
-gcimpute & 0.562 & online \\
-SAITS & 0.564 & deep (right-edge) \\
-BRITS & 0.604 & deep (right-edge) \\
-Transformer & 0.608 & deep (right-edge) \\
-TimesNet & 0.700 & deep (right-edge) \\
+BayOTIDE & 0.322 & online* \\
+\textbf{CAFE} & \textbf{0.391} & factor (ours) \\
+OnlineEWCov & 0.406 & online \\
+KalmanLL & 0.467 & online \\
+EWMA & 0.470 & online \\
+LOCF & 0.492 & online \\
+XSecMean & 0.492 & online \\
+OnlineMeanVar & 0.508 & online \\
+RollingMean & 0.547 & online \\
+RollingMedian & 0.553 & online \\
+SeasonalNaive & 0.581 & online \\
+gcimpute & 0.698 & online \\
+ImputeFormer & 0.788 & deep (right-edge) \\
+GROUSE & 0.812 & online \\
+SAITS & 0.871 & deep (right-edge) \\
+Transformer & 0.877 & deep (right-edge) \\
+Zero & 0.895 & online \\
+TimesNet & 0.928 & deep (right-edge) \\
+CausalMean & 0.993 & online \\
+BRITS & 1.141 & deep (right-edge) \\
+Drift & 2.364 & online \\
 \bottomrule
 \end{tabular}
 \end{table}

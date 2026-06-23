@@ -1,0 +1,35 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (scattered (MCAR) gaps).} Mean MAE over 5 real datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. The deep imputers' large positive $\Delta$ is look-ahead they cannot keep in a backtest; \cafe{}'s $\Delta$ is $0$ by construction.}
+\label{tab:bidirracemcar}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Method & Bidir MAE & $\Delta$ look-ahead & Family \\
+\midrule
+LinearInterp & 0.129 & -- & classical \\
+LOCF & 0.183 & 0.000 & online \\
+XSecMean & 0.183 & 0.000 & online \\
+OnlineEWCov & 0.188 & 0.000 & online \\
+\textbf{CAFE} & 0.217 & 0.000 & factor (ours) \\
+Drift & 0.252 & 0.000 & online \\
+TRMF & 0.253 & -- & classical \\
+BayOTIDE & 0.266 & 0.000 & online* \\
+KalmanLL & 0.294 & 0.000 & online \\
+EWMA & 0.329 & 0.000 & online \\
+ImputeFormer & 0.357 & 0.227 & deep (right-edge) \\
+BRITS & 0.360 & 0.666 & deep (right-edge) \\
+SAITS & 0.365 & 0.417 & deep (right-edge) \\
+Transformer & 0.372 & 0.412 & deep (right-edge) \\
+TimesNet & 0.385 & 0.454 & deep (right-edge) \\
+RollingMean & 0.387 & 0.000 & online \\
+RollingMedian & 0.389 & 0.000 & online \\
+OnlineMeanVar & 0.446 & 0.000 & online \\
+GROUSE & 0.515 & 0.000 & online \\
+gcimpute & 0.588 & 0.000 & online \\
+SeasonalNaive & 0.593 & 0.000 & online \\
+SoftImpute & 0.606 & -- & classical \\
+Zero & 0.857 & 0.000 & online \\
+CausalMean & 0.973 & 0.000 & online \\
+\bottomrule
+\end{tabular}
+\end{table}

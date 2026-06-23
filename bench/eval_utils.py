@@ -52,6 +52,36 @@ def mcar_mask(shape, rate: float, seed: int) -> np.ndarray:
     return np.random.default_rng(seed).random(shape) < rate
 
 
+def block_mask(shape, rate: float, seed: int, min_gap: int = 8, max_gap: int = 40) -> np.ndarray:
+    """Per-column CONTIGUOUS gaps (True = held out) totalling ~rate of each column.
+
+    This is the regime where last-value/local methods fail (no nearby observation) and
+    a model with AR+season+factor extrapolation matters -- and the realistic shape of a
+    sensor outage or a market closure in a backtest."""
+    T, N = shape
+    rng = np.random.default_rng(seed)
+    M = np.zeros((T, N), bool)
+    target = int(round(rate * T))
+    for j in range(N):
+        filled, guard = 0, 0
+        while filled < target and guard < 200:
+            g = int(rng.integers(min_gap, max_gap + 1))
+            g = min(g, T)
+            s = int(rng.integers(0, max(1, T - g)))
+            if not M[s:s + g, j].any():
+                M[s:s + g, j] = True
+                filled += g
+            guard += 1
+    return M
+
+
+def make_mask(pattern: str, shape, rate: float, seed: int) -> np.ndarray:
+    """Dispatch by pattern name: 'mcar'/'point' or 'block'."""
+    if pattern in ("block", "subseq", "subsequence"):
+        return block_mask(shape, rate, seed)
+    return mcar_mask(shape, rate, seed)
+
+
 def score_masked(truth: np.ndarray, pred: np.ndarray, mask: np.ndarray) -> dict:
     """MAE/RMSE on held-out cells only; NaN/Inf in pred is penalised, not ignored."""
     mask = np.asarray(mask, bool)

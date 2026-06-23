@@ -42,6 +42,7 @@ EPOCHS = int(os.environ.get("HR_EPOCHS", 8))
 SEEDS = list(range(int(os.environ.get("HR_SEEDS", 1))))
 WINDOW = int(os.environ.get("HR_WINDOW", 24))
 RATE = float(os.environ.get("HR_RATE", 0.10))
+PATTERNS = os.environ.get("HR_PATTERNS", "block,mcar").split(",")
 DATASETS = os.environ.get("HR_DATASETS",
                           "fredmd,exchange,airquality,appliances,beijing").split(",")
 CACHE = os.path.join(HERE, "horserace_cache.json")
@@ -96,12 +97,20 @@ def _classical_methods():
         out["LinearInterp"] = ("classical", lambda X: Nai.linear_interp(X, {}), None)
     except Exception as e:
         print("  [skip] LinearInterp:", e)
+    return out
+
+
+def _simple_causal_methods():
+    """The full suite of simple causal baselines (mean/median/rolling/drift/Kalman/
+    EWMA/seasonal/cross-section/LOCF/GROUSE/...). All strictly point-in-time."""
+    out = {}
     try:
-        import c_baselines as C
-        out["LOCF"] = ("causal", lambda X: C.locf_impute(X, {}),
-                       lambda X: C.locf_impute(X, {}))
+        import causal_simple as CS
+        for name, fn in CS.CAUSAL_SIMPLE.items():
+            g = (lambda f: (lambda X: f(X, {})))(fn)
+            out[name] = ("causal", g, g)       # causal natively: bidir mirrors causal
     except Exception as e:
-        print("  [skip] LOCF:", e)
+        print("  [skip] simple causal suite:", e)
     return out
 
 
@@ -123,18 +132,17 @@ def _online_causal_methods():
             out["BayOTIDE"] = ("online", b, b)     # online filter (not strict PIT)
     except Exception as e:
         print("  [skip] online competitors:", e)
-    try:
-        import online_baselines as OB
-        _ewcov = OB.make_online_ewcov()
-        e = lambda X: _ewcov(X, {})
-        out["OnlineEWCov"] = ("causal", e, e)
-    except Exception as ex:
-        print("  [skip] online_baselines:", ex)
     return out
 
 
-def _deep_methods(Xobs):
-    """PyPOTS models: same trained weights, two readouts (bidir + causal)."""
+def _deep_methods(Xobs_full, Xobs_hist):
+    """PyPOTS models, two HONESTLY-DIFFERENT trainings:
+      * bidir  -- trained transductively on the FULL series (standard, future-using),
+                  full-window readout.
+      * causal -- trained on HISTORY ONLY (Xobs_hist = data < t0), then right-edge
+                  readout. This is causal in BOTH senses (parameters AND inference use
+                  only data <= t) -- matching CAFE's standard, not just inference-causal.
+    """
     out = {}
     try:
         import deep_baselines as D
@@ -146,11 +154,13 @@ def _deep_methods(Xobs):
         return out
     for name in ["SAITS", "BRITS", "Transformer", "TimesNet", "ImputeFormer"]:
         try:
-            imp = D.build(name, L=WINDOW, epochs=EPOCHS)
-            imp.fit(Xobs)
+            m_bi = D.build(name, L=WINDOW, epochs=EPOCHS)
+            m_bi.fit(Xobs_full)                       # transductive (full series)
+            m_ca = D.build(name, L=WINDOW, epochs=EPOCHS)
+            m_ca.fit(Xobs_hist)                       # history only -> no training leak
             out[name] = ("deep",
-                         (lambda m: (lambda X: m.fill_bidir(X)))(imp),
-                         (lambda m: (lambda X: m.fill_causal(X)))(imp))
+                         (lambda m: (lambda X: m.fill_bidir(X)))(m_bi),
+                         (lambda m: (lambda X: m.fill_causal(X)))(m_ca))
         except Exception as e:
             print(f"  [skip] {name}:", repr(e)[:160])
     return out
@@ -167,23 +177,31 @@ def _run_fn(fn, Xobs, truth, mask):
     return sc["mae"], sc["rmse"], sec
 
 
-def race_dataset(name, seed):
+def race_dataset(name, seed, pattern="block"):
     clean = _load(name)
-    mask = EU.mcar_mask(clean.shape, RATE, seed)
+    T, N = clean.shape
+    t0 = int(T * 0.6)                                  # history / live (deployment) split
+    # Backtest framing: hold out cells ONLY in the live segment (where a deployed model
+    # would actually be imputing). History stays observed and is the only data a causal
+    # method may train on.
+    mask = np.zeros((T, N), bool)
+    mask[t0:] = EU.make_mask(pattern, (T - t0, N), RATE, seed)
     Xstd = EU.standardize_on_observed(clean, mask)     # LEAK-FREE: stats from visible cells
     Xobs = Xstd.copy()
     Xobs[mask] = np.nan
+    Xobs_hist = Xobs[:t0]                               # data < t0 only (no future)
     truth = Xstd
 
     methods = {}
     methods.update(_cafe_method())
-    methods.update(_classical_methods())
-    methods.update(_online_causal_methods())
-    methods.update(_deep_methods(Xobs))         # trains on this dataset/seed's Xobs
+    methods.update(_simple_causal_methods())           # full naive causal suite
+    methods.update(_classical_methods())               # non-causal batch (bidir only)
+    methods.update(_online_causal_methods())           # gcimpute / BayOTIDE
+    methods.update(_deep_methods(Xobs, Xobs_hist))     # bidir=full, causal=history-trained
 
     rows = []
     for mname, (family, bfn, cfn) in methods.items():
-        rec = {"dataset": name, "method": mname, "family": family,
+        rec = {"dataset": name, "method": mname, "family": family, "pattern": pattern,
                "bidir_mae": None, "bidir_rmse": None, "bidir_sec": None,
                "causal_mae": None, "causal_rmse": None, "causal_sec": None,
                "delta": None, "causal_verified": None, "seed": seed}
@@ -251,6 +269,13 @@ def _agg(results):
 
 
 def write_tables(results, meta):
+    patterns = [p for p in PATTERNS if any(r["pattern"] == p for r in results)]
+    for pat in patterns:
+        suffix = "" if pat == patterns[0] else f"_{pat}"   # first pattern = headline files
+        _write_pattern_tables([r for r in results if r["pattern"] == pat], pat, suffix)
+
+
+def _write_pattern_tables(results, pattern, suffix):
     agg = _agg(results)
     methods = sorted({m for (_, m) in agg})
     datasets = [d for d in DATASETS if any(ds == d for (ds, _) in agg)]
@@ -263,14 +288,18 @@ def write_tables(results, meta):
     # ---- CAUSAL leaderboard (the showcase): sorted by mean causal MAE ----
     causal_rows = [(m, mean_over_ds(m, "causal_mae")) for m in methods]
     causal_rows = sorted([r for r in causal_rows if r[1] is not None], key=lambda r: r[1])
+    patname = {"block": "contiguous block gaps", "mcar": "scattered (MCAR) gaps",
+               "subseq": "subsequence gaps"}.get(pattern, pattern)
     lines = [r"\begin{table}[t]\centering\small",
              r"\setlength{\tabcolsep}{4pt}",
-             r"\caption{\textbf{The causal horse race (mean MAE $\downarrow$ over %d real datasets, %d%% MCAR).} "
-             r"Every method held to strict point-in-time evaluation; deep models applied via right-edge "
-             r"readout (causal\_race). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be "
-             r"made causal and do not appear. \cafe{} leads the only leaderboard valid for sequential decisions.}"
-             % (len(datasets), int(RATE * 100)),
-             r"\label{tab:causalrace}",
+             r"\caption{\textbf{The causal horse race --- %s (mean MAE $\downarrow$ over %d real datasets, %d%%).} "
+             r"Every method held to strict point-in-time evaluation (deep models trained on history only and "
+             r"applied via right-edge readout, causal in both parameters and inference). Batch methods "
+             r"(SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear; the deep "
+             r"imputers collapse once the future is withheld. This is the only leaderboard valid for "
+             r"sequential decisions.}"
+             % (patname, len(datasets), int(RATE * 100)),
+             r"\label{tab:causalrace%s}" % suffix.replace("_", ""),
              r"\begin{tabular}{@{}lcc@{}}", r"\toprule",
              r"Method & Causal MAE $\downarrow$ & Family \\", r"\midrule"]
     famlabel = {"cafe": "factor (ours)", "causal": "online", "online": "online*",
@@ -281,7 +310,7 @@ def write_tables(results, meta):
         val = r"\textbf{%.3f}" % mae if fam == "cafe" else "%.3f" % mae
         lines.append(f"{bold} & {val} & {famlabel.get(fam, fam)} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
-    with open(os.path.join(ROOT, "paper", "tables", "horserace_causal.tex"), "w") as f:
+    with open(os.path.join(ROOT, "paper", "tables", f"horserace_causal{suffix}.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
 
     # ---- BIDIRECTIONAL leaderboard + look-ahead gap ----
@@ -289,11 +318,12 @@ def write_tables(results, meta):
     bidir_rows = sorted([r for r in bidir_rows if r[1] is not None], key=lambda r: r[1])
     lines = [r"\begin{table}[t]\centering\small",
              r"\setlength{\tabcolsep}{4pt}",
-             r"\caption{\textbf{Bidirectional leaderboard and the look-ahead gap.} Mean MAE over %d real "
+             r"\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (%s).} Mean MAE over %d real "
              r"datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: "
-             r"the accuracy a method silently borrows from the future. \cafe{}'s $\Delta$ is $0$ by construction.}"
-             % len(datasets),
-             r"\label{tab:bidirrace}",
+             r"the accuracy a method silently borrows from the future. The deep imputers' large positive "
+             r"$\Delta$ is look-ahead they cannot keep in a backtest; \cafe{}'s $\Delta$ is $0$ by construction.}"
+             % (patname, len(datasets)),
+             r"\label{tab:bidirrace%s}" % suffix.replace("_", ""),
              r"\begin{tabular}{@{}lccc@{}}", r"\toprule",
              r"Method & Bidir MAE & $\Delta$ look-ahead & Family \\", r"\midrule"]
     for m, mae, dl in bidir_rows:
@@ -302,9 +332,9 @@ def write_tables(results, meta):
         dstr = "%.3f" % dl if dl is not None else "--"
         lines.append(f"{bold} & {mae:.3f} & {dstr} & {famlabel.get(fam, fam)} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
-    with open(os.path.join(ROOT, "paper", "tables", "horserace_bidir.tex"), "w") as f:
+    with open(os.path.join(ROOT, "paper", "tables", f"horserace_bidir{suffix}.tex"), "w") as f:
         f.write("\n".join(lines) + "\n")
-    print("[tables] wrote paper/tables/horserace_causal.tex + horserace_bidir.tex")
+    print(f"[tables] wrote horserace_causal{suffix}.tex + horserace_bidir{suffix}.tex ({pattern})")
 
 
 # --------------------------------------------------------------------------- #
@@ -321,13 +351,14 @@ def main():
         pv = tv = "n/a"
 
     results = []
-    for ds in DATASETS:
-        for seed in SEEDS:
-            print(f"\n=== {ds} ({DATASET_DESC.get(ds, ds)})  seed={seed} ===")
-            try:
-                results.extend(race_dataset(ds, seed))
-            except Exception as e:
-                print(f"  dataset {ds} failed:", repr(e)[:160])
+    for pattern in PATTERNS:
+        for ds in DATASETS:
+            for seed in SEEDS:
+                print(f"\n=== [{pattern}] {ds} ({DATASET_DESC.get(ds, ds)})  seed={seed} ===")
+                try:
+                    results.extend(race_dataset(ds, seed, pattern))
+                except Exception as e:
+                    print(f"  dataset {ds} failed:", repr(e)[:160])
 
     verify = verify_causal_methods()
     print("\n[causal-verify]", verify)
@@ -335,7 +366,13 @@ def main():
     meta = {"datasets": DATASETS, "rows_cap": ROWS, "epochs": EPOCHS,
             "seeds": len(SEEDS), "window": WINDOW, "rate": RATE,
             "pypots_version": pv, "torch_version": tv,
+            "protocol": "temporal split 60/40; hold out RATE of LIVE-segment cells; "
+                        "deep CAUSAL models trained on HISTORY only (no training leak) + "
+                        "right-edge readout; deep BIDIR trained transductively (full series); "
+                        "CAFE/online run point-in-time; all scored on identical live cells",
             "leak_free": "standardize_on_observed (post-mask, visible-only stats)",
+            "causal_sense": "causal column is causal in BOTH parameters and inference "
+                            "(matches CAFE); bidir column is the standard future-using setting",
             "causal_verified": verify,
             "cmd": ".venv-bench/bin/python bench/exp_horserace.py"}
     with open(CACHE, "w") as f:

@@ -18,6 +18,11 @@ pandas = ["pandas>=1.3"]
 polars = ["polars>=0.20"]
 viz = ["matplotlib>=3.5"]
 all = ["pandas>=1.3", "polars>=0.20", "matplotlib>=3.5"]
+# Head-to-head causal horse race only (NOT needed to use CAFE). Installs the deep
+# baselines via PyPOTS + the online Gaussian copula. Keep these OUT of the core so the
+# library stays numpy-only. BayOTIDE has no PyPI release -- git-clone it separately.
+# Recommended in an isolated venv: python -m venv .venv-bench && .venv-bench/bin/pip install -e ".[bench]"
+bench = ["pypots>=1.4", "torch>=2.2", "gcimpute>=0.0.4", "matplotlib>=3.5"]
 dev = [
     "pandas>=1.3",
     "polars>=0.20",
