@@ -498,33 +498,19 @@ marginally favours TRMF ($-0.015$ MAE), which we report honestly rather than
 hide. All three paired differences are significant at $p<0.05$.
 \input{tables/seeds}
 
-\paragraph{The cost of look-ahead.} \S\ref{sec:model} argued that non-causal
-imputers leak the future; here we measure the damage. On ETTh1 we train a ridge
-forecaster to predict the next step from imputed features under a strict
-$70/30$ temporal split, then score it two ways: \emph{reported} (features from a
-single batch imputation of the whole series) and \emph{live} (each test row
-re-imputed point-in-time). The gap $\Delta_{R^2}$ is pure look-ahead optimism.
-Bidirectional imputers inflate reported $R^2$ by up to $0.48$ (SoftImpute) and
-$0.19$ (TRMF): TRMF's flattering reported $R^2$ ($0.36$) collapses to $0.16$ once
-the imputation is done honestly point-in-time, and that $0.19$ is pure
-look-ahead. \cafe{}'s reported and live scores are identical by construction, and
-the model-free \emph{revision moat} corroborates it---a batch method rewrites an
-early cell by $0.5$--$0.7$ SD as the future arrives, \cafe{} by exactly zero
-(Table~\ref{tab:leakage}, Fig.~\ref{fig:leakage}).
-\input{tables/leakage}
-
-\paragraph{A sequential-decision backtest.} The look-ahead leak is most damaging
-where it is hardest to spot: a financial backtest. Table~\ref{tab:backtest} runs
-the same downstream model two ways---\emph{reported} (test features from a single
-batch imputation of the whole panel, the number a naive backtest prints) and
-\emph{live} (each test row re-imputed strictly point-in-time, walk-forward)---and
-reports next-step forecast $R^2$ and a toy long/short Sharpe. Non-causal imputers
-show large reported-minus-live optimism (on ETTh1, SoftImpute $+0.864$ $R^2$ and
-$+0.39$ Sharpe; TRMF $+0.757$ $R^2$), while \cafe{}'s gap is exactly $0$ by
-truncation invariance, verified by the same look-ahead checker. This mirrors the
-look-ahead inflation documented for cross-sectionally imputed firm characteristics
-by Bryzgalova et al.~\cite{bryzgalova2025missing}.
-\input{tables/backtest}
+\paragraph{Look-ahead inflates downstream evaluation.} The leak of
+\S\ref{sec:model} is most damaging downstream: features imputed with a non-causal
+method carry future information into a forecaster or backtest, inflating its
+\emph{reported} score above anything achievable \emph{live}. We measure this
+directly, as a deployment-realistic walk-forward on structured panels, in the
+Online Downstream Test below---where the non-causal imputers' apparent edge
+evaporates point-in-time while \cafe{}'s reported score equals its live score by
+construction (the imputation analogue of the look-ahead inflation documented for
+cross-sectionally imputed firm characteristics by Bryzgalova et
+al.~\cite{bryzgalova2025missing}). The model-free \emph{revision moat} corroborates
+it: a non-causal batch method silently rewrites an early imputed cell by up to half
+a standard deviation as the future arrives (Table~\ref{tab:causalverify}), \cafe{}
+by exactly zero.
 
 \paragraph{Reconstruction MAE is not downstream utility.} Lower imputation error
 does not guarantee a better downstream model. On the smooth, low-cross-section
@@ -799,16 +785,6 @@ head-to-head ranking; see Table~\ref{tab:publishedrefs}.}
 These panels accompany the experiments of \S\ref{sec:exp}; every number is from a
 real run on the stated data.
 
-\begin{figure}[h]\centering
-\includegraphics[width=0.92\textwidth]{figures/leakage.pdf}
-\caption{\textbf{The cost of look-ahead (Table~\ref{tab:leakage}).} \emph{Left:}
-a downstream ridge forecaster's reported vs.\ honest \emph{live} $R^2$ on ETTh1;
-batch (bidirectional) imputation inflates the reported score, and the same
-fixed model is worse live, while \cafe{} is identical both ways. \emph{Right:}
-mean $|$revision$|$ of an early imputed cell as the future is revealed---batch
-methods keep rewriting their own past, \cafe{} is flat at zero.}
-\label{fig:leakage}
-\end{figure}
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.74\textwidth]{figures/longgap.pdf}
