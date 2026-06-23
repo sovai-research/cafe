@@ -335,7 +335,7 @@ def _write_pattern_tables(results, pattern, suffix):
     causal_rows = sorted([r for r in causal_rows if r[1] is not None], key=lambda r: r[1])
     colspec = "lcc" + ("c" if hasfx else "")
     fxhdr = r" & FX (ctrl)$\downarrow$" if hasfx else ""
-    lines = [r"\begin{table*}[t]\centering\small",
+    lines = [r"\begin{table*}[tbp]\centering\small",
              r"\setlength{\tabcolsep}{4pt}",
              r"\caption{\textbf{The causal horse race --- %s (mean causal MAE $\downarrow$ over %d "
              r"\emph{structured} real datasets, %d%%).} A benchmark of genuine common-factor structure "
@@ -363,7 +363,7 @@ def _write_pattern_tables(results, pattern, suffix):
     bidir_rows = sorted([r for r in bidir_rows if r[1] is not None], key=lambda r: r[1])
     colspec = "lccc" + ("c" if hasfx else "")
     fxhdr = r" & FX (ctrl)" if hasfx else ""
-    lines = [r"\begin{table*}[t]\centering\small",
+    lines = [r"\begin{table*}[tbp]\centering\small",
              r"\setlength{\tabcolsep}{4pt}",
              r"\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (%s).} Mean MAE over %d "
              r"\emph{structured} real datasets under the standard (future-using) protocol, and $\Delta=$ "

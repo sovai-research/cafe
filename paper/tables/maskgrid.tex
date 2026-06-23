@@ -1,4 +1,4 @@
-\begin{table*}[t]\centering\small
+\begin{table*}[tbp]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{Mask grid: MAE (and RMSE) across missingness pattern $\times$ rate.} Primary metrics are MAE / RMSE (lower better), \emph{not} correlation. Each cell is the mean over Beijing, ETTh1, AirQ, Chlorine, Syn2D, Syn1Dseas and 3 seeds; real series capped to the first 1500 rows for speed. \textbf{Point/MCAR} drops cells independently; \textbf{Subsequence} removes per-column contiguous runs of fixed-ish length; \textbf{Block} removes per-column blackouts of widely varying length. \cafe{} and LOCF are strictly causal (point-in-time); LinInterp (reads the next observed value) and SoftImpute (batch, two-sided) are non-causal references (\emph{italic}), shown for context only. \textbf{Bold} $=$ best \emph{causal} method per row. Format: MAE\,/\,RMSE.}
 \label{tab:maskgrid}

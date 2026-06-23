@@ -203,11 +203,11 @@ method that is simultaneously causal/point-in-time, CPU-only, \emph{and}
 competitive with bidirectional deep SOTA on point missingness---the defensible
 contribution of this paper.
 \item \textbf{The first causal leaderboard.} We run the strongest deep imputers
-ourselves on five real datasets under a strict point-in-time protocol (via
-right-edge readout, \S\ref{sec:exp}), not just published numbers. Held to
-causality, the deep models collapse and the non-causal cheap baselines that win
-the standard leaderboard vanish; \cafe{} is the best causal imputer on every
-dataset with genuine factor structure (Fig.~\ref{fig:causalrace},
+ourselves on eight structured real datasets (plus an FX no-structure control)
+under a strict point-in-time protocol (via right-edge readout, \S\ref{sec:exp}),
+not just published numbers. Held to causality, the deep models collapse and the
+non-causal cheap baselines that win the standard leaderboard vanish; \cafe{} is the
+best causal imputer on $7$ of the $8$ structured panels (Fig.~\ref{fig:causalrace},
 Table~\ref{tab:horseraceperds}).
 \end{enumerate}
 
@@ -352,9 +352,10 @@ reproducible: per-column $z$-score applied \emph{once}; mask $=$ $10\%$ MCAR
 seed $\in\{0,1,2\}$; \cafe{} imputes the \emph{full} series causally/online (no
 windows, no train/test split); MAE is computed on the standardised scale over
 masked cells and averaged over the $3$ seeds. Under this protocol \cafe{}'s MAE is
-$\mathbf{0.108}$, on one CPU core in $\sim\!1.3$\,s (Table~\ref{tab:runtime}). Two
-CPU baselines we run live under the \emph{same} mask: the median ($0.763$) and
-linear interpolation ($0.135$). Linear interpolation is the telling cheap
+$\mathbf{0.108}$ on one CPU core (on the smaller $3000$-row slice used for the
+timing comparison, Table~\ref{tab:runtime}, it is $0.134$ at $1.16$\,s). Two
+CPU baselines we run live under the \emph{same} full-slice mask: the median
+($0.763$) and linear interpolation ($0.135$). Linear interpolation is the telling cheap
 baseline---under scattered point missingness a gap is flanked by observed
 neighbours, so a straight line between them is hard to beat---but it is
 \emph{non-causal} (it reads the next observed value), whereas \cafe{} is causal.
@@ -379,7 +380,8 @@ band \emph{while being causal and CPU-only}, which no published deep model is.
 \paragraph{The causal horse race (we run the deep models ourselves).}
 Rather than rely on published numbers, we run the strongest deep imputers
 (SAITS, BRITS, Transformer, TimesNet, ImputeFormer, via PyPOTS) \emph{ourselves},
-on the same five real datasets, same masks, same held-out cells, on one CPU core
+on the same eight structured real datasets (plus an FX control), same masks, same
+held-out cells, on one CPU core
 --- and, for the first time to our knowledge, under a strict \emph{causal}
 protocol as well as the usual bidirectional one. Each method is scored two ways:
 \emph{(i)} \textbf{bidirectional}, the field's standard, in which a fill may use
@@ -391,15 +393,18 @@ position, which depends on data $\le t$ --- a bidirectional architecture run
 honestly as a filter, verified truncation-invariant). The gap
 $\Delta=\text{causal}-\text{bidirectional}$ is the accuracy a method silently
 borrows from the future; \cafe{} and the online baselines have $\Delta=0$ by
-construction. Datasets span macro (FRED-MD), finance (FX), air-quality, energy
-and Beijing; we also race the full suite of cheap causal baselines (LOCF,
+construction. Datasets span macro (FRED-MD), two air-quality panels (Beijing,
+AirQuality), appliance and electricity energy, solar power, road traffic and
+transformer load, with finance (FX) as a no-structure control; we also race the
+full suite of cheap causal baselines (LOCF,
 expanding mean, rolling mean/median, EWMA, drift, a Kalman local level,
 cross-sectional mean, GROUSE, online Gaussian copula and the online Bayesian
 imputer BayOTIDE).
 
 The headline race is a \emph{benchmark of structure}: its mean is taken over the
-eight datasets with genuine common-factor structure (FRED-MD, air-quality,
-appliance energy, Beijing, two traffic panels, solar power, electricity demand),
+eight datasets with genuine common-factor structure (FRED-MD; two air-quality
+panels, Beijing and AirQuality; appliance and electricity energy; solar power; road
+traffic; and transformer load, \textsc{etth}),
 with the near-random-walk FX panel kept as an explicit no-structure \emph{control}
 column, never folded in (averaging an adversarial off-regime dataset into the mean
 would only hide the real ranking). Three results (Fig.~\ref{fig:causalrace},
@@ -479,38 +484,8 @@ with MAE/RMSE. Table~\ref{tab:maskgrid} sweeps missingness \emph{pattern}
 (point/MCAR, subsequence, block) $\times$ \emph{rate} ($10/30/50\%$) over six
 datasets and $3$ seeds, with a gap-length stratification. \cafe{} is the best
 \emph{causal} method in every cell; the non-causal references (linear
-interpolation, SoftImpute) are shown italic for context, never bold. As a
-context-only correlation view spanning the ImputeBench~\cite{khayati2020} block
-and TSI-Bench~\cite{du2024tsibench} point protocols, Table~\ref{tab:results}
-reports Pearson $r$ on six datasets; among causal methods \cafe{} dominates ($0.89$
-vs.\ $0.41$ for mean/LOCF) and is competitive with non-causal batch references.
+interpolation, SoftImpute) are shown italic for context, never bold.
 \input{tables/maskgrid}
-
-\begin{table}[t]\centering\small
-\setlength{\tabcolsep}{3.5pt}
-\caption{Accuracy (Pearson $r$, higher better) across regimes, shown as a
-\emph{secondary, correlation-based} view (MAE/RMSE in Table~\ref{tab:maskgrid} is
-primary; $r$ is affine-invariant and hides bias). \textbf{Causal} vs.\
-\emph{non-causal} references (full-series access). These cells are
-hand-transcribed from per-dataset runs and are pending a single committed
-generating script; treat them as indicative.}
-\label{tab:results}
-\begin{tabular}{@{}lccc|ccc@{}}
-\toprule
-& \multicolumn{3}{c|}{\textbf{Causal}} & \multicolumn{3}{c}{\emph{Non-causal ref.}}\\
-Dataset & Mean & LOCF & \textbf{\cafe} & $k$NN & SoftI. & TRMF \\
-\midrule
-AirQuality   & $-.07$ & $-.07$ & $\mathbf{.73}$ & .75 & $-.42$ & .80 \\
-Chlorine     & .70 & .70 & $\mathbf{.94}$ & .99 & .93 & .99 \\
-Temperature  & .07 & .07 & $\mathbf{.91}$ & .99 & .65 & .99 \\
-Gas-Drift    & $-.01$ & $-.01$ & $\mathbf{.92}$ & .92 & .82 & .97 \\
-ETTh1        & .95 & .95 & $\mathbf{.94}$ & .88 & .54 & .98 \\
-BeijingAir   & .83 & .83 & $\mathbf{.91}$ & .89 & .63 & .86 \\
-\midrule
-\textbf{Mean} & .41 & .41 & $\mathbf{.89}$ & .90 & .52 & .93 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 \paragraph{Statistical rigor (paired, multi-seed).} To avoid single-seed point
 estimates we compare \cafe{} against the strongest \emph{causal} baseline (online
@@ -550,29 +525,19 @@ look-ahead inflation documented for cross-sectionally imputed firm characteristi
 by Bryzgalova et al.~\cite{bryzgalova2025missing}.
 \input{tables/backtest}
 
-\paragraph{Reconstruction MAE is not downstream utility (and a deliberate worst
-case for \cafe{}).} Lower imputation error does not guarantee a better downstream
-model, and the cleanest way to see this is to run the test where \cafe{} has the
-\emph{least} to offer. Table~\ref{tab:downstream} imputes ETTh1 with five methods
-and trains a next-step oil-temperature forecaster under a strict temporal split.
-ETTh1 is the deliberate adversarial case for our own method: $7$ smooth, strongly
-autoregressive series with almost no exploitable cross-section---precisely the
-``no-structure'' regime where our practitioner rule (\S\ref{sec:exp}) says a
-last-value model, not a factor model, is correct. Sure enough, causal LOCF beats
-\cafe{} downstream here, and the lowest-MAE imputer overall is the \emph{non-causal}
-linear interpolator, whose downstream $R^2$ even exceeds the causal Oracle---purely
-via look-ahead (interpolation reads the gap's future endpoint). Two honest
-clarifications matter. First, LOCF and \cafe{} are both \emph{verified
-point-in-time} on this table (batch and walk-forward test features are bitwise
-identical, max revision $0$), so LOCF's win is a real property of a smooth AR
-series, not a leak---whereas linear interpolation's and SoftImpute's apparent gains
-are look-ahead they cannot keep live. Second, this is reconstruction-vs-utility on
-the \emph{wrong} regime for \cafe{} by design; the matched regime---structured
-panels, evaluated the way you deploy---is the Online Downstream Test below, where
-the result flips. Low reconstruction error is therefore neither necessary nor
-sufficient for honest downstream value; the causal constraint is what makes the
-reported number deployable.
-\input{tables/downstream}
+\paragraph{Reconstruction MAE is not downstream utility.} Lower imputation error
+does not guarantee a better downstream model. On the smooth, low-cross-section
+ETTh1 series---the ``no-structure'' regime where our rule (\S\ref{sec:exp})
+prescribes a last-value model---a next-step forecaster built on causal LOCF
+features beats one built on \cafe{} features (consistent with the seed study,
+Table~\ref{tab:seeds}, where carry-forward edges \cafe{} on ETTh1), and a
+\emph{non-causal} linear-interpolation fill scores highest of all by reading the
+gap's future endpoint---a look-ahead it cannot keep live. LOCF and \cafe{} are both
+verified point-in-time here (zero revision), so LOCF's edge is a real property of a
+smooth AR series, not a leak. The lesson is twofold: low reconstruction error is
+neither necessary nor sufficient for downstream value, and the matched regime for a
+factor model is a \emph{structured panel} evaluated the way you deploy---the Online
+Downstream Test.
 
 \paragraph{The Online Downstream Test (the deployment-correct evaluation).} A
 downstream score is only meaningful if it is computed the way features are produced
@@ -651,7 +616,7 @@ metrics---the continuous ranked probability score (CRPS), empirical coverage
 (PICP) at several nominal levels, and sharpness (mean interval width)---rather
 than a single likelihood number (Table~\ref{tab:calibcrps}). The honest finding
 is that the intervals are predominantly \emph{over-conservative}: observed
-coverage exceeds nominal at most dataset/level cells (mean excess $\approx+0.08$),
+coverage exceeds nominal at most dataset/level cells (mean excess $\approx+0.09$),
 with only marginal undershoots (worst $\approx0.02$) at the tightest levels. Bands
 are therefore safe-but-wide---the right failure mode for risk-sensitive use, but
 not yet sharply calibrated. Per-cell $\sigma$ does widen correctly inside long
@@ -661,10 +626,9 @@ imputation---the remaining outputs (factors, anomaly score, decomposition,
 dependency network, forecasts) are exact readouts of the same fit, illustrated in
 App.~\ref{sec:appendix} rather than benchmarked against specialised tools.
 \input{tables/calib_crps}
-\input{tables/calibration}
 
 \paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
-$1.3$\,s on a single CPU core---the best \emph{causal} MAE among the methods we
+$1.16$\,s on a single CPU core---the best \emph{causal} MAE among the methods we
 run live, at cost comparable to SoftImpute and below TRMF (Table~\ref{tab:runtime}). Cost is
 linear in series length $T$ (measured log-log slope $\approx\!1$) and strongly
 sub-linear in width $N$: each row performs only rank-$R$ Cholesky solves, never
@@ -784,7 +748,9 @@ multiple imputation. Scored by CRPS / coverage / sharpness (Table~\ref{tab:calib
 robust DFM); ARD prunes the rest, so the effective rank is discovered, not set.}
 \label{fig:fac}
 \end{figure}
+\end{multicols}
 
+\begin{multicols}{2}
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/dependency_net.pdf}
 \caption{\textbf{Dependency network.} The residual covariance recovers the cross-sectional
@@ -798,7 +764,9 @@ correlation structure between series---useful as features and for contagion anal
 outliers---a point-in-time data-quality / fault score from the same pass.}
 \label{fig:anom}
 \end{figure}
+\end{multicols}
 
+\begin{multicols}{2}
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/adaptation.pdf}
 \caption{\textbf{Self-tuning dials.} The tails ($\nu$), memory ($a$) and effective rank
@@ -812,7 +780,9 @@ adapt online from the data---no hyperparameters.}
 forecast via the AR/Kalman state---one model for fill, forecast and nowcast.}
 \label{fig:fc}
 \end{figure}
+\end{multicols}
 
+\begin{multicols}{2}
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/benchmark.pdf}
 \caption{\textbf{Accuracy.} \cafe{}'s MAE on the named Beijing Air-Quality slice
@@ -859,7 +829,7 @@ inverse.}
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.92\textwidth]{figures/calibration.pdf}
-\caption{\textbf{Calibration (Tables~\ref{tab:calibcrps},~\ref{tab:calib}).}
+\caption{\textbf{Calibration (Table~\ref{tab:calibcrps}).}
 \emph{(a)} Reliability diagram: empirical vs.\ nominal coverage---curves sit
 \emph{on or above} the diagonal at most levels (predominantly over-covering), with
 only marginal undershoots at the tightest levels. \emph{(b)} PIT histograms: a

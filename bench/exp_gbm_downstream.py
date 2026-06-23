@@ -383,7 +383,7 @@ def _write_table(agg, model_labels, datasets, n_seeds, miss_pct):
     sub = " & ".join([r"$R^2\uparrow$ & RMSE$\downarrow$" for _ in model_labels])
 
     lines = []
-    lines.append(r"\begin{table*}[t]\centering\small")
+    lines.append(r"\begin{table*}[tbp]\centering\small")
     lines.append(r"\setlength{\tabcolsep}{5pt}")
     lines.append(
         r"\caption{\textbf{Do GBMs that handle NaN natively still benefit from "

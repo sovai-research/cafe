@@ -25,14 +25,17 @@ best = {d: min(v for m, _ in methods if (v := get("block", m, d)) is not None) f
 
 caption = (
     r"\caption{\textbf{Causal horse race, per dataset (block-missing, causal MAE $\downarrow$).} "
-    r"Strictly point-in-time evaluation. \cafe{} is the best causal imputer on every dataset with "
-    r"genuine factor structure (macro, air-quality, energy, Beijing --- the four that make up the "
-    r"headline mean). Exchange* is a no-structure control (a near-random-walk FX panel), shown last "
-    r"and never folded into the mean: there a last-value / Kalman prior is correctly better, since a "
-    r"factor prior is the wrong model --- an honest off-regime limitation. Deep imputers, trained on "
-    r"history and applied strictly point-in-time, collapse throughout. Best per column in \textbf{bold}.}"
+    r"Strictly point-in-time evaluation. \cafe{} is the best causal imputer on $7$ of the $8$ "
+    r"structured panels (macro, two air-quality panels, appliance and electricity energy, solar, "
+    r"road traffic, Beijing --- the eight that make up the headline mean); it cedes only the smooth, "
+    r"low-cross-section \textsc{etth}, where a full-covariance online method wins (the same "
+    r"no-structure caveat as FX, at smaller scale). Exchange* is a no-structure control (a "
+    r"near-random-walk FX panel), shown last and never folded into the mean: there a last-value / "
+    r"Kalman prior is correctly better, since a factor prior is the wrong model --- an honest "
+    r"off-regime limitation. Deep imputers, trained on history and applied strictly point-in-time, "
+    r"collapse throughout. Best per column in \textbf{bold}.}"
 )
-L = [r"\begin{table*}[t]\centering\small", r"\setlength{\tabcolsep}{4pt}", caption,
+L = [r"\begin{table*}[tbp]\centering\small", r"\setlength{\tabcolsep}{4pt}", caption,
      r"\label{tab:horseraceperds}",
      r"\begin{tabular}{@{}l" + "c" * len(ds) + r"@{}}", r"\toprule",
      "Method (causal) & " + " & ".join(dn.get(d, d) for d in ds) + r" \\", r"\midrule"]

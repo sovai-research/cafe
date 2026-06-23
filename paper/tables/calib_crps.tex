@@ -1,4 +1,4 @@
-\begin{table*}[t]\centering\small
+\begin{table*}[tbp]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{Probabilistic calibration of \cafe{}'s predictive intervals (CRPS / coverage / sharpness / PIT).} Held-out cells under $10\%$ MCAR, 3 seeds, scored with proper probabilistic metrics imported from a single \texttt{metrics\_prob} module (CRPS, PICP coverage, sharpness, PIT). Coverage is observed empirical coverage of the central interval at each nominal level (calibrated $\Rightarrow$ observed $=$ nominal). Sharpness is the mean $90\%$ interval width; PIT dev.\ is the KS distance of the PIT to Uniform$(0,1)$ ($0$ $=$ perfectly calibrated shape). As is honest to report, the intervals are predominantly \emph{over-conservative}: observed coverage exceeds nominal at 83\% of dataset/level cells (mean excess $+.09$), so bands are safe but wider than ideal. The only exceptions are a few marginal undershoots (worst $.02$) at the tightest levels. Tightening calibration is left to future work. CRPS / sharpness / PIT dev.\ / MAE: lower $\downarrow$ is better.}
 \label{tab:calibcrps}

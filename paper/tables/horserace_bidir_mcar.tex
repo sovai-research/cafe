@@ -1,4 +1,4 @@
-\begin{table*}[t]\centering\small
+\begin{table*}[tbp]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{Bidirectional leaderboard and the look-ahead gap (scattered (MCAR) gaps).} Mean MAE over 8 \emph{structured} real datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. \cafe{} leads even here, where the deep models are allowed to see the future; their large positive $\Delta$ is look-ahead they cannot keep in a backtest, while \cafe{}'s $\Delta$ is $0$ by construction. The final column is the no-structure control (FX / Exchange, a near-random walk): a factor prior is the wrong model there, so \cafe{} is correctly beaten by a last-value/Kalman prior --- an honest off-regime limitation, kept out of the headline mean.}
 \label{tab:bidirracemcar}

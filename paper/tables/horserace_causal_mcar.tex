@@ -1,4 +1,4 @@
-\begin{table*}[t]\centering\small
+\begin{table*}[tbp]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{The causal horse race --- scattered (MCAR) gaps (mean causal MAE $\downarrow$ over 8 \emph{structured} real datasets, 10%).} A benchmark of genuine common-factor structure (macro, air-quality, energy, Beijing). Every method held to strict point-in-time evaluation (deep models trained on history only and applied via right-edge readout, causal in both parameters and inference). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear; the deep imputers collapse once the future is withheld. This is the only leaderboard valid for sequential decisions. The final column is the no-structure control (FX / Exchange, a near-random walk): a factor prior is the wrong model there, so \cafe{} is correctly beaten by a last-value/Kalman prior --- an honest off-regime limitation, kept out of the headline mean.}
 \label{tab:causalracemcar}
