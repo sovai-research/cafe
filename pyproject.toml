@@ -9,7 +9,11 @@ description = "CAFE: Causal Adaptive Factor Estimation -- zero-config, CPU-first
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "Derek Snow", email = "d.snow@sov.ai" }]
+authors = [
+    { name = "Derek Snow", email = "d.snow@sov.ai" },
+    { name = "Matthew Lyberg" },
+    { name = "Eeshaan Asodekar" },
+]
 keywords = ["imputation", "time-series", "panel-data", "causal", "factor-model", "missing-data"]
 classifiers = [
     "Development Status :: 4 - Beta",

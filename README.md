@@ -371,7 +371,7 @@ If you use CAFÉ in your research, please cite the paper ([`paper/cafe.pdf`](pap
 ```bibtex
 @misc{snow2026cafe,
   title  = {CAF\'E: Causal Adaptive Factor Estimation for Point-in-Time Imputation},
-  author = {Snow, Derek},
+  author = {Snow, Derek and Lyberg, Matthew and Asodekar, Eeshaan},
   year   = {2026},
   note   = {https://github.com/sovai-research/cafe}
 }
