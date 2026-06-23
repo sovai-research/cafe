@@ -9,8 +9,23 @@ description = "CAFE: Causal Adaptive Factor Estimation -- zero-config, CPU-first
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
-authors = [{ name = "Derek Snow" }]
+authors = [{ name = "Derek Snow", email = "d.snow@sov.ai" }]
 keywords = ["imputation", "time-series", "panel-data", "causal", "factor-model", "missing-data"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Typing :: Typed",
+]
 dependencies = ["numpy>=1.21"]   # numpy-only core — nothing else required to impute
 
 [project.optional-dependencies]
@@ -34,6 +49,8 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/sovai-research/cafe"
+Repository = "https://github.com/sovai-research/cafe"
+Issues = "https://github.com/sovai-research/cafe/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
