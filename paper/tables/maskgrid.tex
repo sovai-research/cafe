@@ -1,0 +1,34 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Mask grid: MAE (and RMSE) across missingness pattern $\times$ rate.} Primary metrics are MAE / RMSE (lower better), \emph{not} correlation. Each cell is the mean over Beijing, ETTh1, AirQ, Chlorine, Syn2D, Syn1Dseas and 3 seeds; real series capped to the first 1500 rows for speed. \textbf{Point/MCAR} drops cells independently; \textbf{Subsequence} removes per-column contiguous runs of fixed-ish length; \textbf{Block} removes per-column blackouts of widely varying length. \cafe{} and LOCF are strictly causal (point-in-time); LinInterp (reads the next observed value) and SoftImpute (batch, two-sided) are non-causal references (\emph{italic}), shown for context only. \textbf{Bold} $=$ best \emph{causal} method per row. Format: MAE\,/\,RMSE.}
+\label{tab:maskgrid}
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+Pattern & Rate & \cafe{} & LOCF & \textit{LinInterp} & \textit{SoftImpute} \\
+\midrule
+Point/MCAR & 0.1 & \textbf{0.209}\,/\,0.364 & 0.297\,/\,0.497 & \textit{0.209}\,/\,0.364 & \textit{0.753}\,/\,0.976 \\
+ & 0.3 & \textbf{0.255}\,/\,0.412 & 0.322\,/\,0.534 & \textit{0.222}\,/\,0.380 & \textit{0.790}\,/\,1.019 \\
+ & 0.5 & \textbf{0.343}\,/\,0.522 & 0.376\,/\,0.602 & \textit{0.248}\,/\,0.413 & \textit{0.798}\,/\,1.029 \\
+\midrule
+Subsequence & 0.1 & \textbf{0.295}\,/\,0.456 & 0.769\,/\,1.054 & \textit{0.613}\,/\,0.846 & \textit{0.764}\,/\,0.965 \\
+ & 0.3 & \textbf{0.372}\,/\,0.551 & 0.822\,/\,1.121 & \textit{0.652}\,/\,0.896 & \textit{0.788}\,/\,1.011 \\
+ & 0.5 & \textbf{0.487}\,/\,0.704 & 0.823\,/\,1.125 & \textit{0.681}\,/\,0.928 & \textit{0.806}\,/\,1.037 \\
+\midrule
+Block & 0.1 & \textbf{0.383}\,/\,0.566 & 0.874\,/\,1.161 & \textit{0.783}\,/\,1.037 & \textit{0.795}\,/\,1.024 \\
+ & 0.3 & \textbf{0.451}\,/\,0.677 & 0.947\,/\,1.259 & \textit{0.795}\,/\,1.065 & \textit{0.824}\,/\,1.061 \\
+ & 0.5 & \textbf{0.576}\,/\,0.820 & 1.004\,/\,1.341 & \textit{0.828}\,/\,1.120 & \textit{0.827}\,/\,1.070 \\
+\bottomrule
+\end{tabular}
+\\[6pt]
+{\small
+\textbf{Gap-length stratification} (Block missing, rate 0.3, single run on Beijing): MAE by contiguous-gap-length band. Short $=$ gap $\le 130$, Medium $\le 176$, Long $>176$ (gaps span 30--575 steps). Bold $=$ best causal.\par}
+\begin{tabular}{@{}lrcccc@{}}
+\toprule
+Gap band & $n$ & \cafe{} & LOCF & \textit{LinInterp} & \textit{SoftImpute} \\
+\midrule
+Short & 20264 & \textbf{0.290} & 0.680 & \textit{0.560} & \textit{0.588} \\
+Medium & 19819 & \textbf{0.310} & 0.808 & \textit{0.711} & \textit{0.657} \\
+Long & 19406 & \textbf{0.319} & 0.665 & \textit{0.544} & \textit{0.529} \\
+\bottomrule
+\end{tabular}
+\end{table*}

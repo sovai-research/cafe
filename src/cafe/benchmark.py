@@ -11,8 +11,12 @@ Design principles (grounded in the imputation-benchmark literature):
 * **Real, not asserted.** Every baseline here is *run live* on the same masked data with
   the same seed and scored on the same held-out cells — apples-to-apples. Published
   deep-learning numbers appear only as clearly-labelled **reference rows with a citation**,
-  from a single source per dataset (never mixing protocols), and are never silently merged
-  with the live results.
+  are never silently merged with the live results, and CAFÉ is **never ranked among
+  them** (different data variant / mask / windowed protocol — context, not a board).
+  All published numbers mirror the one registry ``bench/refs_published.py``; where two
+  sources disagree on a cell (e.g. Beijing SAITS .137 vs .155) **both** are shown, each
+  tagged with its source — we never pick one. Note CSDI (.102, TSI-Bench) is the lowest
+  published Beijing MAE, so no protocol-independent "lowest MAE" claim is made.
 * **Causal vs bidirectional is a hard separation.** Causal methods fill X[t] from data
   ≤ t (filtering, backtest-safe, deployable online); bidirectional methods use the whole
   series incl. the future (smoothing — forbidden look-ahead bias in a backtest). The table
@@ -214,34 +218,64 @@ _BASELINES = [
 
 
 # --------------------------------------------------------------------------- #
-# Published reference numbers — ONE source per dataset (never mixing protocols).
-# All BIDIRECTIONAL. Standardised MAE @ 10% point/MCAR. Verified from the papers.
-# IMPORTANT: these use a WINDOWED protocol (e.g. 24-step windows w/ train/val/test
-# split); CAFÉ's live rows above impute the FULL series causally — a different,
-# strictly-online setting. Shown for context, not as a like-for-like leaderboard.
+# Published reference numbers.
+#
+# SINGLE SOURCE OF TRUTH: bench/refs_published.py (the structured `REFS`
+# registry). That file lives in the research harness (not in the installed
+# package), so it cannot be imported here at runtime; the rows below are a
+# verbatim MIRROR of it and MUST be kept in sync with it — do not edit values
+# here without editing bench/refs_published.py. This replaces the repo's old
+# second, contradictory registry.
+#
+# All entries are BIDIRECTIONAL + GPU (each fill sees the whole series, incl.
+# the future) under a WINDOWED train/val/test protocol — a DIFFERENT data
+# variant/mask/setting from CAFÉ's full-series causal online imputation. They
+# are shown as clearly-labelled CONTEXT, never as a like-for-like leaderboard,
+# and CAFÉ is deliberately not ranked among them.
+#
+# Where two sources disagree on the same (method, dataset) cell we keep BOTH,
+# each tagged with its source (e.g. Beijing SAITS .137 [du2023] vs .155
+# [tsibench]) — we never silently pick one. Note that under the TSI-Bench
+# source CSDI (.102) is the strongest Beijing MAE, so there is no protocol-
+# independent "lowest MAE" claim.
+#
+# Each row: (method, MAE, source-tag). Source tags resolve via _SOURCES below.
 # --------------------------------------------------------------------------- #
+_SOURCES = {
+    "du2023":   "Du et al. 2023, SAITS (ESWA), Table 2",
+    "tsibench": "TSI-Bench, arXiv:2406.12747 (NeurIPS'24 D&B)",
+    "fgti2024": "FGTI, NeurIPS'24 (frequency-domain diffusion)",
+}
+
 _PUBLISHED = {
-    # Beijing Multi-Site Air-Quality — single source: TSI-Bench (one coherent table).
-    "beijing": ("TSI-Bench (arXiv:2406.12747, preprint)", [
-        ("CSDI",         0.102),
-        ("iTransformer", 0.123),
-        ("BRITS",        0.127),
-        ("Transformer",  0.142),
-        ("SAITS",        0.155),
-    ]),
-    # PhysioNet-2012 — single source: SAITS paper (Du+2023 ESWA, Table 2).
-    "physionet": ("Du+2023 ESWA (SAITS), Table 2", [
-        ("SAITS",        0.186),
-        ("Transformer",  0.190),
-        ("BRITS",        0.256),
-        ("M-RNN",        0.533),
-    ]),
-    # Electricity — single source: SAITS paper (Du+2023 ESWA, Table 2).
-    "electricity": ("Du+2023 ESWA (SAITS), Table 2", [
-        ("SAITS",        0.735),
-        ("Transformer",  0.823),
-        ("BRITS",        0.847),
-    ]),
+    # Beijing Multi-Site Air-Quality — MAE @ 10% MCAR-point.
+    # du2023 and TSI-Bench disagree on every shared method: BOTH are kept.
+    "beijing": [
+        ("CSDI",         0.102, "tsibench"),   # strongest under tsibench (< CAFÉ .108)
+        ("iTransformer", 0.123, "tsibench"),
+        ("BRITS",        0.127, "tsibench"),
+        ("BRITS",        0.153, "du2023"),
+        ("Transformer",  0.142, "tsibench"),
+        ("Transformer",  0.158, "du2023"),
+        ("SAITS",        0.137, "du2023"),
+        ("SAITS",        0.155, "tsibench"),
+        ("FGTI",         0.149, "fgti2024"),
+        ("GP-VAE",       0.268, "du2023"),
+        ("M-RNN",        0.294, "du2023"),
+    ],
+    # PhysioNet-2012 — MAE @ 10% (SAITS Table 2).
+    "physionet": [
+        ("SAITS",        0.186, "du2023"),
+        ("Transformer",  0.190, "du2023"),
+        ("BRITS",        0.256, "du2023"),
+        ("M-RNN",        0.533, "du2023"),
+    ],
+    # Electricity — MAE @ 10% (SAITS Table 2).
+    "electricity": [
+        ("SAITS",        0.735, "du2023"),
+        ("Transformer",  0.823, "du2023"),
+        ("BRITS",        0.847, "du2023"),
+    ],
 }
 
 _LOCAL = {
@@ -304,7 +338,8 @@ def _score(truth, pred, M):
 class BenchmarkResult:
     """Outcome of :func:`benchmark`. Prints grouped by kind (causal first, then
     bidirectional), each sorted by MAE. ``.plot()`` charts it; ``.to_pandas()`` returns
-    the rows; ``.published`` holds the cited reference (source, rows)."""
+    the rows; ``.published`` holds a list of ``(method, MAE, source-tag)`` cited
+    reference rows (bidirectional, different-protocol context — never head-to-head)."""
 
     def __init__(self, name, rows, published, meta):
         # causal block first, bidir block second; within each, best MAE first; failures last
@@ -343,14 +378,21 @@ class BenchmarkResult:
             else:
                 L.append(f"  {r['method']:16s} {'FAILED':>8s}  ({r.get('err','')[:28]})")
         if self.published:
-            src, prows = self.published
-            L += ["", f"PUBLISHED reference — BIDIRECTIONAL, windowed protocol [{src}].",
-                  "  (Not run here. CAFÉ above runs the FULL series causally — a different,",
-                  "   strictly-online setting; shown for context, not a like-for-like board.)",
-                  f"  {'method':16s} {'MAE':>8s}"]
-            for nm, mae in prows:
-                L.append(f"  {nm:16s} {mae:8.3f}")
-        L += ["", "★ = best causal method."]
+            prows = sorted(self.published, key=lambda r: r[1])
+            used = sorted({tag for _, _, tag in prows})
+            L += ["",
+                  "PUBLISHED reference — CONTEXT ONLY, *not* a head-to-head leaderboard.",
+                  "  All rows below are BIDIRECTIONAL + GPU (each fill sees the whole",
+                  "  series incl. the future), under a windowed train/val/test protocol",
+                  "  on a DIFFERENT data variant/mask. CAFÉ above runs the FULL series",
+                  "  causally/online — so CAFÉ is deliberately NOT ranked among these.",
+                  "  Where sources disagree both values are kept, each tagged.",
+                  f"  {'method':16s} {'MAE':>8s}  source"]
+            for nm, mae, tag in prows:
+                L.append(f"  {nm:16s} {mae:8.3f}  [{tag}]")
+            L += ["", "  sources:  " + ";  ".join(
+                f"{k} = {_SOURCES[k]}" for k in used)]
+        L += ["", "★ = best causal method (CAFÉ vs causal baselines, run LIVE here)."]
         return "\n".join(L)
 
     def plot(self, ax=None):
@@ -372,9 +414,11 @@ class BenchmarkResult:
         if 0 < n_causal < len(ok):
             ax.axhline(len(ok) - n_causal - 0.5, color="0.3", lw=0.8, ls=":")
         if self.published:
-            ceil = min(v for _, v in self.published[1])
+            # Best published BIDIRECTIONAL number, drawn as a context line only
+            # (different protocol — not a like-for-like target).
+            ceil = min(v for _, v, _ in self.published)
             ax.axvline(ceil, color="C3", ls="--", lw=1)
-            ax.text(ceil, 0.1, "  published\n  ceiling (bidir)", color="C3",
+            ax.text(ceil, 0.1, "  best published\n  (bidir, diff. protocol)", color="C3",
                     fontsize=8, va="bottom", ha="left")
         ax.set_xlabel("MAE (standardised, lower = better)")
         ax.set_title(f"{self.name}: causal (blue, top) vs bidirectional (grey, bottom)")

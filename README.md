@@ -37,10 +37,26 @@ the future arrives. It is:
 - **More than imputation** — the same pass yields per-cell uncertainty, latent
   factors, anomaly scores, an additive decomposition, a dependency network and forecasts.
 
-On the standard Beijing Air-Quality benchmark (SAITS protocol), CAFÉ reaches the
-**lowest MAE (0.111)** — below SAITS (0.137), BRITS (0.153) and the Transformer
-(0.158) — while being the only **causal, CPU-only** method (the deep baselines are
-bidirectional and GPU-trained). See [`paper/cafe.pdf`](paper/cafe.pdf).
+### The "two-of-three" claim
+
+Prior strong imputers pick at most two of {**causal / point-in-time**, **CPU-only**,
+**competitive with bidirectional deep SOTA**}. The published front-runners — SAITS,
+BRITS, Transformer, CSDI, ImputeFormer, FGTI — are all **bidirectional** (they fill
+the past using the future) **and GPU-trained**. CAFÉ is, to our knowledge, the first
+method to credibly claim **all three at once**: strictly point-in-time, `numpy`-only on
+a CPU, and in the same accuracy band as those bidirectional deep models.
+
+On `data/beijing_clean.npy` (the longest fully-observed slice, 17,117 × 132,
+per-column z-scored once), under a **10% point-MCAR mask** (`np.random.default_rng`,
+seeds {0,1,2}, MAE on the standardised scale over held-out cells), CAFÉ imputes the
+**full series causally/online** and reaches **MAE ≈ 0.108**. The published deep numbers
+(SAITS, BRITS, …) come from a **different, windowed train/val/test protocol** on a
+different Beijing preprocessing, so they are **context, not a head-to-head leaderboard**
+— CAFÉ is *not* ranked among them. Under the TSI-Bench source, diffusion-based **CSDI
+reaches 0.102**, lower than CAFÉ; we therefore make **no protocol-independent "lowest
+MAE" claim**. The point is the moat: a causal, CPU-only method landing *in that band*
+at all. Published numbers come from one reconciled registry
+([`bench/refs_published.py`](bench/refs_published.py)); see [`paper/cafe.pdf`](paper/cafe.pdf).
 
 ## Install
 
@@ -81,13 +97,17 @@ cafe.benchmark(df)               # your data, scored honestly (causal vs bidirec
 cafe.benchmark("beijing")        # real data + cited published SOTA reference rows
 ```
 
-On the **Beijing Multi-Site Air-Quality** benchmark (17,117 × 132, 10% missing,
-standardised), CAFÉ — *causal, CPU-only, no training* — reaches **MAE ≈ 0.11**, beating the
-published **bidirectional** SAITS (0.137), BRITS (0.153) and Transformer (0.158), and
-within reach of diffusion-based CSDI (0.102). Every competing method uses the *future* to
-fill the past (a smoothing task, and forbidden look-ahead bias in a backtest); CAFÉ does
-not. The benchmark runs the simple baselines *live* on the same mask and shows the deep
-numbers as clearly-labelled, cited references — see
+On the **Beijing Multi-Site Air-Quality** benchmark (17,117 × 132, **10% point-MCAR**,
+standardised), CAFÉ — *causal, CPU-only, no training* — reaches **MAE ≈ 0.108**, in the
+band of the published **bidirectional** deep models (SAITS, BRITS, Transformer) while
+being the only causal one. Those deep numbers use a **different windowed train/val/test
+protocol**, so the benchmark prints them as a clearly-labelled, cited **reference block —
+context, not a ranked board** — and CAFÉ is not placed among them; under one source CSDI
+(0.102) is lower, so no "lowest MAE" claim is made. Every deep competitor uses the
+*future* to fill the past (smoothing — forbidden look-ahead in a backtest); CAFÉ does
+not. The benchmark runs the simple baselines *live* on the same mask, separates **causal
+vs bidirectional** tiers, and mirrors published numbers from the single registry
+[`bench/refs_published.py`](bench/refs_published.py) — see
 [`notebooks/cafe_benchmark.ipynb`](notebooks/cafe_benchmark.ipynb).
 
 ### Everything from one causal pass
@@ -107,6 +127,54 @@ res.params                   # learned dials: {'nu', 'ar', 'effective_rank'}
 # forecasting == imputing future rows (AR/Kalman state), with the same model
 future = cafe.CAFE().forecast(df, horizon=24)
 ```
+
+### Missingness as signal (causal features)
+
+When *where* a value is missing is itself informative (clinical panels, sensors,
+financial reporting), the gap pattern is a feature — not just a hole to fill. CAFÉ
+ships a **strictly forward-only** feature builder: every feature at row `t` is a
+function of rows `≤ t` only (no future), so it is safe to use alongside the imputed
+values in a downstream causal model.
+
+```python
+from cafe.missingness import missingness_features
+
+# pass the original (with NaNs) OR pass mask= explicitly when the data is already filled
+feats = missingness_features(df, mask=was_missing)        # same container type back
+```
+
+It emits five families per numeric column: `was_imputed` (indicator),
+`time_since_obs` (BRITS-style steps since last observed), `gap_length` (current run of
+missing), `missing_rate` (causal expanding fraction missing), and `selective_mim` —
+indicators emitted **only for columns whose missingness is informative**, scored
+leak-free by an expanding contemporaneous association test to avoid high-dimensional
+MIM overfitting. Returns the same container type (`<col>__<feature>` columns), or pass
+`return_meta=True` for the raw arrays plus the list of informative columns.
+
+## More in the research harness (`bench/`)
+
+The library is deliberately small; the empirical evidence lives in `bench/`, each
+experiment self-contained, CPU-only, and run *live* (no fabricated numbers):
+
+- **`refs_published.py`** — the single reconciled registry of *published* competitor
+  numbers (one source of truth; both values kept where sources disagree).
+- **`exp_seeds.py`** — multi-seed paired CAFÉ-vs-causal-baseline comparison with
+  Student-t / bootstrap CIs and a paired significance test.
+- **`exp_maskgrid.py`** — MAE/RMSE across mask pattern × rate (point / subsequence /
+  block × 0.1/0.3/0.5), causal vs non-causal reference columns.
+- **`exp_backtest_lookahead.py`** — quantifies the *decision* cost of look-ahead from
+  non-causal imputation in a walk-forward backtest (CAFÉ's gap is exactly 0).
+- **`exp_downstream.py`** — downstream forecasting utility under a strict temporal
+  split (reconstruction MAE is neither necessary nor sufficient for downstream gain).
+- **`exp_calibration_crps.py`** + **`metrics_prob.py`** — CRPS, coverage and sharpness
+  for the predictive intervals (mask-aware probabilistic metrics, NLL dropped).
+- **`exp_mnar_scope.py`** — MCAR→MNAR degradation and an honest scope statement of what
+  self-censored values CAFÉ can and cannot recover.
+- **`m_naive.py` / `online_baselines.py`** — naive and causal/online rivals (LOCF,
+  seasonal-naive, GROUSE-lite, streaming EW-cov), each tagged causal / non-causal.
+
+`bench/repro.py` lists every generator and the paper table/figure it writes;
+`make repro` shows the manifest and `make repro-run` regenerates them.
 
 ## What it is (in one paragraph)
 

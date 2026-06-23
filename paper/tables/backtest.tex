@@ -1,0 +1,24 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The decision cost of look-ahead from non-causal imputation: a point-in-time backtest.} A ridge predicts the next-step target from imputed features; a toy long/short rule trades the sign of the predicted next-step move (per-period Sharpe, not annualized). Strict temporal split ($60/40$, $30\%$ contiguous block missingness). \emph{Reported} columns build test features from a single \emph{batch} (bidirectional) imputation of the whole panel -- the number a naive backtest prints. \emph{Live} re-imputes each test row strictly point-in-time (expanding walk-forward). The same trained model is scored both ways, so the gap isolates the imputation leak. $\Delta$ = Reported$-$Live is pure look-ahead optimism (lower is more honest). \cafe{} is causal, so reported $\equiv$ live and $\Delta=0$ \emph{by truncation invariance} (verified via \texttt{assert\_causal}). This is the imputation analogue of the look-ahead inflation documented for cross-sectionally imputed firm characteristics in Bryzgalova et al., \emph{Missing Financial Data} (RFS 2025).}
+\label{tab:backtest}
+\begin{tabular}{@{}lc cccc cc@{}}
+\toprule
+ & & \multicolumn{3}{c}{Forecast $R^2$} & \multicolumn{3}{c}{Long/short Sharpe} \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-8}
+Method & Causal? & Rep. & Live & $\Delta\!\downarrow$ & Rep. & Live & $\Delta\!\downarrow$ \\
+\midrule
+\multicolumn{8}{l}{\emph{ETTh1 (real; oil-temperature target, hourly)}}\\
+Linear-interp & \ding{55} & 0.284 & 0.790 & -0.506 & 0.46 & 0.45 & 0.00 \\
+SoftImpute & \ding{55} & 0.333 & -0.531 & 0.864 & -0.01 & -0.40 & 0.39 \\
+TRMF & \ding{55} & 0.550 & -0.207 & 0.757 & -0.05 & -0.18 & 0.13 \\
+\textbf{\cafe{}} & \ding{51} & 0.339 & 0.339 & \textbf{0.000} & -0.10 & -0.10 & \textbf{0.00} \\
+\midrule
+\multicolumn{8}{l}{\emph{Synthetic price-like series (mean-reverting factor)}}\\
+Linear-interp & \ding{55} & 0.931 & 0.929 & 0.002 & 0.01 & 0.02 & -0.01 \\
+SoftImpute & \ding{55} & -8.447 & -8.349 & -0.099 & -0.28 & 0.00 & -0.28 \\
+TRMF & \ding{55} & -57.672 & -58.099 & 0.428 & -0.28 & 0.07 & -0.35 \\
+\textbf{\cafe{}} & \ding{51} & -3.159 & -3.159 & \textbf{0.000} & -0.19 & -0.19 & \textbf{0.00} \\
+\bottomrule
+\end{tabular}
+\end{table*}

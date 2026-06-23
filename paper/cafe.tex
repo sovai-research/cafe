@@ -76,12 +76,18 @@ threshold tuned to a dataset. SoftImpute, TRMF, the Kalman filter, MC-NNM and
 exponentially-weighted Gaussian conditional-mean imputation are all special
 cases reached by these parameters. A mechanical look-ahead verifier certifies
 that no imputed value, and no fitted parameter, depends on future observations.
-On six standard published benchmarks \cafe{} is, by a wide margin, the strongest
-\emph{causal} imputer (mean correlation $0.89$ vs.\ $0.41$ for causal
-baselines), is competitive with \emph{non-causal} batch methods that exploit the
-full series, and is the single best method on the largest panel (Beijing air
-quality, $132$ series)---all on a single CPU core, with no GPU, no training run,
-and no hyperparameters to set. The result is a fast, auditable, deployable
+Our central claim is a \emph{two-of-three}: prior imputers achieve at most two of
+\{\,causal/point-in-time, CPU-only, accuracy competitive with bidirectional deep
+SOTA\,\}; to our knowledge \cafe{} is the first to credibly hold all three at
+once. Empirically, across causal baselines \cafe{} is by a wide margin the
+strongest \emph{causal} imputer (mean MAE far below mean/LOCF; significant over
+$12$ seeds, Table~\ref{tab:seeds}), and on a standardised Beijing air-quality
+slice ($132$ series, $10\%$ point/MCAR; protocol named in \S\ref{sec:exp}) it
+reaches an MAE in the same range as bidirectional, GPU-trained deep imputers---all
+on a single CPU core, with no GPU, no training run, and no hyperparameters to set.
+We compare to those deep models only against their \emph{published} numbers, in a
+clearly separated reference column, and never present a single ranked leaderboard
+across mismatched protocols. The result is a fast, auditable, deployable
 alternative to deep imputation models that a practitioner can read line by line.
 \end{abstract}
 
@@ -178,6 +184,16 @@ $\le t$. We verify this mechanically (Prop.~\ref{prop:causal}).
 \item \textbf{CPU-first, zero-config.} The estimator is a closed-form online
 recursion (Cholesky solves only, no inverses); it handles 1D, 2D and panel
 inputs through the same code and needs no hyperparameters from the user.
+\item \textbf{The two-of-three.} The strongest published imputers
+(ImputeFormer~\cite{nie2024imputeformer}, FGTI~\cite{fgti2024},
+CSDI~\cite{tashiro2021}, PriSTI~\cite{liu2023pristi}, SAITS~\cite{du2023},
+BRITS~\cite{cao2018}) are all \emph{bidirectional} and GPU-trained; the published
+causal/online cluster (BayOTIDE~\cite{fang2024bayotide}, online Gaussian
+copula~\cite{zhao2022copula}, GROUSE~\cite{balzano2010grouse}) is CPU-friendly
+but not competitive with that deep SOTA. \cafe{} is, to our knowledge, the first
+method that is simultaneously causal/point-in-time, CPU-only, \emph{and}
+competitive with bidirectional deep SOTA on point missingness---the defensible
+contribution of this paper.
 \end{enumerate}
 
 \paragraph{In plain terms.} \cafe{} reads a value as
@@ -305,64 +321,86 @@ future arrives (Table~\ref{tab:causalverify}).
 \input{tables/causal_verify}
 
 \section{Benchmarks and Results}\label{sec:exp}
-We benchmark \cafe{} \emph{without retraining any competitor}: we reproduce each
-study's exact dataset, masking protocol and metric, and place \cafe{}'s number
-beside the authors' published values.
+We benchmark \cafe{} \emph{without retraining any competitor}: we run \cafe{} and
+classical CPU baselines live, and for deep models we cite only their
+\emph{published} numbers. Because those numbers come from different data variants,
+masks and (windowed train/val/test) protocols, we never merge them with \cafe{}
+into a single ranked leaderboard; they appear as a clearly-separated reference
+column (Table~\ref{tab:publishedrefs}).
 
-\paragraph{Head-to-head with deep imputers (Beijing Air-Quality).}
-We adopt the protocol of the SAITS study~\cite{du2023} on the Beijing
-Multi-Site Air-Quality dataset ($132$ features): standardise each feature, mask
-$10\%$ of observed values at random, and report MAE on the standardised scale
-(mean over 3 seeds). Table~\ref{tab:sota} places \cafe{} against the numbers
-reported by Du et al.~\cite{du2023} for BRITS~\cite{cao2018}, the
-Transformer~\cite{vaswani2017}, GP-VAE~\cite{fortuin2020}, M-RNN~\cite{yoon2019}
-and SAITS. \cafe{} attains the lowest MAE \emph{while being the only causal,
-CPU-only method}---the deep baselines are bidirectional (each fill sees the whole
-series) and GPU-trained.\footnote{We reproduce the public dataset and protocol;
-minor preprocessing differences across studies (e.g.\ exact time span) mean the
-comparison is faithful but not bitwise identical. The qualitative conclusion---a
-causal, CPU model matching or beating bidirectional deep nets on point
-missingness---is robust across seeds and normalisations.}
+\paragraph{\cafe{} on Beijing Air-Quality, with the mask named.} On the Beijing
+Multi-Site Air-Quality dataset we use the longest fully-observed contiguous slice
+(\,$17{,}117\times132$\,, \texttt{data/beijing\_clean.npy}; the same dense slice
+across all our Beijing runs). The protocol is stated exactly so it is
+reproducible: per-column $z$-score applied \emph{once}; mask $=$ $10\%$ MCAR
+\emph{point} missingness drawn with \texttt{np.random.default\_rng(seed)} for
+seed $\in\{0,1,2\}$; \cafe{} imputes the \emph{full} series causally/online (no
+windows, no train/test split); MAE is computed on the standardised scale over
+masked cells and averaged over the $3$ seeds. Under this protocol \cafe{}'s MAE is
+$\mathbf{0.108}$, on one CPU core in $\sim\!1.3$\,s (Table~\ref{tab:runtime}). Two
+CPU baselines we run live under the \emph{same} mask: the median ($0.763$) and
+linear interpolation ($0.135$). Linear interpolation is the telling cheap
+baseline---under scattered point missingness a gap is flanked by observed
+neighbours, so a straight line between them is hard to beat---but it is
+\emph{non-causal} (it reads the next observed value), whereas \cafe{} is causal.
 
-\begin{table}[t]\centering\small
-\setlength{\tabcolsep}{4pt}
-\caption{Beijing Air-Quality, SAITS protocol (standardised, $10\%$ MCAR, MAE
-$\downarrow$). Deep baselines as reported by~\cite{du2023}; they are
-\emph{bidirectional} (use the future). Linear interpolation (our run) is the
-telling cheap baseline: under \emph{scattered} point missingness a gap is flanked
-by observed neighbours, so a straight line between them is hard to beat---it
-already edges every GPU deep net---but it too is \emph{non-causal} (it reads the
-next observed value). \cafe{} is the only causal method here, and still lowest, on
-one CPU core.}
-\label{tab:sota}
-\begin{tabular}{@{}lcccc@{}}
-\toprule
-Method & MAE $\downarrow$ & Causal? & Backbone & HW \\
-\midrule
-Median            & .763 & --- & --- & --- \\
-M-RNN~\cite{yoon2019}     & .294 & \ding{55} & RNN & GPU \\
-GP-VAE~\cite{fortuin2020} & .268 & \ding{55} & VAE & GPU \\
-BRITS~\cite{cao2018}      & .153 & \ding{55} & BiRNN & GPU \\
-Transformer~\cite{vaswani2017} & .158 & \ding{55} & Attn & GPU \\
-SAITS~\cite{du2023}       & .137 & \ding{55} & Attn & GPU \\
-Linear interp             & .135 & \ding{55} & interp & CPU \\
-\textbf{\cafe{} (ours)}   & $\mathbf{.108}$ & \ding{51} & factor & \textbf{CPU} \\
-\bottomrule
-\end{tabular}
-\end{table}
+\paragraph{Where the deep numbers sit (context, not a head-to-head).} Published
+deep imputers report Beijing MAE in roughly the same range---e.g.\
+SAITS~\cite{du2023}, BRITS~\cite{cao2018}, the Transformer~\cite{vaswani2017},
+GP-VAE~\cite{fortuin2020}, M-RNN~\cite{yoon2019}, CSDI~\cite{tashiro2021},
+FGTI~\cite{fgti2024} ($0.149$), ImputeFormer~\cite{nie2024imputeformer}---but
+\emph{all under a different (windowed, train/val/test, possibly different span and
+preprocessing) protocol}, all bidirectional, and all GPU-trained. We therefore do
+\textbf{not} rank \cafe{} against them in one table. Their published values, with
+sources, are collected in Table~\ref{tab:publishedrefs}, which also surfaces a
+caveat that matters: the two most-cited registries \emph{disagree} on every
+shared method (e.g.\ SAITS $.137$~\cite{du2023} vs.\ $.155$~\cite{du2024tsibench},
+BRITS $.153$ vs.\ $.127$), and under the TSI-Bench~\cite{du2024tsibench} source
+CSDI reports $.102$. We make no protocol-independent ``lowest MAE'' claim. The
+defensible statement is the two-of-three: \cafe{}'s $0.108$ lands in the deep-SOTA
+band \emph{while being causal and CPU-only}, which no published deep model is.
+\input{tables/published_refs}
 
-\paragraph{Breadth across regimes.} Table~\ref{tab:results} reports Pearson
-correlation on six datasets spanning the ImputeBench~\cite{khayati2020}
-(block missingness) and the TSI-Bench~\cite{du2024tsibench} point-missing
-protocol. Among strictly \emph{causal}
-methods \cafe{} dominates ($0.89$ vs.\ $0.41$ for mean/LOCF); against
-\emph{non-causal} batch references that see the full series it is competitive and
-best overall on the largest panel (BeijingAir).
+\paragraph{Relation to prior work.} The closest published rival to \cafe{}'s
+low-rank core is ImputeFormer~\cite{nie2024imputeformer} (KDD'24), which also
+imposes a low-rank inductive bias---but via a \emph{bidirectional}, GPU-trained
+attention network that reads the whole series for every fill; \cafe{} keeps the
+low-rank factor structure yet estimates it by a closed-form \emph{online}
+recursion that is strictly point-in-time and runs on a CPU core. Against the
+diffusion line (CSDI~\cite{tashiro2021}, PriSTI~\cite{liu2023pristi}) and
+frequency-domain diffusion (FGTI~\cite{fgti2024}) the same two distinctions hold,
+plus orders-of-magnitude less compute (no hundreds of denoising steps per fill).
+The natural comparison cluster is therefore the \emph{causal/online} family:
+BayOTIDE~\cite{fang2024bayotide} (online Bayesian temporal low-rank), the online
+Gaussian-copula imputer of Zhao \& Udell~\cite{zhao2022copula}, and
+GROUSE~\cite{balzano2010grouse} (online subspace tracking from partial
+observations). \cafe{} subsumes the mechanics of this cluster---its EW-covariance
+limit is the Gaussian conditional mean, its rank-tracking limit is GROUSE---inside
+\emph{one} self-tuning penalised objective with learned rank, AR memory,
+Student-$t$ tails and seasonality, and we show it reaches the deep-SOTA accuracy
+band that this cluster does not, without leaving the causal/CPU regime.
+
+\paragraph{Breadth across regimes (MAE/RMSE).} Our primary accuracy metric is
+error, not correlation: Pearson $r$ is affine-invariant and hides bias, so we lead
+with MAE/RMSE. Table~\ref{tab:maskgrid} sweeps missingness \emph{pattern}
+(point/MCAR, subsequence, block) $\times$ \emph{rate} ($10/30/50\%$) over six
+datasets and $3$ seeds, with a gap-length stratification. \cafe{} is the best
+\emph{causal} method in every cell; the non-causal references (linear
+interpolation, SoftImpute) are shown italic for context, never bold. As a
+context-only correlation view spanning the ImputeBench~\cite{khayati2020} block
+and TSI-Bench~\cite{du2024tsibench} point protocols, Table~\ref{tab:results}
+reports Pearson $r$ on six datasets; among causal methods \cafe{} dominates ($0.89$
+vs.\ $0.41$ for mean/LOCF) and is competitive with non-causal batch references.
+\input{tables/maskgrid}
 
 \begin{table}[t]\centering\small
 \setlength{\tabcolsep}{3.5pt}
-\caption{Accuracy (Pearson $r$, higher better) across regimes. \textbf{Causal}
-vs.\ \emph{non-causal} references (full-series access).}
+\caption{Accuracy (Pearson $r$, higher better) across regimes, shown as a
+\emph{secondary, correlation-based} view (MAE/RMSE in Table~\ref{tab:maskgrid} is
+primary; $r$ is affine-invariant and hides bias). \textbf{Causal} vs.\
+\emph{non-causal} references (full-series access). These cells are
+hand-transcribed from per-dataset runs and are pending a single committed
+generating script; treat them as indicative.}
 \label{tab:results}
 \begin{tabular}{@{}lccc|ccc@{}}
 \toprule
@@ -381,6 +419,16 @@ BeijingAir   & .83 & .83 & $\mathbf{.91}$ & .89 & .63 & .86 \\
 \end{tabular}
 \end{table}
 
+\paragraph{Statistical rigor (paired, multi-seed).} To avoid single-seed point
+estimates we compare \cafe{} against the strongest \emph{causal} baseline (online
+TRMF: low-rank MF $+$ AR, fully point-in-time) over $12$ independent MCAR$(10\%)$
+mask seeds, both methods seeing the same mask each seed (Table~\ref{tab:seeds}).
+\cafe{} wins on Beijing and the synthetic panel with very small CIs and
+$p<10^{-11}$; on the short, smooth ETTh1 ($7$ series) the carry-forward AR target
+marginally favours TRMF ($-0.015$ MAE), which we report honestly rather than
+hide. All three paired differences are significant at $p<0.05$.
+\input{tables/seeds}
+
 \paragraph{The cost of look-ahead.} \S\ref{sec:model} argued that non-causal
 imputers leak the future; here we measure the damage. On ETTh1 we train a ridge
 forecaster to predict the next step from imputed features under a strict
@@ -395,6 +443,30 @@ the model-free \emph{revision moat} corroborates it---a batch method rewrites an
 early cell by $0.5$--$0.7$ SD as the future arrives, \cafe{} by exactly zero
 (Table~\ref{tab:leakage}, Fig.~\ref{fig:leakage}).
 \input{tables/leakage}
+
+\paragraph{A sequential-decision backtest.} The look-ahead leak is most damaging
+where it is hardest to spot: a financial backtest. Table~\ref{tab:backtest} runs
+the same downstream model two ways---\emph{reported} (test features from a single
+batch imputation of the whole panel, the number a naive backtest prints) and
+\emph{live} (each test row re-imputed strictly point-in-time, walk-forward)---and
+reports next-step forecast $R^2$ and a toy long/short Sharpe. Non-causal imputers
+show large reported-minus-live optimism (on ETTh1, SoftImpute $+0.864$ $R^2$ and
+$+0.39$ Sharpe; TRMF $+0.757$ $R^2$), while \cafe{}'s gap is exactly $0$ by
+truncation invariance, verified by the same look-ahead checker. This mirrors the
+look-ahead inflation documented for cross-sectionally imputed firm characteristics
+by Bryzgalova et al.~\cite{bryzgalova2025missing}.
+\input{tables/backtest}
+
+\paragraph{Reconstruction MAE is not downstream utility.} Lower imputation error
+does not guarantee a better downstream model. Table~\ref{tab:downstream} imputes
+ETTh1 with five methods and then trains a next-step OT forecaster under a strict
+temporal split: the lowest-MAE imputer overall is the \emph{non-causal} linear
+interpolator, whose downstream $R^2$ even exceeds the causal Oracle---purely via
+look-ahead (interpolation reads the gap's future endpoint)---while SoftImpute's
+much lower MAE than zero-fill yields no downstream gain. Low reconstruction error
+is therefore neither necessary nor sufficient for honest downstream value; the
+causal constraint is what makes the reported number deployable.
+\input{tables/downstream}
 
 \paragraph{Ablation.} Table~\ref{tab:ablation} turns each learned dial off on the
 regime it targets. Every one pays for itself: removing Student-$t$ tails nearly
@@ -423,22 +495,40 @@ beating even the non-causal SoftImpute reference at every length.
 \input{tables/mnar}
 \input{tables/longgap}
 
-\paragraph{Uncertainty.} The same pass returns a per-cell posterior interval. It
-is \emph{conservative by construction}: across datasets the empirical coverage
-never falls below nominal (Table~\ref{tab:calib}), so a band is never falsely
-tight---the safe failure mode for risk-sensitive use. The per-cell $\sigma$
-widens correctly inside long gaps (Fig.~\ref{fig:unc}) and is informative (lower
-CRPS than a homoscedastic $\sigma$) on the high-frequency ETTh1 data; tightening
-its absolute scale on smoother panels is future work. This is the one capability
-we evaluate quantitatively beyond imputation---the remaining outputs (factors,
-anomaly score, decomposition, dependency network, forecasts) are exact readouts
-of the same fit, illustrated in App.~\ref{sec:appendix} rather than benchmarked
-against specialised tools.
+\paragraph{MNAR scope (honest).} \cafe{} does not ``solve'' MNAR: when a value's
+missingness depends on its own (unobserved) magnitude, the complete-data
+distribution is non-identifiable without an explicit missingness model
+(Ma \& Zhang~\cite{ma2021mnar}), and \cafe{} deliberately makes none. Instead it
+recovers a self-censored value only insofar as the surviving cross-section and
+recent past still carry information about it (the recoverability lever of a causal
+view of imputation, Cheng et al.~\cite{cheng2025causalview}). Empirically this
+gives \emph{bounded} degradation from MCAR to MNAR ($+20\%$ MAE for \cafe{} at a
+matched $20\%$ rate) with an openly reported residual censoring bias ($-0.122$,
+the under-prediction of the removed high tail) rather than an MCAR-only protocol
+that hides it (Table~\ref{tab:mnarscope}).
+\input{tables/mnar_scope}
+
+\paragraph{Uncertainty (CRPS, coverage, sharpness).} The same pass returns a
+per-cell predictive interval, which we score with \emph{proper} probabilistic
+metrics---the continuous ranked probability score (CRPS), empirical coverage
+(PICP) at several nominal levels, and sharpness (mean interval width)---rather
+than a single likelihood number (Table~\ref{tab:calibcrps}). The honest finding
+is that the intervals are predominantly \emph{over-conservative}: observed
+coverage exceeds nominal at most dataset/level cells (mean excess $\approx+0.08$),
+with only marginal undershoots (worst $\approx0.02$) at the tightest levels. Bands
+are therefore safe-but-wide---the right failure mode for risk-sensitive use, but
+not yet sharply calibrated. Per-cell $\sigma$ does widen correctly inside long
+gaps (Fig.~\ref{fig:unc}); tightening the absolute scale on smoother panels is
+explicit future work. This is the one capability we evaluate quantitatively beyond
+imputation---the remaining outputs (factors, anomaly score, decomposition,
+dependency network, forecasts) are exact readouts of the same fit, illustrated in
+App.~\ref{sec:appendix} rather than benchmarked against specialised tools.
+\input{tables/calib_crps}
 \input{tables/calibration}
 
 \paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
-$1.3$\,s on a single CPU core---the lowest MAE of any baseline, at cost
-comparable to SoftImpute and below TRMF (Table~\ref{tab:runtime}). Cost is
+$1.3$\,s on a single CPU core---the best \emph{causal} MAE among the methods we
+run live, at cost comparable to SoftImpute and below TRMF (Table~\ref{tab:runtime}). Cost is
 linear in series length $T$ (measured log-log slope $\approx\!1$) and strongly
 sub-linear in width $N$: each row performs only rank-$R$ Cholesky solves, never
 an $N\times N$ inverse (Fig.~\ref{fig:scaling}). Against GPU-trained deep
@@ -447,11 +537,13 @@ of denoising steps per fill), this is the $\sim\!10^3\times$ compute gap
 referenced below.
 \input{tables/runtime}
 
-\paragraph{Takeaway.} \cafe{} matches or beats both classical batch methods and
-GPU-trained deep imputers on standard benchmarks, while being the only method
-that is \emph{causal} (no look-ahead) and CPU-only---running the full suite in
-$\sim\!1$\,s. The right reading is accuracy \emph{at strictly less information and
-$\sim$1000$\times$ less compute}.
+\paragraph{Takeaway.} \cafe{} reaches accuracy in the band of GPU-trained deep
+imputers (under its named, reproducible Beijing protocol) and is the strongest
+causal method we run live, while being the only method that is \emph{causal} (no
+look-ahead) \emph{and} CPU-only---the two-of-three no prior imputer holds at
+once---running the full suite in $\sim\!1$\,s. The right reading is competitive
+accuracy \emph{at strictly less information and $\sim$1000$\times$ less compute},
+not a protocol-independent ``lowest MAE'' claim.
 
 \appendix
 \section{Using the \texttt{cafe} library}\label{sec:lib}
@@ -516,9 +608,10 @@ black box. Each term can be inspected, audited, or used on its own.}
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/uncertainty.pdf}
 \caption{\textbf{Conservative uncertainty.} Every fill carries a posterior band that widens
-inside long gaps (less information). The bands are \emph{never over-confident}---empirically
-they over-cover, a safe failure mode for decision-making---and enable confidence intervals,
-error propagation, and multiple imputation.}
+inside long gaps (less information). The bands are \emph{predominantly over-conservative}---they
+over-cover at most levels (a safe failure mode for decision-making), with only marginal
+undershoots at the tightest levels---and enable confidence intervals, error propagation, and
+multiple imputation. Scored by CRPS / coverage / sharpness (Table~\ref{tab:calibcrps}).}
 \label{fig:unc}
 \end{figure}
 
@@ -559,8 +652,11 @@ forecast via the AR/Kalman state---one model for fill, forecast and nowcast.}
 
 \begin{figure}[H]\centering
 \includegraphics[width=\linewidth]{figures/benchmark.pdf}
-\caption{\textbf{Accuracy.} Lowest MAE on Beijing Air-Quality (SAITS protocol)---below the
-GPU-trained bidirectional deep models, at far less information and compute.}
+\caption{\textbf{Accuracy.} \cafe{}'s MAE on the named Beijing Air-Quality slice
+($10\%$ point/MCAR, standardised, $3$ seeds) lands in the band of GPU-trained
+bidirectional deep models---\emph{at far less information and compute, and while
+remaining causal}. Published deep numbers (different protocols) are context, not a
+head-to-head ranking; see Table~\ref{tab:publishedrefs}.}
 \label{fig:bench}
 \end{figure}
 \end{multicols}
@@ -600,11 +696,13 @@ inverse.}
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.92\textwidth]{figures/calibration.pdf}
-\caption{\textbf{Calibration (Table~\ref{tab:calib}).} \emph{(a)} Reliability
-diagram: empirical vs.\ nominal coverage---every curve sits \emph{on or above} the
-diagonal, so \cafe{} never under-covers. \emph{(b)} PIT histograms: a flat
-profile would be sharply calibrated; \cafe{}'s are centre-peaked, the signature of
-conservative (over-dispersed) intervals---safe, but loose, on the smoother panels.}
+\caption{\textbf{Calibration (Tables~\ref{tab:calibcrps},~\ref{tab:calib}).}
+\emph{(a)} Reliability diagram: empirical vs.\ nominal coverage---curves sit
+\emph{on or above} the diagonal at most levels (predominantly over-covering), with
+only marginal undershoots at the tightest levels. \emph{(b)} PIT histograms: a
+flat profile would be sharply calibrated; \cafe{}'s are centre-peaked, the
+signature of conservative (over-dispersed) intervals---safe, but loose, on the
+smoother panels.}
 \label{fig:calib}
 \end{figure}
 

@@ -19,6 +19,14 @@ import numpy as np
 from . import _core
 from .io import Ctx, from_matrix, to_matrix
 
+# Optional missingness-as-signal features (the fact a cell WAS missing is often
+# informative and is erased by imputation). Guarded so the library still imports and
+# works if the module is absent; the feature path is opt-in and off by default.
+try:
+    from .missingness import missingness_features as _missingness_features
+except Exception:  # pragma: no cover - defensive; absence must never break impute()
+    _missingness_features = None
+
 __all__ = ["CAFE", "CafeResult", "impute"]
 
 
@@ -85,10 +93,19 @@ class CafeResult:
             for i, r in enumerate(tr):
                 if r["cvar"] is not None:
                     cvar[i] = r["cvar"]
+            # time_fe is a per-row scalar (shared cross-sectional level) broadcast over
+            # features; the attr_* arrays are the faithful per-cell contributions the core
+            # actually summed into each fill (see decompose()).
+            time_fe = np.array([r["time_fe"] for r in tr])[:, None] * np.ones((1, N))
             self._C = dict(
                 level=np.array([r["mu"] for r in tr]),
                 season=np.array([r["season"] for r in tr]),
-                factor=np.array([r["lr"] for r in tr]),
+                factor=np.array([r["lr"] for r in tr]),       # raw factor estimate
+                time_fe=time_fe,
+                # contributions AS USED in the fill (post cross-section fusion):
+                attr_factor=np.array([r["attr_factor"] for r in tr]),
+                attr_carry=np.array([r["attr_carry"] for r in tr]),
+                attr_xsec=np.array([r["attr_xsec"] for r in tr]),
                 Z=np.array([r["z"] for r in tr]),
                 cvar=cvar,
                 row_w=np.array([r["row_w"] for r in tr]),
@@ -145,16 +162,83 @@ class CafeResult:
         return s
 
     # ---- additive decomposition ----
-    def decompose(self):
-        """Additive parts as containers: ``level + season + factor + residual`` equals
-        the (filled) data exactly, so the decomposition is complete -- ``residual`` is
-        the heavy-tailed noise the structural parts don't explain (near zero at imputed
-        cells, the observation noise at observed cells)."""
+    def _decompose_parts(self):
+        """Raw (numpy) faithful additive components that sum EXACTLY to the filled data.
+
+        The model fills a missing cell with the sum of *real* additive terms:
+
+            filled = level(mu) + season + time_fe + factor + carry + cross_section + resid
+
+        where, at a MISSING cell, ``factor``/``carry``/``cross_section`` are the post-fusion
+        contributions actually summed in (the low-rank/AR factor share, the idiosyncratic
+        AR carry share, and the cross-sectional conditional-mean share -- see _core), and
+        ``resid`` is EXACTLY zero (the model added nothing else). At an OBSERVED cell the
+        structural terms are the model's fit and ``resid`` is the genuine observation noise
+        the structure does not explain. Previously time_fe + carry + cross_section were
+        silently dumped into ``residual``, falsely implying residual ~ 0 only by absorbing
+        real structural signal; these are now their own named, attributable terms.
+        """
         C = self._comp()
-        struct = C["level"] + C["season"] + C["factor"]
-        parts = {"level": C["level"], "season": C["season"], "factor": C["factor"],
-                 "residual": self._filled - struct}
-        return {k: from_matrix(v, self._ctx) for k, v in parts.items()}
+        parts = {
+            "level":         C["level"],          # per-feature fixed effect (mu)
+            "season":        C["season"],         # Fourier seasonal mean
+            "time_fe":       C["time_fe"],         # contemporaneous shared level (time FE)
+            "factor":        C["attr_factor"],     # low-rank/AR factor contribution (as used)
+            "carry":         C["attr_carry"],      # idiosyncratic AR carry (gap extrapolation)
+            "cross_section": C["attr_xsec"],       # cross-sectional conditional-mean fill
+        }
+        struct = sum(parts.values())
+        parts["residual"] = self._filled - struct   # ~0 at imputed cells; noise at observed
+        return parts
+
+    def decompose(self, full=False):
+        """Faithful additive structural attribution of the filled data.
+
+        Every part sums EXACTLY to the filled value. By default (``full=False``) the
+        granular dynamic terms are grouped for a compact, backward-compatible view with
+        the classical four parts ``level + season + factor + residual``, but -- unlike
+        before -- ``factor`` now honestly carries ALL the dynamic structure used to fill a
+        cell (low-rank/AR factor + contemporaneous time fixed-effect + idiosyncratic carry
+        + cross-sectional conditional mean), so ``residual`` is GENUINELY ~0 at imputed
+        cells (the model added no unexplained term there) and is the real observation noise
+        at observed cells. It no longer hides real structural signal inside "residual".
+
+        Pass ``full=True`` to get the fully itemised attribution with the dynamic term
+        split into its named channels: ``level, season, time_fe, factor, carry,
+        cross_section, residual`` (each a same-type container). This is the honest
+        structural breakdown of exactly what the model summed into each fill.
+        """
+        parts = self._decompose_parts()
+        if full:
+            return {k: from_matrix(v, self._ctx) for k, v in parts.items()}
+        # compact 4-part view: fold the dynamic channels into one honest "factor" term.
+        factor = (parts["factor"] + parts["time_fe"]
+                  + parts["carry"] + parts["cross_section"])
+        compact = {"level": parts["level"], "season": parts["season"],
+                   "factor": factor, "residual": parts["residual"]}
+        return {k: from_matrix(v, self._ctx) for k, v in compact.items()}
+
+    # ---- missingness-as-signal features (causal MIM + decay/gap features) ----
+    def missingness_features(self, **kwargs):
+        """Causal missingness-as-signal features for THIS run's original missing pattern.
+
+        Imputation erases *where* data was missing, yet that pattern is often itself
+        informative (a sensor offline during an event; a deliberately skipped field).
+        This returns forward-only (point-in-time) features -- was-imputed indicators,
+        time-since-last-observation, gap lengths, expanding missing-rate, and a
+        leak-free selective MIM -- computed from the ORIGINAL missing mask of the data
+        passed to :meth:`CAFE.run`, in the same container type/labels as ``imputed``.
+
+        Keyword args are forwarded to :func:`cafe.missingness.missingness_features`
+        (e.g. ``kinds=``, ``selective=``, ``return_meta=True``). Returns ``None`` if the
+        optional missingness module is unavailable.
+        """
+        if _missingness_features is None:
+            return None
+        # Score against the (causally) imputed values but key features off the original
+        # NaN mask, so the features "survive" imputation as intended.
+        mask = np.isnan(self._X)
+        return _missingness_features(self.imputed, mask=mask, **kwargs)
 
     # ---- cross-sectional dependency network ----
     def dependency_network(self):
@@ -197,11 +281,11 @@ class CafeResult:
             ax.plot(np.asarray(self.anomaly_scores()), lw=0.8, color="C3")
             ax.set_ylim(0, 1.02); ax.set_title("anomaly score (0 = fit, 1 = outlier)")
         elif kind in ("decomposition", "decompose"):
-            C = self._comp()
-            resid = self._filled - (C["level"] + C["season"] + C["factor"])
-            parts = {"level": C["level"], "season": C["season"],
-                     "factor": C["factor"], "residual": resid}
+            # faithful itemised attribution (drops all-zero channels for legibility)
+            parts = {nm: np.asarray(M) for nm, M in self._decompose_parts().items()}
             for nm, M in parts.items():
+                if not np.any(M[:, j]):           # skip channels inactive for this series
+                    continue
                 ax.plot(M[:, j], lw=1.0, label=nm)
             ax.legend(ncol=4, fontsize=8); ax.set_title(f"{label}: additive decomposition")
         elif kind in ("dependency", "network"):
@@ -250,13 +334,38 @@ class CAFE:
         filled, trace, core = _run_traced(X)
         return CafeResult(ctx, X, filled, trace, core)
 
-    def impute(self, data, meta=None):
+    def impute(self, data, meta=None, return_mask=False, missingness_kwargs=None):
         """Return just the filled data in the original container type. Uses the lean
-        forward path (no introspection trace) -- identical values, lighter + faster."""
+        forward path (no introspection trace) -- identical values, lighter + faster.
+
+        Parameters
+        ----------
+        return_mask : bool, default False
+            If True (and the optional :mod:`cafe.missingness` module is available),
+            also compute causal missingness-as-signal features from the ORIGINAL missing
+            pattern and return ``(filled, features)`` instead of just ``filled``. These
+            forward-only features (was-imputed indicator, time-since-observed, gap length,
+            expanding missing-rate, selective MIM) preserve the signal that imputation
+            would otherwise erase, for use as extra columns in a downstream model.
+            Default behaviour (``return_mask=False``) is unchanged and fully
+            backward-compatible. If the module is unavailable, ``features`` is ``None``.
+        missingness_kwargs : dict, optional
+            Extra keyword args forwarded to
+            :func:`cafe.missingness.missingness_features`.
+        """
         X, ctx = to_matrix(data)
         if _is_panel(meta):
-            return from_matrix(np.asarray(_core.online_impute(X, meta), float), ctx)
-        return from_matrix(_run_fast(X), ctx)
+            filled = from_matrix(np.asarray(_core.online_impute(X, meta), float), ctx)
+        else:
+            filled = from_matrix(_run_fast(X), ctx)
+        if not return_mask:
+            return filled
+        feats = None
+        if _missingness_features is not None:
+            mask = np.isnan(np.asarray(X, float))
+            feats = _missingness_features(filled, mask=mask,
+                                          **(missingness_kwargs or {}))
+        return filled, feats
 
     def forecast(self, data, horizon: int):
         """Forecast ``horizon`` steps ahead by imputing appended all-missing rows
@@ -271,8 +380,14 @@ class CAFE:
         return from_matrix(fc, fctx)
 
 
-def impute(data, meta=None):
+def impute(data, meta=None, return_mask=False, missingness_kwargs=None):
     """Zero-config causal imputation. Accepts numpy / pandas / polars (1D or 2D),
     returns the same container type with missing values filled, using only past +
-    contemporaneous information (no look-ahead)."""
-    return CAFE().impute(data, meta)
+    contemporaneous information (no look-ahead).
+
+    With ``return_mask=True`` also returns causal missingness-as-signal features for the
+    original missing pattern as ``(filled, features)`` (see :meth:`CAFE.impute`); the
+    default single-value return is unchanged.
+    """
+    return CAFE().impute(data, meta, return_mask=return_mask,
+                         missingness_kwargs=missingness_kwargs)

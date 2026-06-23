@@ -1,0 +1,14 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Seed rigor: CAFE vs the strongest causal baseline.} Mean MAE\,$\downarrow$ $\pm$ 95\% CI (Student-$t$) over 12 independent MCAR\,(10\%) mask seeds; both methods see the \emph{same} mask each seed. \textsc{paired diff} $=$ mean(baseline\,$-$\,CAFE) per seed (positive $\Rightarrow$ CAFE lower error); $p$ is the paired $t$-test, with the Wilcoxon signed-rank $p$ in brackets. Both methods are causal / point-in-time (no deep models, no published numbers). The better mean is \textbf{bold}; significance stars on the paired diff: $^{*}p{<}0.05$, $^{**}p{<}0.01$, $^{***}p{<}0.001$.}
+\label{tab:seeds}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Dataset & Shape & CAFE MAE & Online TRMF MAE & Paired diff & $p$ ($t$ / W) \\
+\midrule
+Beijing & 2500x60 & \textbf{$0.146\pm0.002$} & $0.328\pm0.003$ & $+0.182$$^{***}$ & $1.8e-18$ / $4.9e-4$ \\
+ETTh1 & 2500x7 & $0.198\pm0.003$ & \textbf{$0.184\pm0.005$} & $-0.015$$^{***}$ & $4.0e-4$ / $9.8e-4$ \\
+Synthetic & 1500x30 & \textbf{$0.222\pm0.002$} & $0.272\pm0.004$ & $+0.050$$^{***}$ & $3.7e-12$ / $4.9e-4$ \\
+\bottomrule
+\end{tabular}
+\end{table}

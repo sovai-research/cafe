@@ -72,6 +72,14 @@ HALFLIFE     = 200.0     # EW forgetting for pooled scale/cov statistics
 MU_HALFLIFE  = float(os.environ.get("MU_HL", "100000.0"))   # ~static expanding FE
 EPS          = 1e-9
 _BLEND_WLR   = float(os.environ.get("BLEND_WLR", "0.5"))   # sweepable; default EB mean
+# Cold-start (warm-up) predictive-band inflation. Before W is fit and the EW scale
+# accumulators settle, fills collapse to mu+season+carry and the posterior variance is
+# computed from near-prior statistics -> spuriously narrow. We widen the band by a
+# factor that decays from (1+WARM_C) toward 1 over ~WARM_TAU rows (one refit window),
+# so early imputations honestly report low confidence. Band-only: never touches the
+# imputed value, and depends only on the row counter (point-in-time / causal).
+_WARM_C      = 1.5       # max extra std multiplier at step 0 (band up to ~2.5x as wide)
+_WARM_TAU    = float(REFIT_EVERY)   # warm-up horizon in rows (~one W refit)
 
 
 # Partition-based order statistics (no full sort) that reproduce numpy's
@@ -571,9 +579,23 @@ class _UnifiedCore:
         # MCAR (age large or rho 0) and persists across short block gaps.
         carry = self.rho_idio ** np.minimum(self.idio_age, 60.0) * self.idio_last
 
+        # Per-cell additive ATTRIBUTION of the fill (decompose()). We record the exact
+        # contributions actually summed into each MISSING cell so the structural
+        # decomposition is faithful (sums to the filled value, residual==0 at imputed
+        # cells) instead of dumping time-FE + carry + cross-section into "residual".
+        # Initialised to the as-fit structural terms; the carry / cross-section channels
+        # default to 0 and are filled in below for missing cells only.
+        record = getattr(self, "record", False)
+        if record:
+            attr_factor = lr.copy()        # factor contribution as USED in the fill
+            attr_carry = np.zeros(N)       # idiosyncratic AR carry contribution
+            attr_xsec = np.zeros(N)        # cross-section conditional-mean contribution
+
         if miss.any():
             fill = mu[miss] + season[miss] + time_fe + lr[miss] + carry[miss]
             _carry_m = carry[miss]
+            if record:
+                attr_carry[miss] = _carry_m        # pre-fusion: full low-rank+carry channel
             # Fuse with the FULL-covariance cross-section conditional mean. The factor
             # update (lr) is the conditional mean under the LOW-RANK covariance W S W^T +
             # Psi; xs is the conditional mean under the FULL empirical (EW) residual
@@ -592,8 +614,13 @@ class _UnifiedCore:
                 # block) the carry + low-rank/AR prediction take over.
                 fill = (mu[miss] + season[miss] + time_fe
                         + (1.0 - w_xs) * (lr[miss] + _carry_m) + w_xs * xs)
+                if record:
+                    # split the fused channels into their faithful per-cell shares.
+                    attr_factor[miss] = (1.0 - w_xs) * lr[miss]
+                    attr_carry[miss] = (1.0 - w_xs) * _carry_m
+                    attr_xsec[miss] = w_xs * xs
             out[miss] = fill
-            if getattr(self, "record", False):       # opt-in introspection (no prod effect)
+            if record:       # opt-in introspection (no prod effect)
                 # Posterior predictive variance that GROWS through a gap and saturates at
                 # the marginal -- the textbook forecast variance of an AR state. k = steps
                 # since the last observation = the forecast horizon for this cell.
@@ -615,6 +642,25 @@ class _UnifiedCore:
                 _idio = np.maximum(self.psi[miss], 0.0) * (1.0 - self.rho_idio ** (2.0 * _k))
                 _cv = np.full(N, np.nan)
                 _cv[miss] = _fv + _idio                            # posterior predictive var
+                # ---- COLD-START widening (warm-up honesty) ----
+                # Before the pooled loadings W have been refit (the first ~REFIT_EVERY
+                # rows, and a little beyond while the running scales settle) the factor
+                # term lr is essentially 0 and every missing cell collapses to mu+season+
+                # carry. The posterior-variance terms above are computed from EW scale
+                # accumulators that are themselves near their tiny priors at t~0, so the
+                # band is spuriously CONFIDENT exactly when the model knows least. We
+                # inflate the variance by a factor that starts large and decays to 1 as
+                # observations accrue, reflecting the genuinely low confidence during
+                # warm-up. The multiplier is data-agnostic (depends only on the row
+                # counter, so it is point-in-time / causal: truncating the future cannot
+                # change an early row's warm-up factor) and >=1 so it never *shrinks* a
+                # band. tau_warm sets the warm-up horizon (~one refit window); the extra
+                # variance ~ (1 + c/(1+step)) -> 1, i.e. up to ~ (1+WARM_C) on the std at
+                # step 0, fading smoothly thereafter. Also forced wide until W_ready.
+                warm = 1.0 + _WARM_C / (1.0 + self.step / _WARM_TAU)
+                if not self.W_ready:                  # no loadings yet -> least confident
+                    warm = max(warm, 1.0 + _WARM_C)
+                _cv[miss] = _cv[miss] * (warm * warm)              # inflate VARIANCE (std*warm)
                 self._cvar_row = _cv
 
         # advance idiosyncratic-carry age for every feature (reset below for observed)
@@ -758,6 +804,12 @@ class _UnifiedCore:
                 t=int(abs_t), eid=int(eid), obs=obs.copy(),
                 mu=mu.copy(), season=np.asarray(season, float).copy(),
                 time_fe=float(time_fe), lr=np.asarray(lr, float).copy(),
+                # faithful per-cell additive attribution actually summed into the fill:
+                # attr_factor (factor contribution as used), attr_carry (idiosyncratic AR
+                # carry), attr_xsec (cross-section conditional-mean). time_fe is a scalar
+                # broadcast over features. See CafeResult.decompose().
+                attr_factor=attr_factor.copy(), attr_carry=attr_carry.copy(),
+                attr_xsec=attr_xsec.copy(),
                 z=np.asarray(z_t, float).copy(), filled=out.copy(),
                 cvar=(self._cvar_row if (miss.any() and getattr(self, "_cvar_row", None) is not None) else None),
                 row_w=float(row_w), r2row=(float(r2row) if obs.any() else float("nan")),

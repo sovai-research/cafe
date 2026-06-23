@@ -1,0 +1,21 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{Downstream-task utility vs.\ reconstruction accuracy.} ETTh1 next-step oil-temperature (OT) forecasting: all seven channels are imputed, then used to predict OT one step ahead. (5999 rows, 20\% MCAR over the table, strict temporal 70/30 split, mean$\pm$std over 3 seeds). \emph{Recon MAE} is reconstruction error on the masked cells (lower better); the model columns report held-out test $R^2$ (higher better) and RMSE (lower better) for two downstream model \emph{types}. The \emph{Oracle} row trains on the fully-observed (un-masked) table---the causal upper bound. Non-causal imputers are \emph{italic}. \textbf{Bold recon} $=$ best \emph{causal} reconstruction; \textbf{bold }$R^2$ $=$ best \emph{causal} downstream score for the tree model. Reconstruction MAE and downstream utility do not move together: the non-causal interpolator attains the lowest MAE \emph{and} can exceed the causal Oracle's $R^2$ only because interpolating across a gap reads the future endpoint (look-ahead leakage), and SoftImpute's much lower MAE than na\"ive zero-fill does not translate into any downstream gain. Low reconstruction error is therefore neither necessary nor sufficient for honest downstream value.}
+\label{tab:downstream}
+\begin{tabular}{@{}l c c c c c@{}}
+\toprule
+Imputer & Recon MAE$\downarrow$ & \multicolumn{2}{c}{Ridge} & \multicolumn{2}{c}{GradBoost} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6}
+ & & $R^2\uparrow$ & RMSE$\downarrow$ & $R^2\uparrow$ & RMSE$\downarrow$ \\
+\midrule
+ZeroFill (no imp.) & $0.782${\scriptsize$\pm0.004$} & $-2.441${\scriptsize$\pm0.207$} & $0.651${\scriptsize$\pm0.020$} & $-1.922${\scriptsize$\pm0.547$} & $0.598${\scriptsize$\pm0.056$} \\
+LOCF & $\mathbf{0.222}${\scriptsize$\pm0.004$} & $0.881${\scriptsize$\pm0.003$} & $0.121${\scriptsize$\pm0.002$} & $\mathbf{0.867}${\scriptsize$\pm0.008$} & $0.128${\scriptsize$\pm0.004$} \\
+\textbf{CAFE (ours)} & $0.272${\scriptsize$\pm0.001$} & $0.627${\scriptsize$\pm0.022$} & $0.214${\scriptsize$\pm0.006$} & $0.607${\scriptsize$\pm0.028$} & $0.220${\scriptsize$\pm0.008$} \\
+\midrule
+\emph{LinearInterp} & \emph{$0.163${\scriptsize$\pm0.002$}} & \emph{$0.910${\scriptsize$\pm0.002$}} & \emph{$0.105${\scriptsize$\pm0.001$}} & \emph{$0.900${\scriptsize$\pm0.002$}} & \emph{$0.111${\scriptsize$\pm0.001$}} \\
+\emph{SoftImpute} & \emph{$0.722${\scriptsize$\pm0.031$}} & \emph{$-2.116${\scriptsize$\pm0.283$}} & \emph{$0.619${\scriptsize$\pm0.028$}} & \emph{$-1.824${\scriptsize$\pm0.468$}} & \emph{$0.588${\scriptsize$\pm0.049$}} \\
+\midrule
+\emph{Oracle (clean table)} & $\,$--$\,$ & $0.899${\scriptsize$\pm0.000$} & $0.112${\scriptsize$\pm0.000$} & $0.880${\scriptsize$\pm0.000$} & $0.121${\scriptsize$\pm0.000$} \\
+\bottomrule
+\end{tabular}
+\end{table*}
