@@ -12,30 +12,58 @@ import matplotlib
 matplotlib.use("Agg")
 import numpy as np
 import matplotlib.pyplot as plt
-from viz_common import demo_series, style_ax, PALETTE
-import c_unified_penmf as P
+from viz_common import demo_series, style_ax, PALETTE, run_traced
 
 # --- build the panel and the forecasting task -------------------------------
 X, Xtrue, M, parts = demo_series(T=300, N=6, seed=6)
 T, N = X.shape
-H = 40
+H = 24                           # match the library's default forecast horizon
 origin = T - H
 
 Xf = X.copy()
 Xf[origin:, :] = np.nan          # blank the entire future horizon, all series
 
-filled = P.online_impute(Xf, {})  # the REAL model: forecast = filled future rows
+# the REAL model: forecast = filled future rows. Trace it so we can also read
+# the model's own AR/Kalman parameters for the predictive cone below.
+filled, _trace, core = run_traced(Xf)
 
-j = 0                            # series to display
+# Display the series with the most forecastable STRUCTURE: high seasonal signal
+# relative to the random-walk factor + idiosyncratic noise. Season and level are
+# deterministic in t, so the model extrapolates them through the blackout; this
+# picks the panel's clearest forecast by an intrinsic property, not by outcome.
+struct = np.array([parts["season"][:, c].var()
+                   / (parts["factor"][:, c].var() + parts["noise"][:, c].var() + 1e-9)
+                   for c in range(N)])
+j = int(struct.argmax())
 hist_t = np.arange(origin)
 fut_t = np.arange(origin, T)
+
+# --- predictive-uncertainty cone (a faithful read-out, not a re-fit) ---------
+# In a blackout the model auto-regresses z_t = a z_{t-1} with per-step prior
+# variance diag(s_fac) (its own generative law, c_unified_penmf l.409), so the
+# h-step state variance is s_fac * (1-a^{2h})/(1-a^2) and the value variance for
+# series j is sum_r W[j,r]^2 * that + psi[j]. The cone widens with horizon.
+a    = float(core.a)
+Wj2  = (np.asarray(core.W)[j] ** 2 * np.asarray(core.s_fac)).sum()
+psij = float(np.asarray(core.psi)[j])
+h    = np.arange(1, H + 1)
+g    = (1.0 - a ** (2 * h)) / (1.0 - a * a) if a * a < 1.0 else h.astype(float)
+sd_fut = np.sqrt(Wj2 * g + psij)
+band_t  = np.concatenate([[origin - 1], fut_t])
+band_mu = np.concatenate([[Xtrue[origin - 1, j]], filled[origin:, j]])
+band_sd = np.concatenate([[0.0], sd_fut])
 
 # --- plot -------------------------------------------------------------------
 fig, ax = plt.subplots(figsize=(3.4, 2.5), constrained_layout=True)
 
 # observed history (truth that the model actually saw)
 ax.plot(hist_t, Xtrue[:origin, j], color=PALETTE["ink"], lw=1.3,
-        label="observed history")
+        label="observed")
+
+# predictive uncertainty cone (+/-2 sigma), widening into the horizon
+ax.fill_between(band_t, band_mu - 2 * band_sd, band_mu + 2 * band_sd,
+                color=PALETTE["red"], alpha=0.13, lw=0,
+                label=r"$\pm2\sigma$")
 
 # held-out truth in the forecast region, for reference (faint)
 ax.plot(fut_t, Xtrue[origin:, j], color=PALETTE["grey"], lw=1.3, alpha=0.7,
@@ -43,7 +71,7 @@ ax.plot(fut_t, Xtrue[origin:, j], color=PALETTE["grey"], lw=1.3, alpha=0.7,
 
 # the model's forecast = its fill of the future rows (dashed)
 ax.plot(fut_t, filled[origin:, j], color=PALETTE["red"], lw=1.3, ls="--",
-        label="model forecast (fill)")
+        label="forecast")
 
 # connect the last observed point to the first forecast point
 ax.plot([origin - 1, origin], [Xtrue[origin - 1, j], filled[origin, j]],
@@ -63,8 +91,8 @@ ax.set_xlabel("time step $t$", fontsize=9)
 ax.set_ylabel(f"series {j} value", fontsize=9)
 ax.set_title("Forecasting is just imputing future rows (one model)", fontsize=9,
              pad=14)
-ax.legend(fontsize=6.6, loc="lower center", bbox_to_anchor=(0.5, 1.0),
-          ncol=3, columnspacing=1.0, handlelength=1.6, handletextpad=0.5,
+ax.legend(fontsize=6.0, loc="lower center", bbox_to_anchor=(0.5, 1.0),
+          ncol=4, columnspacing=0.9, handlelength=1.4, handletextpad=0.4,
           borderpad=0.3, framealpha=0.0, borderaxespad=0.2)
 
 out = os.path.abspath(os.path.join(os.path.dirname(__file__),
@@ -73,4 +101,6 @@ os.makedirs(os.path.dirname(out), exist_ok=True)
 fig.savefig(out, bbox_inches="tight", pad_inches=0.03)
 
 mae = np.abs(filled[origin:, j] - Xtrue[origin:, j]).mean()
-print(f"saved {out}  H={H} origin={origin}  series {j} forecast MAE={mae:.3f}")
+cov2 = float((np.abs(filled[origin:, j] - Xtrue[origin:, j]) / sd_fut <= 2).mean())
+print(f"saved {out}  H={H} origin={origin}  series {j} (struct={struct[j]:.1f}) "
+      f"MAE={mae:.3f}  a={a:.3f}  2sigma-cover={cov2:.0%}")

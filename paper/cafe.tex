@@ -761,7 +761,8 @@ adapt online from the data---no hyperparameters.}
 \begin{minipage}[t]{0.48\textwidth}\centering
 \includegraphics[width=\linewidth]{figures/forecasting.pdf}
 \captionof{figure}{\textbf{Forecasting = imputation.} Masking the last rows and imputing them yields a
-forecast via the AR/Kalman state---one model for fill, forecast and nowcast.}
+forecast via the AR/Kalman state---one model for fill, forecast and nowcast. The shaded $\pm2\sigma$
+cone is the model's own predictive variance, widening with horizon as the latent state's information decays.}
 \label{fig:fc}
 \end{minipage}
 
