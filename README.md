@@ -4,6 +4,7 @@ Zero-config, CPU-first, <b>point-in-time</b> missing-value imputation —
 with uncertainty, factors, anomalies and forecasts from a single forward pass.</p>
 
 <p align="center">
+<a href="https://pypi.org/project/cafe-impute/"><img src="https://img.shields.io/pypi/v/cafe-impute.svg?color=2C7A7B" alt="PyPI"></a>
 <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT">
 <img src="https://img.shields.io/badge/python-%E2%89%A53.9-blue.svg" alt="py">
 <img src="https://img.shields.io/badge/deps-numpy--only-informational.svg" alt="deps">
@@ -14,6 +15,15 @@ with uncertainty, factors, anomalies and forecasts from a single forward pass.</
 > It is a *mechanistic statistical model — not a neural network*: one penalised
 > objective whose learned parameters make SoftImpute, TRMF, the Kalman filter,
 > MC-NNM and Gaussian conditional-mean imputation all **special cases**.
+
+<p align="center">
+<img src="docs/figures/hero.png" alt="CAFÉ in one picture" width="820"><br>
+<sub><b>CAFÉ in one picture.</b> Every value is the sum of four interpretable parts — a per-series
+level, a Fourier season, a few shared low-rank factors and heavy-tailed noise — filled using
+<b>only data up to its own time</b> <i>t</i> (a mechanical verifier certifies no look-ahead). One
+penalised objective whose dials are learned from the data; the classical imputers are its corners,
+so there is no model to select.</sub>
+</p>
 
 ---
 
@@ -61,11 +71,18 @@ at all. Published numbers come from one reconciled registry
 ## Install
 
 ```bash
+pip install cafe-impute            # core (numpy only)
+pip install "cafe-impute[all]"     # + pandas, polars, matplotlib
+```
+
+<details><summary>…or from source</summary>
+
+```bash
 git clone https://github.com/sovai-research/cafe.git
 cd cafe
-pip install -e .            # core (numpy only)
-pip install -e ".[all]"     # + pandas, polars, matplotlib
+pip install -e ".[all]"
 ```
+</details>
 
 ## Quick start
 
@@ -188,16 +205,26 @@ would apply, done automatically, online, and provably without peeking at the fut
 The four "dials" (how many factors, how much memory, how heavy the tails, how strong
 the seasonality) are learned from the data. No neural network, no training phase.
 
-The objective and its special cases:
+**The objective** — one penalised loss, fit online:
 
-```
-min  Σ ρ_ν( x_ti − μ_e,i − (Φ_t β)_i − (z_t Wᵀ)_i )      # robust (Student-t) fit
-   + Σ_l α_l ‖W_:,l‖²       (ARD → rank)                  SoftImpute : a=0, ν→∞
-   + λ_z Σ_t ‖z_t − a z_{t−1}‖²   (→ dynamics)            TRMF       : a learned
-   + λ_b ‖β‖²  (→ seasonality)   + ridge(μ)  (→ FE)        Kalman/SSM : a→1
-                                                          MC-NNM     : FE + low rank
-   z_t = a z_{t−1} + η_t,   ε ~ t_ν(0, Ψ)                 EW-cov     : rank→0
-```
+$$
+\min_{\mu,\beta,W,z}\ \sum_{t,i}\rho_\nu\!\big(x_{ti}-\mu_{e,i}-(\Phi_t\beta)_i-(z_tW^\top)_i\big)
+\;+\;\underbrace{\sum_l \alpha_l\lVert W_{:,l}\rVert^2}_{\text{ARD}\,\to\,\text{rank}}
+\;+\;\underbrace{\lambda_z\sum_t\lVert z_t-a\,z_{t-1}\rVert^2}_{\to\ \text{dynamics}}
+\;+\;\underbrace{\lambda_\beta\lVert\beta\rVert^2}_{\to\ \text{season}}
+\;+\;\underbrace{\mathrm{ridge}(\mu)}_{\to\ \text{FE}}
+$$
+
+with latent dynamics $z_t = a\,z_{t-1} + \eta_t$ and heavy-tailed residuals $\varepsilon \sim t_\nu(0,\Psi)$.
+Turn the learned dials and the classical imputers fall out **exactly** — they are corners of this one space:
+
+| Special case | Recovered when |
+| --- | --- |
+| **SoftImpute** | $a=0,\ \nu\to\infty$ — no dynamics, Gaussian |
+| **TRMF** | $a$ learned — AR factor dynamics |
+| **Kalman / SSM** | $a\to1$ — random-walk state |
+| **MC-NNM** | fixed effects $+$ low rank |
+| **EW-cov** | rank $\to 0$ — pure cross-sectional covariance |
 
 ## Repository layout
 
@@ -221,6 +248,117 @@ history); `src/cafe/` is the packaged product. Both share the same estimator.
   time-prefix verifier across the benchmark suite.
 - **Robustness** — `bench/robustness.py` checks finite, same-shape output on every edge
   input (all-NaN, 1×1, constant, Inf, huge/tiny, wide/tall, single entity/time).
+
+## The evidence
+
+The whole case for CAFÉ is one experiment: **forbid the future, and the leaderboard collapses.**
+
+<p align="center">
+<img src="docs/figures/causal_race_flip.png" alt="Forbid the future and the board collapses" width="840"><br>
+<sub><b>Forbid the future and the board collapses.</b> Each line is a method; the <i>y</i>-axis is MAE on a
+shared scale. <b>Left</b> = the standard <b>bidirectional</b> game (a method may read the future);
+<b>right</b> = strict <b>causal</b>, point-in-time scoring. Every causal-native method is a flat line — its
+score is unchanged (∆ = 0). The bidirectional front-runners — TRMF, the deep imputers, linear interpolation —
+slope up and drop, because the advantage they posted <i>was</i> look-ahead. CAFÉ rises to <b>#1 causal</b>.</sub>
+</p>
+
+<p align="center">
+<img src="docs/figures/causal_moat.png" alt="No look-ahead: CAFÉ's past imputations are frozen" width="760"><br>
+<sub><b>The moat: no look-ahead.</b> For a fixed early missing cell, we re-impute on growing time-prefixes.
+CAFÉ's estimate is <b>frozen the moment its time passes</b> (flat line), so a backtest cannot be contaminated;
+the non-causal batch method's “past” estimate keeps drifting as the future is revealed.</sub>
+</p>
+
+<p align="center">
+<img src="docs/figures/benchmark.png" alt="Lowest MAE on Beijing Air-Quality" width="500"><br>
+<sub><b>Accuracy — in the band of GPU deep nets, causal and on a CPU.</b> Beijing Air-Quality
+(10% point-MCAR, standardised, 3 seeds): CAFÉ reaches MAE ≈ 0.108. The deep numbers use a different
+windowed train/val/test protocol, so they are cited <i>context, not a ranked board</i> (see “Why CAFÉ” above).</sub>
+</p>
+
+<details>
+<summary><b>📊 The deployable (causal) leaderboard</b> — ranked by the score that survives deployment, not the look-ahead-inflated one</summary>
+
+Mean MAE over 8 structured datasets. Methods are ranked by **causal** (strict point-in-time) MAE — the number
+that survives a backtest — not by the future-using **bidirectional** MAE that flatters look-ahead. `∆ = causal − bidir`
+is the accuracy a method *silently borrows from the future*. TRMF posts the lowest bidirectional MAE (0.315) but
+borrows ∆ = 0.28, so its honest causal MAE is mid-pack; **CAFÉ borrows nothing (∆ = 0) and is #1 deployable.**
+The last column is a no-structure control (FX, a near-random walk), where a factor prior is the wrong model — an
+honest off-regime limitation, kept out of the headline mean.
+
+| Method | Causal MAE ↓ | Bidir MAE | ∆ borrowed | FX (ctrl) ↓ | Family |
+| --- | ---: | ---: | ---: | ---: | --- |
+| **CAFÉ** | **0.327** | 0.327 | **0.000** | 0.502 | **factor (ours)** |
+| BayOTIDE | 0.360 | 0.360 | 0.000 | 0.246 | online |
+| OnlineEWCov | 0.435 | 0.435 | 0.000 | 0.264 | online |
+| TRMF | 0.592 | 0.315 | 0.277 | 0.314 | classical |
+| SeasonalNaive | 0.605 | 0.605 | 0.000 | 0.201 | online |
+| SAITS | 0.631 | 0.502 | 0.129 | 1.193 | deep |
+| gcimpute | 0.640 | 0.640 | 0.000 | 1.012 | online |
+| ImputeFormer | 0.660 | 0.601 | 0.060 | 0.939 | deep |
+| SoftImpute | 0.663 | 0.668 | −0.005 | 0.314 | classical |
+| Transformer | 0.683 | 0.496 | 0.187 | 1.277 | deep |
+| OnlineMeanVar | 0.689 | 0.689 | 0.000 | 0.234 | online |
+| EWMA | 0.699 | 0.699 | 0.000 | 0.149 | online |
+| KalmanLL | 0.706 | 0.706 | 0.000 | 0.143 | online |
+| RollingMedian | 0.719 | 0.719 | 0.000 | 0.316 | online |
+| RollingMean | 0.724 | 0.724 | 0.000 | 0.319 | online |
+| GROUSE | 0.728 | 0.728 | 0.000 | 1.155 | online |
+| TimesNet | 0.734 | 0.545 | 0.189 | 1.414 | deep |
+| LinearInterp | 0.785 | 0.655 | 0.131 | 0.306 | classical |
+| LOCF | 0.799 | 0.799 | 0.000 | 0.162 | online |
+| XSecMean | 0.799 | 0.799 | 0.000 | 0.162 | online |
+| BRITS | 0.821 | 0.508 | 0.313 | 1.421 | deep |
+| Zero | 0.842 | 0.842 | 0.000 | 1.012 | online |
+| CausalMean | 0.885 | 0.885 | 0.000 | 1.218 | online |
+| Drift | 6.979 | 6.979 | 0.000 | 0.752 | online |
+
+</details>
+
+<details>
+<summary><b>🎯 Does it help a real downstream model?</b> — online forecasting utility, strictly point-in-time</summary>
+
+When the downstream model **cannot tolerate NaN** (e.g. a ridge regression), imputation is mandatory and the only
+choice is the imputer. Predicting a held-out panel target from the *other* columns at the same time (50% of feature
+cells missing, 60% contiguous blocks; strict temporal 70/30 split), online **Live** R² (each test row re-imputed
+point-in-time). Among **deployable (causal)** methods, CAFÉ wins on all four panels:
+
+| Panel | ZeroFill (forced) | LOCF | **CAFÉ** | Oracle (clean) |
+| --- | ---: | ---: | ---: | ---: |
+| Beijing (PM2.5) | −0.110 | −0.141 | **0.499** | 1.000 |
+| Traffic (PEMS) | 0.869 | 0.795 | **0.922** | 0.951 |
+| Solar (NREL) | 0.904 | 0.845 | **0.944** | 0.942 |
+| Air Quality | 0.833 | 0.737 | **0.940** | 0.987 |
+
+CAFÉ gains **+0.20 Live R²** over the forced ZeroFill and **+0.27** over LOCF, on average — a real online improvement
+with **zero look-ahead** (Reported ≡ Live, ∆ = 0, verified by `assert_causal`). The non-causal references
+(LinearInterp, SoftImpute) post strong *Reported* R² that **collapses Live** — their batch edge is pure look-ahead.
+Even NaN-native GBMs (XGBoost/LightGBM/CatBoost) gain ≈ +0.016 R² from CAFÉ's causal fill over raw-NaN on
+structured panels (full tables in [`paper/cafe.pdf`](paper/cafe.pdf)).
+
+</details>
+
+<details>
+<summary><b>🖼️ Everything from one causal pass</b> — the full output gallery</summary>
+
+Every panel is read straight from the same forward run — no quantity is illustrative.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/figures/decomposition.png" alt="Decomposition"><br><sub><b>Interpretable decomposition.</b> Each fill is the sum of level + season + shared factors + idiosyncratic carry — auditable, not a black box.</sub></td>
+<td width="50%"><img src="docs/figures/uncertainty.png" alt="Uncertainty"><br><sub><b>Per-cell uncertainty.</b> Bands widen inside long gaps; scored by CRPS / coverage / sharpness.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/figures/factors.png" alt="Latent factors"><br><sub><b>Latent factors & learned rank.</b> A streaming robust DFM; ARD prunes the rest, so the effective rank is discovered.</sub></td>
+<td width="50%"><img src="docs/figures/dependency_net.png" alt="Dependency network"><br><sub><b>Dependency network.</b> Residual covariance recovers the cross-sectional correlation structure between series.</sub></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/figures/anomaly.png" alt="Anomaly detection"><br><sub><b>Anomaly detection (free).</b> Student-<i>t</i> weights drop exactly on injected outliers — a point-in-time data-quality score.</sub></td>
+<td width="50%"><img src="docs/figures/forecasting.png" alt="Forecasting"><br><sub><b>Forecasting = imputation.</b> Masking the last rows and imputing them yields a forecast via the AR/Kalman state — one model.</sub></td>
+</tr>
+</table>
+
+</details>
 
 ## Citation
 
