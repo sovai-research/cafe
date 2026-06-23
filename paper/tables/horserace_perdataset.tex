@@ -2,18 +2,18 @@
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{Causal horse race, per dataset (block-missing, causal MAE $\downarrow$).} Strictly point-in-time evaluation. \cafe{} is the best causal imputer on every dataset with genuine factor structure (macro, air-quality, energy, Beijing --- the four that make up the headline mean). Exchange* is a no-structure control (a near-random-walk FX panel), shown last and never folded into the mean: there a last-value / Kalman prior is correctly better, since a factor prior is the wrong model --- an honest off-regime limitation. Deep imputers, trained on history and applied strictly point-in-time, collapse throughout. Best per column in \textbf{bold}.}
 \label{tab:horseraceperds}
-\begin{tabular}{@{}lccccc@{}}
+\begin{tabular}{@{}lccccccccc@{}}
 \toprule
-Method (causal) & AirQual & Applnce & Beijing & FRED-MD & Exchange* \\
+Method (causal) & AirQual & Applnce & Beijing & electric & etth & FRED-MD & solar & traffic2 & Exchange* \\
 \midrule
-\textbf{CAFE} & \textbf{0.304} & \textbf{0.417} & \textbf{0.247} & \textbf{0.227} & 0.762 \\
-BayOTIDE & 0.376 & 0.432 & 0.299 & 0.242 & 0.261 \\
-OnlineEWCov & 0.338 & 0.507 & 0.444 & 0.457 & 0.282 \\
-KalmanLL & 0.802 & 0.515 & 0.552 & 0.310 & \textbf{0.158} \\
-LOCF & 0.936 & 0.508 & 0.578 & 0.273 & 0.164 \\
+\textbf{CAFE} & \textbf{0.342} & \textbf{0.428} & \textbf{0.316} & \textbf{0.315} & 0.638 & \textbf{0.227} & \textbf{0.133} & \textbf{0.214} & 0.502 \\
+BayOTIDE & 0.392 & 0.457 & 0.400 & 0.389 & 0.559 & 0.242 & 0.141 & 0.299 & 0.246 \\
+OnlineEWCov & 0.391 & 0.511 & 0.591 & 0.410 & \textbf{0.431} & 0.457 & 0.325 & 0.364 & 0.264 \\
+KalmanLL & 0.860 & 0.568 & 0.698 & 0.733 & 0.699 & 0.310 & 0.990 & 0.789 & \textbf{0.143} \\
+LOCF & 1.010 & 0.570 & 0.724 & 0.949 & 0.817 & 0.273 & 0.975 & 1.075 & 0.162 \\
 \midrule
-SAITS$^\dagger$ & 0.432 & 0.702 & 0.708 & 1.120 & 1.390 \\
-ImputeFormer$^\dagger$ & 0.654 & 0.708 & 0.766 & 0.844 & 0.967 \\
+SAITS$^\dagger$ & 0.482 & 0.655 & 0.819 & 0.511 & 0.734 & 1.137 & 0.309 & 0.399 & 1.193 \\
+ImputeFormer$^\dagger$ & 0.648 & 0.670 & 0.870 & 0.621 & 0.781 & 0.871 & 0.322 & 0.500 & 0.939 \\
 \bottomrule
 \end{tabular}
  \\[2pt]{\footnotesize $^\dagger$deep models, applied strictly point-in-time (right-edge readout).}

@@ -332,7 +332,7 @@ def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
         ax.axvline(xc, color=PALETTE["grey"], lw=0.6, alpha=0.18, zorder=0)
 
     ax.set_title("Forbid the future and the board collapses:  "
-                 "deep & interpolation methods fall, CAFÉ (causal) leads either way",
+                 "the bidirectional leaders (TRMF, deep nets) fall, CAFÉ rises to #1 causal",
                  fontsize=12, fontweight="bold", pad=30)
 
     # ---- legend: horizontal, under the title, clear of the x tick labels --- #

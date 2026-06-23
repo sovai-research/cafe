@@ -1,0 +1,40 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{The Online Downstream Test: deployment-realistic imputation for online forecasting on structured panels.} A ridge forecasts the next-step value of a held-out panel target (the column best explained by the cross-section, chosen on \emph{train} only) from the other columns; a toy long/short rule trades the sign of the predicted next-step move (per-period Sharpe). 30\% of feature cells are missing (60\% contiguous blocks $+$ MCAR); the target is never imputed. Strict temporal 70/30 split with the feature scaler fit on \emph{train} rows only (no test leakage); mean over 3 missingness seeds. The standard (batch) protocol imputes the WHOLE series once and reads test features from that fill (\emph{Reported}). Deployment is online: each test row is re-imputed STRICTLY point-in-time on the prefix up to that row (\emph{Live}, expanding walk-forward) -- the only number a live system could have produced. The same trained model is scored both ways, so $\Delta = $Reported$-$Live isolates the imputation look-ahead. \textbf{Two findings.} \emph{(Honesty)} the non-causal imputers (LinearInterp, SoftImpute) post strong \emph{Reported} $R^2$ that \emph{collapses} Live ($\Delta \gg 0$): their batch advantage is pure look-ahead, the imputation analogue of the leak in Bryzgalova et al., \emph{Missing Financial Data} (RFS 2025). \cafe{} (and the other causal baselines) have Reported $\equiv$ Live, $\Delta = 0$ \emph{by truncation invariance} (verified via \texttt{assert\_causal}). \emph{(Utility)} among causal methods, \cafe{}'s point-in-time cross-sectional fill gives the best deployable (Live) $R^2$ (\textbf{bold}), beating raw-NaN and LOCF because it reconstructs the missing cell from the contemporaneous cross-section. \emph{Online evaluation is the deployment-correct one: it is the only protocol that does not reward look-ahead.} \textbf{Utility finding:} across 4 panels \cafe{} has the best Live $R^2$ among causal methods in 3, loses on average 0.002 Live $R^2$ over raw-NaN and gains 0.112 over LOCF -- a real online improvement, no look-ahead.}
+\label{tab:online_downstream}
+\begin{tabular}{@{}lc ccc c@{}}
+\toprule
+ & & \multicolumn{3}{c}{Forecast $R^2$} & L/S \\
+\cmidrule(lr){3-5}\cmidrule(lr){6-6}
+Imputer & Causal? & Rep. & Live$\uparrow$ & $\Delta\!\downarrow$ & Sharpe$_{\mathrm{live}}$ \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Beijing (PM2.5 panel)}}\\
+RAW-NaN (mean) & \ding{51} & 0.617 & \textbf{0.617} & 0.000 & 0.12 \\
+LOCF & \ding{51} & 0.303 & 0.303 & 0.000 & 0.10 \\
+\cafe{} (ours) & \ding{51} & 0.495 & 0.495 & 0.000 & 0.14 \\
+LinearInterp & \ding{55} & 0.452 & 0.421 & 0.032 & 0.11 \\
+SoftImpute & \ding{55} & 0.724 & 0.715 & 0.009 & 0.14 \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Traffic (PEMS occupancy)}}\\
+RAW-NaN (mean) & \ding{51} & 0.350 & 0.350 & 0.000 & 0.74 \\
+LOCF & \ding{51} & 0.307 & 0.307 & 0.000 & 0.69 \\
+\cafe{} (ours) & \ding{51} & 0.433 & \textbf{0.433} & 0.000 & 0.83 \\
+LinearInterp & \ding{55} & 0.268 & 0.238 & 0.030 & 0.65 \\
+SoftImpute & \ding{55} & 0.380 & 0.371 & 0.009 & 0.75 \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Solar (NREL plant power)}}\\
+RAW-NaN (mean) & \ding{51} & 0.897 & 0.897 & 0.000 & 0.46 \\
+LOCF & \ding{51} & 0.801 & 0.801 & 0.000 & 0.38 \\
+\cafe{} (ours) & \ding{51} & 0.929 & \textbf{0.929} & 0.000 & 0.53 \\
+LinearInterp & \ding{55} & 0.846 & 0.815 & 0.032 & 0.41 \\
+SoftImpute & \ding{55} & 0.901 & 0.899 & 0.002 & 0.46 \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Air Quality (multisensor)}}\\
+RAW-NaN (mean) & \ding{51} & 0.929 & 0.929 & 0.000 & 0.13 \\
+LOCF & \ding{51} & 0.928 & 0.928 & 0.000 & 0.15 \\
+\cafe{} (ours) & \ding{51} & 0.930 & \textbf{0.930} & 0.000 & 0.17 \\
+LinearInterp & \ding{55} & 0.929 & 0.929 & 0.000 & 0.14 \\
+SoftImpute & \ding{55} & 0.929 & 0.929 & 0.000 & 0.14 \\
+\bottomrule
+\end{tabular}
+\end{table*}

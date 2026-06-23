@@ -44,7 +44,8 @@ WINDOW = int(os.environ.get("HR_WINDOW", 24))
 RATE = float(os.environ.get("HR_RATE", 0.10))
 PATTERNS = os.environ.get("HR_PATTERNS", "block,mcar").split(",")
 DATASETS = os.environ.get("HR_DATASETS",
-                          "fredmd,exchange,airquality,appliances,beijing").split(",")
+                          "fredmd,airquality,appliances,beijing,traffic2,etth,solar,electric,"
+                          "exchange").split(",")
 # The headline race is a benchmark OF STRUCTURE. Macro (FRED-MD), air-quality, energy
 # and Beijing all carry genuine common-factor structure -- exactly the regime a low-rank
 # dynamic factor model is built for. FX (exchange) is a near-random walk with no factor
@@ -53,7 +54,8 @@ DATASETS = os.environ.get("HR_DATASETS",
 # reported in its own column, and never fold it into the headline mean (averaging an
 # adversarial off-regime dataset into a structure benchmark just hides the real ranking).
 NOSTRUCT = [d for d in os.environ.get("HR_NOSTRUCT", "exchange").split(",") if d]
-CACHE = os.path.join(HERE, "horserace_cache.json")
+# HR_CACHE lets parallel workers write disjoint partial caches (merged afterwards).
+CACHE = os.environ.get("HR_CACHE") or os.path.join(HERE, "horserace_cache.json")
 
 
 # --------------------------------------------------------------------------- #
@@ -66,6 +68,9 @@ def _load(name):
         "airquality": "airquality_clean.npy", "appliances": "appliances_clean.npy",
         "traffic": "traffic_clean.npy", "beijing": "beijing_clean.npy",
         "etth1": "ETTh1_clean.npy",
+        # 4 added structured panels (see bench/datasets_extra.py for provenance)
+        "traffic2": "traffic2_clean.npy", "etth": "etth_clean.npy",
+        "solar": "solar_clean.npy", "electric": "electric_clean.npy",
     }
     X = np.load(p(files[name])).astype(float)
     if X.shape[0] > ROWS:
@@ -80,6 +85,8 @@ DATASET_DESC = {
     "airquality": "Air-quality sensors", "appliances": "Appliance energy",
     "traffic": "Road traffic (PeMS)", "beijing": "Beijing air-quality",
     "etth1": "Electricity transformer temp",
+    "traffic2": "Road traffic (PEMS occupancy)", "etth": "Transformer temp/load",
+    "solar": "Solar PV power (NREL)", "electric": "Electricity demand (UCI)",
 }
 
 
@@ -105,6 +112,14 @@ def _classical_methods():
         out["LinearInterp"] = ("classical", lambda X: Nai.linear_interp(X, {}), None)
     except Exception as e:
         print("  [skip] LinearInterp:", e)
+    # Give the batch methods a CAUSAL variant (right-edge / trailing-window readout,
+    # same treatment as the deep models) so each gets a real look-ahead gap Delta.
+    # This replaces the None causal slots above with (family, bidir_fn, causal_fn).
+    try:
+        from causal_batch import CAUSAL_BATCH
+        out.update(CAUSAL_BATCH)
+    except Exception as e:
+        print("  [skip] causal_batch (batch methods stay bidir-only):", e)
     return out
 
 
@@ -414,7 +429,8 @@ def main():
     with open(CACHE, "w") as f:
         json.dump({"meta": meta, "results": results}, f, indent=2)
     print(f"[cache] wrote {CACHE} ({len(results)} rows)")
-    write_tables(results, meta)
+    if not os.environ.get("HR_SKIP_TABLES"):
+        write_tables(results, meta)
 
 
 def regen_from_cache():

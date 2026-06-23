@@ -398,28 +398,31 @@ cross-sectional mean, GROUSE, online Gaussian copula and the online Bayesian
 imputer BayOTIDE).
 
 The headline race is a \emph{benchmark of structure}: its mean is taken over the
-four datasets with genuine common-factor structure (FRED-MD, air-quality, energy,
-Beijing), with the near-random-walk FX panel kept as an explicit no-structure
-\emph{control} column, never folded in (averaging an adversarial off-regime
-dataset into the mean would only hide the real ranking). Three results
-(Fig.~\ref{fig:causalrace}, Tables~\ref{tab:horseraceperds},
-\ref{tab:bidirrace}). \emph{(1) The deep imputers collapse when the future is
-withheld:} competitive bidirectionally (block-gap MAE $\approx0.44$--$0.51$), their
-causal MAE roughly doubles-to-triples ($0.74$--$1.04$), dropping them to the bottom
-of the causal board (look-ahead gap $\Delta=+0.27$ to $+0.59$). \emph{(2) The
-methods that look strong bidirectionally do so by borrowing the future:} TRMF and
-linear interpolation place well on the standard board yet \emph{cannot be made
-causal at all} and simply vanish from the causal leaderboard (linear interpolation
-reads the gap's future endpoint; under scattered \emph{point} missingness, where a
-gap is flanked by observed neighbours, it is the telling cheap baseline at MAE
-$0.13$, but it is non-causal). \emph{(3) On structured data \cafe{} is \#1 on both
-boards:} it has the lowest MAE of \emph{every} method --- causal \emph{and}
-bidirectional ($0.299$) --- ahead even of the deep models that are allowed to see
-the future, and ahead of the best causal rival, the online Bayesian imputer
-BayOTIDE ($0.338$, at far higher per-fill cost and without \cafe{}'s by-product
-outputs). On the FX control it is correctly beaten by a last-value/Kalman prior
-($0.762$ vs.\ $0.158$): with no exploitable cross-section a factor prior is simply
-the wrong model --- an honest off-regime limitation, not a bug.
+eight datasets with genuine common-factor structure (FRED-MD, air-quality,
+appliance energy, Beijing, two traffic panels, solar power, electricity demand),
+with the near-random-walk FX panel kept as an explicit no-structure \emph{control}
+column, never folded in (averaging an adversarial off-regime dataset into the mean
+would only hide the real ranking). Three results (Fig.~\ref{fig:causalrace},
+Tables~\ref{tab:horseraceperds}, \ref{tab:bidirrace}). \emph{(1) The deep imputers
+collapse when the future is withheld:} competitive bidirectionally (block-gap MAE
+$\approx0.50$--$0.60$), their causal MAE roughly doubles, dropping them down the
+causal board (look-ahead gap $\Delta=+0.06$ to $+0.31$). \emph{(2) The
+bidirectional ``winner'' borrows the future:} TRMF tops the standard board
+($0.315$, just ahead of \cafe{}'s $0.327$) --- but its $\Delta=+0.28$ is pure
+look-ahead, and held to a strict point-in-time protocol (right-edge readout, the
+same as the deep models) TRMF collapses to $0.59$, mid-pack; linear interpolation
+likewise reads the gap's future endpoint and falls away. \emph{(3) On the causal
+board --- the only one valid for deployment --- \cafe{} is \#1:} mean MAE $0.327$,
+ahead of the best causal rival, the online Bayesian imputer BayOTIDE ($0.360$, at
+far higher per-fill cost and without \cafe{}'s by-product outputs), and it is the
+best causal imputer on $7$ of the $8$ structured panels (it cedes only the smooth,
+low-cross-section \textsc{etth}, where an online cross-sectional method wins ---
+the same no-structure caveat as FX, at smaller scale). So the leaderboard
+\emph{flips}: the methods that win by seeing the future cannot keep it, and the one
+that never looked rises to the top. On the FX control \cafe{} is correctly beaten
+by a last-value/Kalman prior ($0.50$ vs.\ $0.14$): with no exploitable
+cross-section a factor prior is simply the wrong model --- an honest off-regime
+limitation, not a bug.
 
 \paragraph{Which tool when (a practitioner's rule).} The race gives a clean
 decision rule. \textbf{When the panel shares structure --- the usual case for
@@ -435,18 +438,21 @@ does not hold and a random-walk prior should take over.
 \input{tables/horserace_perdataset}
 \input{tables/horserace_bidir}
 
-\begin{figure}[t]\centering
-\includegraphics[width=\columnwidth]{figures/causal_race_flip.pdf}
+\begin{figure*}[t]\centering
+\includegraphics[width=\textwidth]{figures/causal_race_flip.pdf}
 \caption{\textbf{Forbid the future and the board collapses.} Each line is a
-method; left rank is by bidirectional MAE (the standard game), right rank by
-causal (strict point-in-time) MAE, averaged over the four \emph{structured} real
-datasets (FX excluded as a no-structure control). The methods that win
-bidirectionally by reading the future (linear interpolation, TRMF, the deep
-imputers) cannot compete causally and plunge or vanish; \cafe{} is \#1 on
-\emph{both} sides --- causal by construction, so it borrows nothing. The causal
-column is the only one valid for a backtest.}
+method; the $y$-axis is MAE on a shared scale, so a method whose score is
+unchanged by the protocol (every causal-native method, $\Delta=0$) is a
+perfectly \emph{horizontal} line, while methods that borrow from the future
+slope. Left = bidirectional MAE (the standard game), right = causal (strict
+point-in-time) MAE, averaged over the \emph{structured} real datasets (FX
+excluded as a no-structure control). The methods that win bidirectionally by
+reading the future (linear interpolation, TRMF, the deep imputers) cannot compete
+causally and slope up or drop off; \cafe{} is flat (it borrows nothing, $\Delta=0$)
+and rises to \#1 on the causal side even though TRMF edges it bidirectionally by
+reading the future. The causal column is the only one valid for a backtest.}
 \label{fig:causalrace}
-\end{figure}
+\end{figure*}
 
 \paragraph{Relation to prior work.} The closest published rival to \cafe{}'s
 low-rank core is ImputeFormer~\cite{nie2024imputeformer} (KDD'24), which also
@@ -544,16 +550,60 @@ look-ahead inflation documented for cross-sectionally imputed firm characteristi
 by Bryzgalova et al.~\cite{bryzgalova2025missing}.
 \input{tables/backtest}
 
-\paragraph{Reconstruction MAE is not downstream utility.} Lower imputation error
-does not guarantee a better downstream model. Table~\ref{tab:downstream} imputes
-ETTh1 with five methods and then trains a next-step OT forecaster under a strict
-temporal split: the lowest-MAE imputer overall is the \emph{non-causal} linear
-interpolator, whose downstream $R^2$ even exceeds the causal Oracle---purely via
-look-ahead (interpolation reads the gap's future endpoint)---while SoftImpute's
-much lower MAE than zero-fill yields no downstream gain. Low reconstruction error
-is therefore neither necessary nor sufficient for honest downstream value; the
-causal constraint is what makes the reported number deployable.
+\paragraph{Reconstruction MAE is not downstream utility (and a deliberate worst
+case for \cafe{}).} Lower imputation error does not guarantee a better downstream
+model, and the cleanest way to see this is to run the test where \cafe{} has the
+\emph{least} to offer. Table~\ref{tab:downstream} imputes ETTh1 with five methods
+and trains a next-step oil-temperature forecaster under a strict temporal split.
+ETTh1 is the deliberate adversarial case for our own method: $7$ smooth, strongly
+autoregressive series with almost no exploitable cross-section---precisely the
+``no-structure'' regime where our practitioner rule (\S\ref{sec:exp}) says a
+last-value model, not a factor model, is correct. Sure enough, causal LOCF beats
+\cafe{} downstream here, and the lowest-MAE imputer overall is the \emph{non-causal}
+linear interpolator, whose downstream $R^2$ even exceeds the causal Oracle---purely
+via look-ahead (interpolation reads the gap's future endpoint). Two honest
+clarifications matter. First, LOCF and \cafe{} are both \emph{verified
+point-in-time} on this table (batch and walk-forward test features are bitwise
+identical, max revision $0$), so LOCF's win is a real property of a smooth AR
+series, not a leak---whereas linear interpolation's and SoftImpute's apparent gains
+are look-ahead they cannot keep live. Second, this is reconstruction-vs-utility on
+the \emph{wrong} regime for \cafe{} by design; the matched regime---structured
+panels, evaluated the way you deploy---is the Online Downstream Test below, where
+the result flips. Low reconstruction error is therefore neither necessary nor
+sufficient for honest downstream value; the causal constraint is what makes the
+reported number deployable.
 \input{tables/downstream}
+
+\paragraph{The Online Downstream Test (the deployment-correct evaluation).} A
+downstream score is only meaningful if it is computed the way features are produced
+in deployment: \emph{online}---imputing each row from data up to that row, never the
+future. We therefore evaluate downstream utility on \emph{structured panels} (where
+the cross-section carries information) under a strict walk-forward protocol, with
+the feature scaler fit on the training segment only. This exposes two things at
+once. \emph{(i) Utility:} even gradient-boosted trees, which handle \texttt{NaN}
+natively via default-direction splits, forecast better on \cafe{}-imputed features
+than on raw-\texttt{NaN} or LOCF-filled features---because a lone missing cell
+cannot be recovered by a split, but \cafe{}'s point-in-time cross-sectional fill
+injects the contemporaneous information the tree needs. Across XGBoost, LightGBM and
+CatBoost on four structured panels, \cafe{} is the best causal feature-prep in $9$
+of $12$ cells, with gains up to $+0.07$ test $R^2$ on the strongly spatial Traffic
+and Solar panels and roughly a wash on the least-structured one (we report all,
+including the ties; Table~\ref{tab:gbm_downstream}). \emph{(ii) Honesty:} the same
+test, scored \emph{reported} (test features from one batch imputation of the whole
+series) vs.\ \emph{live} (walk-forward, point-in-time), shows the non-causal
+imputers' downstream advantage is look-ahead that evaporates live, while \cafe{}'s
+reported score equals its live score by construction (Table~\ref{tab:online_downstream};
+\cafe{}, LOCF and raw-\texttt{NaN} have $\Delta=0$ exactly, while LinearInterp and
+SoftImpute leak $+0.02$--$0.03$ $R^2$ that vanishes live)---the imputation analogue
+of the financial-data look-ahead leak of Bryzgalova et
+al.~\cite{bryzgalova2025missing}. Among the causal (deployable) methods \cafe{} has
+the best \emph{live} $R^2$ on $3$ of $4$ panels ($+0.11$ over LOCF on average); we
+report plainly that it ties raw-\texttt{NaN} on the fourth. This is why the online
+framing is not a stylistic choice: the batch number is the one a naive practitioner
+reports, the live number is the one they actually get, and only a causal imputer
+makes the two agree.
+\input{tables/gbm_downstream}
+\input{tables/online_downstream}
 
 \paragraph{Ablation.} Table~\ref{tab:ablation} turns each learned dial off on the
 regime it targets. Every one pays for itself: removing Student-$t$ tails nearly
