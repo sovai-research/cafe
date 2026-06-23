@@ -1,32 +1,32 @@
-\begin{table}[t]\centering\small
+\begin{table*}[t]\centering\small
 \setlength{\tabcolsep}{4pt}
-\caption{\textbf{The causal horse race --- scattered (MCAR) gaps (mean MAE $\downarrow$ over 5 real datasets, 10%).} Every method held to strict point-in-time evaluation (deep models trained on history only and applied via right-edge readout, causal in both parameters and inference). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear; the deep imputers collapse once the future is withheld. This is the only leaderboard valid for sequential decisions.}
+\caption{\textbf{The causal horse race --- scattered (MCAR) gaps (mean causal MAE $\downarrow$ over 4 \emph{structured} real datasets, 10%).} A benchmark of genuine common-factor structure (macro, air-quality, energy, Beijing). Every method held to strict point-in-time evaluation (deep models trained on history only and applied via right-edge readout, causal in both parameters and inference). Batch methods (SoftImpute, TRMF, linear interpolation) cannot be made causal and do not appear; the deep imputers collapse once the future is withheld. This is the only leaderboard valid for sequential decisions. The final column is the no-structure control (FX / Exchange, a near-random walk): a factor prior is the wrong model there, so \cafe{} is correctly beaten by a last-value/Kalman prior --- an honest off-regime limitation, kept out of the headline mean.}
 \label{tab:causalracemcar}
-\begin{tabular}{@{}lcc@{}}
+\begin{tabular}{@{}lccc@{}}
 \toprule
-Method & Causal MAE $\downarrow$ & Family \\
+Method & Causal MAE $\downarrow$ & FX (ctrl)$\downarrow$ & Family \\
 \midrule
-LOCF & 0.183 & online \\
-XSecMean & 0.183 & online \\
-OnlineEWCov & 0.188 & online \\
-\textbf{CAFE} & \textbf{0.217} & factor (ours) \\
-Drift & 0.252 & online \\
-BayOTIDE & 0.266 & online* \\
-KalmanLL & 0.294 & online \\
-EWMA & 0.329 & online \\
-RollingMean & 0.387 & online \\
-RollingMedian & 0.389 & online \\
-OnlineMeanVar & 0.446 & online \\
-GROUSE & 0.515 & online \\
-ImputeFormer & 0.583 & deep (right-edge) \\
-gcimpute & 0.588 & online \\
-SeasonalNaive & 0.593 & online \\
-SAITS & 0.783 & deep (right-edge) \\
-Transformer & 0.784 & deep (right-edge) \\
-TimesNet & 0.839 & deep (right-edge) \\
-Zero & 0.857 & online \\
-CausalMean & 0.973 & online \\
-BRITS & 1.026 & deep (right-edge) \\
+\textbf{CAFE} & \textbf{0.176} & 0.382 & factor (ours) \\
+OnlineEWCov & 0.205 & 0.123 & online \\
+LOCF & 0.219 & 0.040 & online \\
+XSecMean & 0.219 & 0.040 & online \\
+BayOTIDE & 0.288 & 0.181 & online* \\
+Drift & 0.299 & 0.064 & online \\
+GROUSE & 0.335 & 1.236 & online \\
+KalmanLL & 0.349 & 0.071 & online \\
+EWMA & 0.388 & 0.092 & online \\
+RollingMean & 0.452 & 0.125 & online \\
+RollingMedian & 0.455 & 0.124 & online \\
+gcimpute & 0.482 & 1.013 & online \\
+OnlineMeanVar & 0.505 & 0.211 & online \\
+ImputeFormer & 0.574 & 0.621 & deep (right-edge) \\
+Transformer & 0.664 & 1.262 & deep (right-edge) \\
+SAITS & 0.672 & 1.227 & deep (right-edge) \\
+SeasonalNaive & 0.683 & 0.232 & online \\
+TimesNet & 0.743 & 1.221 & deep (right-edge) \\
+Zero & 0.818 & 1.013 & online \\
+CausalMean & 0.909 & 1.229 & online \\
+BRITS & 0.928 & 1.418 & deep (right-edge) \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

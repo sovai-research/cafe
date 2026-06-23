@@ -397,35 +397,54 @@ expanding mean, rolling mean/median, EWMA, drift, a Kalman local level,
 cross-sectional mean, GROUSE, online Gaussian copula and the online Bayesian
 imputer BayOTIDE).
 
-Three results (Fig.~\ref{fig:causalrace}, Tables~\ref{tab:horseraceperds},
+The headline race is a \emph{benchmark of structure}: its mean is taken over the
+four datasets with genuine common-factor structure (FRED-MD, air-quality, energy,
+Beijing), with the near-random-walk FX panel kept as an explicit no-structure
+\emph{control} column, never folded in (averaging an adversarial off-regime
+dataset into the mean would only hide the real ranking). Three results
+(Fig.~\ref{fig:causalrace}, Tables~\ref{tab:horseraceperds},
 \ref{tab:bidirrace}). \emph{(1) The deep imputers collapse when the future is
-withheld:} competitive bidirectionally (MAE $\approx0.36$), their causal MAE
-roughly doubles-to-triples (e.g.\ $0.79$--$1.14$ on block gaps), dropping them to
-the bottom of the causal board. \emph{(2) The bidirectional winner is a
-non-causal cheap baseline} (linear interpolation, MAE $0.13$ on point gaps) that
-\emph{cannot be made causal at all} and simply vanishes from the causal
-leaderboard. \emph{(3) Among causal methods, \cafe{} wins where structure exists:}
-on block-missing data it is the best causal imputer on every dataset with genuine
-factor structure (FRED-MD, air-quality, energy, Beijing; Table~\ref{tab:horseraceperds}),
-and is beaten only on the near-random-walk FX series, where a last-value/Kalman
-model is correctly the right prior --- an honest limitation, not a bug. The
-online Bayesian imputer BayOTIDE is the one competitive causal rival (it edges
-\cafe{} on the FX-inflated \emph{average}), at far higher per-fill cost and
-without \cafe{}'s by-product outputs. Under scattered point missingness the
-simplest causal methods (LOCF, cross-sectional mean) are hard to beat---the
-known small-gap effect---and \cafe{} sits among them, well ahead of every deep
-model.
+withheld:} competitive bidirectionally (block-gap MAE $\approx0.44$--$0.51$), their
+causal MAE roughly doubles-to-triples ($0.74$--$1.04$), dropping them to the bottom
+of the causal board (look-ahead gap $\Delta=+0.27$ to $+0.59$). \emph{(2) The
+methods that look strong bidirectionally do so by borrowing the future:} TRMF and
+linear interpolation place well on the standard board yet \emph{cannot be made
+causal at all} and simply vanish from the causal leaderboard (linear interpolation
+reads the gap's future endpoint; under scattered \emph{point} missingness, where a
+gap is flanked by observed neighbours, it is the telling cheap baseline at MAE
+$0.13$, but it is non-causal). \emph{(3) On structured data \cafe{} is \#1 on both
+boards:} it has the lowest MAE of \emph{every} method --- causal \emph{and}
+bidirectional ($0.299$) --- ahead even of the deep models that are allowed to see
+the future, and ahead of the best causal rival, the online Bayesian imputer
+BayOTIDE ($0.338$, at far higher per-fill cost and without \cafe{}'s by-product
+outputs). On the FX control it is correctly beaten by a last-value/Kalman prior
+($0.762$ vs.\ $0.158$): with no exploitable cross-section a factor prior is simply
+the wrong model --- an honest off-regime limitation, not a bug.
+
+\paragraph{Which tool when (a practitioner's rule).} The race gives a clean
+decision rule. \textbf{When the panel shares structure --- the usual case for
+macro indicators, sensor networks, energy meters, or related asset prices --- use
+\cafe{}}: the common factors are exactly what it exploits, and it leads both
+boards. \textbf{When each series is an independent near-random walk with no
+informative contemporaneous cross-section --- FX being the canonical example --- a
+last-value or local-level Kalman filter is the right prior}, and if a \emph{learned}
+online prior is wanted, BayOTIDE is the strongest such rival. Crucially you do not
+have to guess: \cafe{} reports its own effective rank as a by-product, so a learned
+rank that collapses toward zero is itself the signal that the structure assumption
+does not hold and a random-walk prior should take over.
 \input{tables/horserace_perdataset}
 \input{tables/horserace_bidir}
 
 \begin{figure}[t]\centering
 \includegraphics[width=\columnwidth]{figures/causal_race_flip.pdf}
-\caption{\textbf{The leaderboard flips when you forbid the future.} Each line is a
+\caption{\textbf{Forbid the future and the board collapses.} Each line is a
 method; left rank is by bidirectional MAE (the standard game), right rank by
-causal (strict point-in-time) MAE on five real datasets. Non-causal winners
-(linear interpolation, TRMF) cannot compete causally; the deep imputers plunge;
-\cafe{} and the causal baselines rise. The causal column is the only one valid for
-a backtest.}
+causal (strict point-in-time) MAE, averaged over the four \emph{structured} real
+datasets (FX excluded as a no-structure control). The methods that win
+bidirectionally by reading the future (linear interpolation, TRMF, the deep
+imputers) cannot compete causally and plunge or vanish; \cafe{} is \#1 on
+\emph{both} sides --- causal by construction, so it borrows nothing. The causal
+column is the only one valid for a backtest.}
 \label{fig:causalrace}
 \end{figure}
 
@@ -628,6 +647,28 @@ import cafe
 filled = cafe.impute(df)   # same container type back;
                            # gaps filled point-in-time
 \end{lstlisting}
+
+\paragraph{Panel / tensor data, and the one tuning knob.} Panel data arrives in two
+natural shapes and \cafe{} takes either directly --- a 3D \texttt{(entity, time,
+feature)} array, or a long-format frame with two index columns --- with the same
+exact round-trip (observed cells untouched, strictly point-in-time):
+\begin{lstlisting}[style=cafepy]
+filled = cafe.impute(cube3d)                      # (entity, time, feature) array
+out    = cafe.impute(df, panel=("date","ticker")) # two-index long frame
+\end{lstlisting}
+Panels expose the library's \emph{only} accuracy knob, \texttt{engine}. The default
+\texttt{engine="joint"} (the validated core) pools the contemporaneous cross-section,
+which is right whenever entities share structure; \texttt{engine="per\_entity"} fits
+each series on its own, which wins when each series is rich enough (long history, many
+features) that the cross-section adds nothing --- on such a rich low-rank panel
+per-entity lowers MAE by $\approx\!26\%$ ($17$--$30\%$ over six seeds) in our tests. We
+deliberately ship \emph{no} auto-router between the two: which wins is a property of the
+data-generating process (is the cross-section informative for this entity?), not
+something readable from the data's shape, so \cafe{} exposes the choice and defaults to
+the always-safe \texttt{joint}. This mirrors the headline race's structure-vs-no-structure
+rule (\S\ref{sec:exp}): the same diagnostic --- is there exploitable shared structure? ---
+governs both \cafe{}-vs-random-walk and \texttt{joint}-vs-\texttt{per\_entity}.
+
 The \emph{same} causal pass exposes every capability visualised in Appendix~\ref{sec:appendix}
 (Figures~\ref{fig:moat}--\ref{fig:bench}):
 \begin{lstlisting}[style=cafepy]

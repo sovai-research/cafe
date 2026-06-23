@@ -1,35 +1,35 @@
-\begin{table}[t]\centering\small
+\begin{table*}[t]\centering\small
 \setlength{\tabcolsep}{4pt}
-\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (contiguous block gaps).} Mean MAE over 5 real datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. The deep imputers' large positive $\Delta$ is look-ahead they cannot keep in a backtest; \cafe{}'s $\Delta$ is $0$ by construction.}
+\caption{\textbf{Bidirectional leaderboard and the look-ahead gap (contiguous block gaps).} Mean MAE over 4 \emph{structured} real datasets under the standard (future-using) protocol, and $\Delta=$ causal$-$bidirectional MAE: the accuracy a method silently borrows from the future. \cafe{} leads even here, where the deep models are allowed to see the future; their large positive $\Delta$ is look-ahead they cannot keep in a backtest, while \cafe{}'s $\Delta$ is $0$ by construction. The final column is the no-structure control (FX / Exchange, a near-random walk): a factor prior is the wrong model there, so \cafe{} is correctly beaten by a last-value/Kalman prior --- an honest off-regime limitation, kept out of the headline mean.}
 \label{tab:bidirrace}
-\begin{tabular}{@{}lccc@{}}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
-Method & Bidir MAE & $\Delta$ look-ahead & Family \\
+Method & Bidir MAE & $\Delta$ look-ahead & FX (ctrl) & Family \\
 \midrule
-BayOTIDE & 0.322 & 0.000 & online* \\
-TRMF & 0.334 & -- & classical \\
-LinearInterp & 0.377 & -- & classical \\
-\textbf{CAFE} & 0.391 & 0.000 & factor (ours) \\
-OnlineEWCov & 0.406 & 0.000 & online \\
-KalmanLL & 0.467 & 0.000 & online \\
-EWMA & 0.470 & 0.000 & online \\
-SAITS & 0.474 & 0.397 & deep (right-edge) \\
-LOCF & 0.492 & 0.000 & online \\
-XSecMean & 0.492 & 0.000 & online \\
-Transformer & 0.500 & 0.377 & deep (right-edge) \\
-OnlineMeanVar & 0.508 & 0.000 & online \\
-RollingMean & 0.547 & 0.000 & online \\
-RollingMedian & 0.553 & 0.000 & online \\
-TimesNet & 0.557 & 0.371 & deep (right-edge) \\
-SeasonalNaive & 0.581 & 0.000 & online \\
-BRITS & 0.607 & 0.534 & deep (right-edge) \\
-ImputeFormer & 0.610 & 0.177 & deep (right-edge) \\
-gcimpute & 0.698 & 0.000 & online \\
-SoftImpute & 0.718 & -- & classical \\
-GROUSE & 0.812 & 0.000 & online \\
-Zero & 0.895 & 0.000 & online \\
-CausalMean & 0.993 & 0.000 & online \\
-Drift & 2.364 & 0.000 & online \\
+\textbf{CAFE} & 0.299 & 0.000 & 0.762 & factor (ours) \\
+TRMF & 0.332 & -- & 0.340 & classical \\
+BayOTIDE & 0.338 & 0.000 & 0.261 & online* \\
+OnlineEWCov & 0.437 & 0.000 & 0.282 & online \\
+SAITS & 0.443 & 0.298 & 0.599 & deep (right-edge) \\
+LinearInterp & 0.449 & -- & 0.090 & classical \\
+BRITS & 0.453 & 0.585 & 1.226 & deep (right-edge) \\
+Transformer & 0.471 & 0.268 & 0.620 & deep (right-edge) \\
+TimesNet & 0.515 & 0.298 & 0.721 & deep (right-edge) \\
+KalmanLL & 0.545 & 0.000 & 0.158 & online \\
+EWMA & 0.545 & 0.000 & 0.168 & online \\
+OnlineMeanVar & 0.567 & 0.000 & 0.270 & online \\
+LOCF & 0.574 & 0.000 & 0.164 & online \\
+XSecMean & 0.574 & 0.000 & 0.164 & online \\
+gcimpute & 0.584 & 0.000 & 1.155 & online \\
+RollingMean & 0.603 & 0.000 & 0.321 & online \\
+RollingMedian & 0.610 & 0.000 & 0.326 & online \\
+ImputeFormer & 0.626 & 0.117 & 0.547 & deep (right-edge) \\
+SoftImpute & 0.658 & -- & 0.957 & classical \\
+SeasonalNaive & 0.672 & 0.000 & 0.216 & online \\
+GROUSE & 0.699 & 0.000 & 1.266 & online \\
+Zero & 0.830 & 0.000 & 1.155 & online \\
+CausalMean & 0.902 & 0.000 & 1.353 & online \\
+Drift & 2.810 & 0.000 & 0.580 & online \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

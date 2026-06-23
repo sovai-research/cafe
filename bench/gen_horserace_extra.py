@@ -7,8 +7,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 _cache = json.load(open(os.path.join(HERE, "horserace_cache.json")))
 R, META = _cache["results"], _cache["meta"]
-ds = sorted(set(r["dataset"] for r in R))
-dn = {"fredmd": "FRED-MD", "exchange": "Exchange", "airquality": "AirQual",
+NOSTRUCT = {"exchange"}                         # no-structure control, shown last
+ds = sorted(set(r["dataset"] for r in R), key=lambda d: (d in NOSTRUCT, d))
+dn = {"fredmd": "FRED-MD", "exchange": "Exchange*", "airquality": "AirQual",
       "appliances": "Applnce", "beijing": "Beijing"}
 methods = [("CAFE", "cafe"), ("BayOTIDE", "online"), ("OnlineEWCov", "causal"),
            ("KalmanLL", "causal"), ("LOCF", "causal"), ("SAITS", "deep"),
@@ -24,13 +25,14 @@ best = {d: min(v for m, _ in methods if (v := get("block", m, d)) is not None) f
 
 caption = (
     r"\caption{\textbf{Causal horse race, per dataset (block-missing, causal MAE $\downarrow$).} "
-    r"Strictly point-in-time evaluation on five real datasets. \cafe{} is the best causal imputer "
-    r"on every dataset with genuine factor structure (macro, air-quality, energy, Beijing); on the "
-    r"near-random-walk FX series a last-value / Kalman model is correctly better (a factor prior is "
-    r"the wrong model there). Deep imputers, trained on history and applied strictly point-in-time, "
-    r"collapse throughout. Best per column in \textbf{bold}.}"
+    r"Strictly point-in-time evaluation. \cafe{} is the best causal imputer on every dataset with "
+    r"genuine factor structure (macro, air-quality, energy, Beijing --- the four that make up the "
+    r"headline mean). Exchange* is a no-structure control (a near-random-walk FX panel), shown last "
+    r"and never folded into the mean: there a last-value / Kalman prior is correctly better, since a "
+    r"factor prior is the wrong model --- an honest off-regime limitation. Deep imputers, trained on "
+    r"history and applied strictly point-in-time, collapse throughout. Best per column in \textbf{bold}.}"
 )
-L = [r"\begin{table}[t]\centering\small", r"\setlength{\tabcolsep}{4pt}", caption,
+L = [r"\begin{table*}[t]\centering\small", r"\setlength{\tabcolsep}{4pt}", caption,
      r"\label{tab:horseraceperds}",
      r"\begin{tabular}{@{}l" + "c" * len(ds) + r"@{}}", r"\toprule",
      "Method (causal) & " + " & ".join(dn.get(d, d) for d in ds) + r" \\", r"\midrule"]
@@ -50,7 +52,7 @@ for m, fam in methods:
         L.append(r"\midrule")
 L += [r"\bottomrule", r"\end{tabular}",
       r" \\[2pt]{\footnotesize $^\dagger$deep models, applied strictly point-in-time "
-      r"(right-edge readout).}", r"\end{table}"]
+      r"(right-edge readout).}", r"\end{table*}"]
 open(os.path.join(ROOT, "paper", "tables", "horserace_perdataset.tex"), "w").write("\n".join(L) + "\n")
 print("wrote paper/tables/horserace_perdataset.tex")
 

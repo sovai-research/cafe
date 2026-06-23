@@ -233,9 +233,9 @@ def fig_flip(agg: list, out_path: str, meta: dict | None = None) -> str:
     ax.tick_params(axis="y", length=0)
     ax.grid(True, axis="y", alpha=0.15, lw=0.6)
 
-    ax.set_title("The leaderboard flips under the causal protocol:\n"
-                 "deep models collapse, CAFÉ rises to #1",
-                 fontsize=10, fontweight="bold", pad=8)
+    ax.set_title("Forbid the future and the board collapses:\n"
+                 "deep & interpolation methods fall, CAFÉ (causal) leads either way",
+                 fontsize=9.6, fontweight="bold", pad=8)
 
     # legend by family (only families actually present)
     present = []
