@@ -1,0 +1,19 @@
+\begin{table}[tbp]\centering\small
+\setlength{\tabcolsep}{6pt}
+\caption{\textbf{CAFE vs the closest causal/online statistical rivals (mean point-in-time MAE $\downarrow$ over the 8 structured real panels, 10\% missing, block, mcar gaps).} Every method is run strictly point-in-time (temporal 60/40 split, held-out live-segment cells, leak-free standardisation). The four rivals are faithful online filters in CAFE's own lane: NoTMF (AR-factor), SHASTA-PCA (streaming heteroscedastic PPCA), rGROUSE (robust subspace tracking) and OSW-Net (switching-network SLDS, a compact MissNet stand-in); TRMF/gcimpute/BayOTIDE are published references where available. CAFE additionally emits six by-products (uncertainty, factors, anomaly scores, a dependency network, a trend/season decomposition, and a forecast) that the statistical rivals do not: \emph{SHASTA-PCA} lacks anomaly, dependency net, decomposition, forecast; \emph{rGROUSE} lacks uncertainty, factors, anomaly, dependency net, decomposition, forecast; \emph{NoTMF} lacks uncertainty, anomaly, dependency net, decomposition; \emph{OSW-Net} lacks uncertainty, factors, decomposition.}
+\label{tab:causalrivals}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Method & Causal MAE $\downarrow$ & Family \\
+\midrule
+\textbf{CAFE} & \textbf{0.250} & factor (ours) \\
+SHASTA-PCA & 0.285 & online rival \\
+TRMF (online) & 0.315 & published ref \\
+BayOTIDE & 0.330 & published ref \\
+rGROUSE & 0.338 & online rival \\
+NoTMF & 0.426 & online rival \\
+OSW-Net & 0.443 & online rival \\
+gcimpute & 0.528 & published ref \\
+\bottomrule
+\end{tabular}
+\end{table}
