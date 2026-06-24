@@ -1,0 +1,38 @@
+\begin{table}[tbp]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The leakage leaderboard --- a model-agnostic look-ahead audit (``the $\epsilon$ of imputation'').} Every method, wrapped through the same neutral standard (\texttt{cafe.audit.leakage\_report}), receives a binary \emph{causality certificate} (max revision of an early imputed cell under truncation invariance: re-impute on growing time-prefixes; a strictly point-in-time method never revises an early fill) and a continuous \emph{leakage score} $\Delta=$ causal$-$bidirectional MAE (the accuracy a method silently borrows from the future, measured by applying the same model as an honest right-edge filter). Sorted by $\Delta$ (most leaky first), mean over 8 real tasks. Natively causal methods (\cafe{}, LOCF, Kalman, the online filters) certify with $\Delta\!\approx\!0$; batch and interpolation methods borrow large $\Delta$ they cannot keep in a backtest.}
+\label{tab:leakageaudit}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method & Causal? & max$|$rev$|$ & $\Delta$ leak & Bidir MAE & Causal MAE \\
+\midrule
+NOCB & $\times$ & $4.1\mathrm{e}{0}$ & +0.169 & 0.474 & 0.643 \\
+LinearInterp & $\times$ & $2.5\mathrm{e}{0}$ & +0.136 & 0.353 & 0.490 \\
+SplineInterp & $\times$ & $4.4\mathrm{e}{1}$ & +0.108 & 0.869 & 0.977 \\
+TRMF & $\times$ & $1.0\mathrm{e}{0}$ & +0.001 & 0.270 & 0.271 \\
+\textbf{CAFE} & \checkmark & $0.0$ & +0.000 & 0.301 & 0.301 \\
+Zero & \checkmark & $0.0$ & +0.000 & 0.898 & 0.898 \\
+CausalMean & \checkmark & $0.0$ & +0.000 & 0.982 & 0.982 \\
+RollingMean & \checkmark & $0.0$ & +0.000 & 0.583 & 0.583 \\
+RollingMedian & \checkmark & $0.0$ & +0.000 & 0.593 & 0.593 \\
+Drift & \checkmark & $0.0$ & +0.000 & 2.439 & 2.439 \\
+KalmanLL & \checkmark & $0.0$ & +0.000 & 0.519 & 0.519 \\
+LOCF & \checkmark & $0.0$ & +0.000 & 0.490 & 0.490 \\
+EWMA & \checkmark & $0.0$ & +0.000 & 0.536 & 0.536 \\
+XSecMean & \checkmark & $0.0$ & +0.000 & 0.490 & 0.490 \\
+SeasonalNaive & \checkmark & $0.0$ & +0.000 & 0.719 & 0.719 \\
+OnlineMeanVar & \checkmark & $0.0$ & +0.000 & 0.595 & 0.595 \\
+OnlineEWCov & \checkmark & $0.0$ & +0.000 & 0.332 & 0.332 \\
+GROUSE & \checkmark & $0.0$ & +0.000 & 0.805 & 0.805 \\
+NoTMF & \checkmark & $0.0$ & +0.000 & 0.561 & 0.561 \\
+SHASTA-PCA & \checkmark & $0.0$ & +0.000 & 0.302 & 0.302 \\
+rGROUSE & \checkmark & $0.0$ & +0.000 & 0.395 & 0.395 \\
+OSW-Net & \checkmark & $0.0$ & +0.000 & 0.469 & 0.469 \\
+gcimpute & $\times$ & $4.8\mathrm{e}{-1}$ & +0.000 & 0.596 & 0.596 \\
+BayOTIDE & $\times$ & $3.4\mathrm{e}{-1}$ & +0.000 & 0.360 & 0.360 \\
+SoftImpute & $\times$ & $1.5\mathrm{e}{0}$ & -0.097 & 0.731 & 0.634 \\
+BRITS & $\times$ & $7.9\mathrm{e}{-1}$ & -0.323 & 0.842 & 0.520 \\
+SAITS & $\times$ & $1.1\mathrm{e}{0}$ & -0.400 & 0.796 & 0.397 \\
+\bottomrule
+\end{tabular}
+\end{table}
