@@ -54,6 +54,10 @@ the future arrives. It is:
 - **Container-native** — `numpy`, `pandas`, `polars`, 1D or 2D, dtype/labels preserved.
 - **More than imputation** — the same pass yields per-cell uncertainty, latent
   factors, anomaly scores, an additive decomposition, a dependency network and forecasts.
+- **Knows what it can't recover** — a per-cell recoverability certificate lets it
+  *abstain* (return NaN) on low-confidence cells instead of guessing; calibrated
+  conformal bands; a model-agnostic leakage audit (`cafe.audit`); and mixed-frequency
+  causal *nowcasting* as a special case of imputation.
 
 ### The "two-of-three" claim
 
@@ -145,14 +149,37 @@ res = cafe.CAFE().run(df)
 res.imputed                  # the filled data (original container)
 res.uncertainty              # per-cell posterior std  (bands widen inside long gaps)
 res.confidence_interval()    # (lower, upper) at 1.96 sigma
+res.calibrated_interval(.9)  # causal split-conformal band that hits nominal coverage
 res.factors()                # latent common factors z_t  (streaming robust DFM)
 res.anomaly_scores()         # per-time outlier score in [0,1] (0 = fit, 1 = outlier)
 res.decompose()              # {'level','season','factor','residual'} — sums to the data
 res.dependency_network()     # NxN residual-correlation network between series
 res.params                   # learned dials: {'nu', 'ar', 'effective_rank'}
 
+# knows what it can't recover — abstain (NaN) on low-confidence cells
+res.recoverability_score()   # per-cell certificate in [0,1] (1 = trustworthy fill)
+res.selective_imputed(0.5)   # fill, but NaN where the certificate < 0.5 (risk control)
+
 # forecasting == imputing future rows (AR/Kalman state), with the same model
 future = cafe.CAFE().forecast(df, horizon=24)
+```
+
+### More from the same model
+
+```python
+# Mixed-frequency causal nowcasting — a low-freq series on a high-freq grid is just a
+# column observed every k steps; impute it and read the current (unreleased) period.
+nowcast = cafe.impute(mixed_freq_panel)        # the factor fill *is* the point-in-time nowcast
+
+# The "ε of imputation": audit ANY imputer for look-ahead leakage (model-agnostic)
+import cafe
+report = cafe.audit.leakage_report(some_impute_fn, X)
+report["causal"]          # True iff truncation-invariant (no past cell revised)
+report["leakage_delta"]   # accuracy it silently borrows from the future (causal − bidir MAE)
+
+# The classical imputers CAFÉ generalises, shipped as causal/batch-labelled methods
+from cafe import baselines
+baselines.impute(df, method="softimpute")      # same container API as cafe.impute
 ```
 
 ### Missingness as signal (causal features)

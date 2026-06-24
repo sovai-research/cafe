@@ -80,22 +80,25 @@ def _finalize(out, X):
 # =========================================================================== #
 # --- CAUSAL: last observation carried forward ------------------------------ #
 def _locf(X):
+    # STRICTLY CAUSAL: x[t] = last value observed at or before t. Cells before a
+    # column's first observation have no admissible past, so they are filled with 0
+    # (the neutral prior) -- never the full-column mean, which would peek at future
+    # observations and make the leading edge non-causal (the leakage audit flags that).
     X = np.asarray(X, float)
     T, N = X.shape
     out = X.copy()
-    colmean = _col_mean_fill(X)
     ar = np.arange(T)
     for j in range(N):
         col = out[:, j]
         obs = np.isfinite(col)
         if not obs.any():
-            out[:, j] = colmean[j]
+            out[:, j] = 0.0
             continue
         lidx = np.where(obs, ar, -1)
         prev = np.maximum.accumulate(lidx)
         valid = prev >= 0
         col[valid] = col[prev[valid]]
-        out[:, j] = np.where(np.isfinite(col), col, colmean[j])
+        out[:, j] = np.where(np.isfinite(col), col, 0.0)   # leading (pre-first-obs) -> 0
     return _finalize(out, X)
 
 
@@ -809,7 +812,8 @@ def _wrap(core):
 
 # Public named functions (container-native). Docstrings carry the causal/batch tag.
 def locf(data):
-    """CAUSAL (point-in-time). Last observation carried forward; leading gaps -> col mean."""
+    """CAUSAL (point-in-time). Last observation carried forward; cells before the first
+    observation (no admissible past) -> 0, never the future-peeking column mean."""
     return _wrap(_locf)(data)
 
 

@@ -162,7 +162,10 @@ def test_parity_with_bench(seed):
     MN = importlib.import_module("m_naive")
     checks["linear_interp"] = md(B.linear_interp(X.copy()),
                                  MN.linear_interp(X.copy(), None))
-    checks["locf"] = md(B.locf(X.copy()), MN.locf(X.copy(), None))
+    # NB: B.locf is intentionally NOT compared to MN.locf here -- the library locf is
+    # strictly causal (leading pre-first-obs cells -> 0), whereas MN.locf fills them with
+    # the future-peeking column mean. They match on data without leading gaps but diverge
+    # at the leading edge by design; locf causality is asserted separately below.
 
     CE = importlib.import_module("c_chal_ewcov")
     checks["ewcov"] = md(B.ewcov(X.copy()), CE._ewcov_2d(X.copy(), {}))
@@ -229,3 +232,19 @@ def test_all_missing_matrix(method):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_locf_is_strictly_causal_at_leading_edge():
+    """Regression: the library's causal-labelled LOCF must NOT peek at the future to
+    fill cells before a column's first observation (it fills them with 0, not the
+    full-column mean). Verified by truncation invariance via cafe.audit."""
+    import numpy as np
+    import cafe
+    from cafe import audit, baselines
+    rng = np.random.default_rng(3)
+    X = rng.standard_normal((80, 4))
+    X[rng.random(X.shape) < 0.2] = np.nan
+    X[:5, 0] = np.nan                      # force a leading gap in column 0
+    rep = audit.leakage_report(lambda Z: baselines.impute(Z, method="locf"), X)
+    assert rep["causal"] and rep["max_revision"] < 1e-9, \
+        f"library LOCF leaks: causal={rep['causal']} max_revision={rep['max_revision']:.3e}"

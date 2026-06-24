@@ -470,6 +470,46 @@ locf_fill = baselines.impute(gappy, method="locf")          # causal carry-forwa
 soft_fill = baselines.impute(gappy, method="softimpute")    # batch low-rank (non-causal)
 locf_fill.head(3)"""))
 
+cells.append(md(r"""## 9 · Knowing what it can't recover, and auditing leakage
+
+**Selective imputation — CAFÉ abstains instead of guessing.** From the *same* causal pass,
+a per-cell **recoverability certificate** in `[0,1]` (built from posterior σ, the conformal
+scale, cross-sectional anchor support, factor/loading energy and the robust weight) says
+how trustworthy each fill is. Gate on it and CAFÉ returns `NaN` on the cells it cannot
+recover — a confident-but-wrong value is worse than an honest hole. (Honest scope: the
+certificate separates recoverable from unrecoverable *regimes* reliably; it is a weaker
+per-cell error rank *within* an already-homogeneous panel.)"""))
+cells.append(code(r"""cert = res.recoverability_score()                 # per-cell confidence in [0,1], NaN where observed
+safe = res.selective_imputed(min_confidence=0.5)  # fill, but NaN where the certificate < 0.5
+c = np.asarray(cert.select(num_cols).to_numpy() if hasattr(cert, "select") else cert)
+print("median certificate over imputed cells:", round(float(np.nanmedian(c)), 3))
+print("cells abstained at conf>=0.5      :",
+      int((np.asarray(safe.select(num_cols).to_numpy()) != np.asarray(safe.select(num_cols).to_numpy())).sum()))"""))
+cells.append(md(r"""**The leakage audit — "the ε of imputation".** The same verifier that proves CAFÉ has no
+look-ahead is *model-agnostic*: hand `cafe.audit.leakage_report` **any** imputer and it
+returns a causality certificate (does it silently revise the past?) and a leakage Δ (the
+accuracy it borrows from the future). Causal methods certify; interpolation and batch
+low-rank methods do not."""))
+cells.append(code(r"""import cafe
+X = gappy.select(num_cols).to_numpy()
+for name, fn in [("CAFÉ", lambda Z: cafe.impute(Z)),
+                 ("LOCF", lambda Z: baselines.impute(Z, method="locf")),
+                 ("LinearInterp", lambda Z: baselines.impute(Z, method="linear_interp"))]:
+    r = cafe.audit.leakage_report(fn, X)
+    print(f"{name:13s} causal={str(r['causal']):5s}  max_revision={r['max_revision']:.3f}  leakage_delta={r['leakage_delta']:+.3f}")"""))
+cells.append(md(r"""**Mixed-frequency nowcasting falls out for free.** A low-frequency series on a
+high-frequency grid is just a column observed every `k` steps and `NaN` in between — exactly
+the structured missingness CAFÉ imputes. So the factor fill at the current (unreleased)
+period *is* a strictly point-in-time nowcast, with **no new code**: the classic dynamic-factor
+nowcasting problem is a special case of `cafe.impute`."""))
+cells.append(code(r"""# simulate a quarterly series among the monthly columns: keep it only every 3rd row
+hf = gappy.select(num_cols).to_numpy().copy()
+q = hf[:, 0].copy(); mask_q = np.ones(len(q), bool); mask_q[::3] = False
+hf[mask_q, 0] = np.nan                                   # low-freq column: observed every 3 steps
+nowcast_col = np.asarray(cafe.impute(hf))[:, 0]          # the fill at unobserved rows = the nowcast
+print("nowcast filled the", int(mask_q.sum()), "unreleased months of the quarterly series; e.g. row 1 ->",
+      round(float(nowcast_col[1]), 3))"""))
+
 cells.append(md(r"""## Recap — every claim was checked, not asserted
 
 | Capability | What we *proved* above |
@@ -483,6 +523,9 @@ cells.append(md(r"""## Recap — every claim was checked, not asserted
 | `.dependency_network()` | residual-correlation structure between sensors |
 | `.forecast(df, h)` | same model extrapolates via the AR/Kalman state (live nMAE vs persistence shown above) |
 | `.calibrated_interval(level)` | causal split-conformal band that hits nominal coverage, **σ-only** (imputation unchanged) |
+| `.recoverability_score()` / `.selective_imputed()` | per-cell confidence; **abstains** (NaN) on cells it can't recover instead of guessing |
+| `cafe.audit.leakage_report(fn, X)` | model-agnostic — certifies any imputer causal / measures the Δ it borrows from the future |
+| `cafe.impute(mixed_freq)` | mixed-frequency **nowcasting** falls out for free — the factor fill at the unreleased period is the nowcast |
 | `cafe.baselines` | the classical imputers CAFÉ generalises, shipped as causal/batch-labelled methods |
 
 Zero configuration, pure `numpy`, CPU-only — and backtest-safe by construction. The
