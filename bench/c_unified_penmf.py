@@ -72,6 +72,56 @@ EPS          = 1e-9
 _BLEND_WLR   = float(os.environ.get("BLEND_WLR", "0.5"))   # sweepable; default EB mean
 
 
+# --------------------------------------------------------------------------- #
+# SENSITIVITY-SWEEP OVERRIDES (ws3, Gap #2). PURELY ADDITIVE: every getter below
+# returns its hard-coded DEFAULT unless an override is supplied via the `meta`
+# dict (preferred, thread-safe per call) or, as a fallback, an env var. With NO
+# override set, behaviour is BIT-IDENTICAL to the original constants -- verified
+# by the Beijing 10% MCAR MAE invariance check. These exist ONLY so exp_sensitivity.py
+# can demonstrate the model is flat in a wide band around each internal constant.
+#   _sens_window      : trailing causal window length          (default WINDOW=400)
+#   _sens_periods     : Fourier/harmonic period set    (default [7,12,24,48,168,365])
+#   _sens_gate_r      : R in factor-vs-season gate g=N/(N+R)    (default R_MAX=8)
+#   _sens_nu_base     : the "4" in nu = nu_base + nu_slope/excess         (default 4)
+#   _sens_nu_slope    : the "6" in nu = nu_base + nu_slope/excess         (default 6)
+#   _sens_winsor_k    : season/data winsor band k in (k + nu/4)*1.4826    (default 1.5)
+#   _sens_blend_tilt  : multiplicative tilt on low-rank var in the inverse-var fusion
+#                       w_xs = (tilt*v_lr)/(tilt*v_lr + xsv). tilt>1 trusts the low-rank/
+#                       AR prediction more, <1 the cross-section more; default 1.0 = the
+#                       plain inverse-variance (precision-weighted) fuse, unchanged.
+# --------------------------------------------------------------------------- #
+_SENS_DEFAULTS = {
+    "_sens_window":      WINDOW,
+    "_sens_periods":     None,           # None -> the canonical fixed set below
+    "_sens_gate_r":      float(R_MAX),
+    "_sens_nu_base":     4.0,
+    "_sens_nu_slope":    6.0,
+    "_sens_winsor_k":    1.5,
+    "_sens_blend_tilt":  1.0,
+}
+# active override snapshot for THIS imputation call (set in online_impute, cleared
+# after). A module-level dict is acceptable because online_impute is single-threaded
+# per call (the BLAS threads are inside numpy, not python-level concurrency here).
+_SENS_ACTIVE: dict = {}
+
+
+def _sens(key):
+    """Return the active override for `key`, else its default. Env var `CAFE<KEY>`
+    (upper-cased, e.g. CAFE_SENS_WINDOW) is a fallback so the knobs can also be
+    swept from a subprocess. Defaults reproduce the original constants exactly."""
+    if key in _SENS_ACTIVE:
+        return _SENS_ACTIVE[key]
+    ev = os.environ.get("CAFE" + key.upper())
+    if ev is not None:
+        d = _SENS_DEFAULTS[key]
+        if key == "_sens_periods":
+            return [float(p) for p in ev.split(",") if p.strip()]
+        if key == "_sens_window":
+            return int(float(ev))
+        return float(ev)
+    return _SENS_DEFAULTS[key]
+
+
 # Partition-based order statistics (no full sort) that reproduce numpy's
 # default 'linear' interpolation EXACTLY. Used in place of np.percentile and
 # np.median in the hot time-FE / winsorize paths. Bit-identical to numpy.
@@ -144,6 +194,9 @@ def _fourier_periods(T):
     # imputations when the future is truncated (a spurious look-ahead). Harmonics longer
     # than the data so far are simply unidentifiable and the RLS ridge keeps their beta
     # ~0 -- harmless and point-in-time.
+    p = _sens("_sens_periods")
+    if p is not None:                       # sensitivity sweep: alternate harmonic menu
+        return [float(x) for x in p]
     return [7.0, 12.0, 24.0, 48.0, 168.0, 365.0]
 
 
@@ -180,6 +233,7 @@ class _UnifiedCore:
         self.beta_period = (np.concatenate([periods, periods]) if periods
                             else np.zeros(0))
         self.t_seen = 0.0
+        self.WINDOW = int(_sens("_sens_window"))              # trailing window (sweepable)
         self.a = 0.5                                          # AR coeff on z (learned)
         self.nu = NU_INIT                                     # Student-t dof (pooled)
         self.scale2 = 1.0                                     # robust residual scale^2
@@ -195,7 +249,7 @@ class _UnifiedCore:
         # a row is O(N) and dropping the oldest is O(1) (advance head). This replaces the old
         # per-row np.vstack that reallocated the whole WINDOW x N buffer on EVERY step; a
         # compacting memmove now happens only ~once per WINDOW rows -> amortized O(N)/row.
-        cap = 2 * WINDOW
+        cap = 2 * self.WINDOW
         self._cap = cap
         self._bh = 0                                          # ring head (oldest row)
         self._bn = 0                                          # rows currently buffered
@@ -284,9 +338,9 @@ class _UnifiedCore:
         self.tidx_store[p] = abs_t
         self.ent_store[p] = eid
         self._bn += 1
-        if self._bn > WINDOW:                                 # drop oldest (O(1))
-            self._bh += self._bn - WINDOW
-            self._bn = WINDOW
+        if self._bn > self.WINDOW:                            # drop oldest (O(1))
+            self._bh += self._bn - self.WINDOW
+            self._bn = self.WINDOW
 
     def _refit_W(self):
         n = self._bn
@@ -477,7 +531,7 @@ class _UnifiedCore:
             kurt = m4 / max(m2 * m2, EPS)          # ~3 normal, >3 heavy-tailed
             excess = kurt - 3.0
             if excess > 0.2:                        # heavy tails -> finite small nu
-                nu_hat = 4.0 + 6.0 / excess
+                nu_hat = _sens("_sens_nu_base") + _sens("_sens_nu_slope") / excess
             else:                                   # near-normal -> large nu (L2 limit)
                 nu_hat = NU_MAX
             # gentle EM move toward the moment estimate (stability)
@@ -512,7 +566,7 @@ class _UnifiedCore:
             # whose residuals merely have larger variance, not heavier tails). Only true
             # outliers -- beyond ~4 sigma, which a Gaussian essentially never produces but
             # a heavy tail does -- are capped. Self-gating: benign data has ~no such cells.
-            k_nu = 1.5 + self.nu / 4.0
+            k_nu = _sens("_sens_winsor_k") + self.nu / 4.0
             band = k_nu * 1.4826 * fsc
             # Clip only the IDIOSYNCRATIC part: a coherent level/regime shift moves all
             # features together and must NOT be clipped; a genuine outlier is isolated.
@@ -573,7 +627,7 @@ class _UnifiedCore:
             # during blackout xs is unavailable -> pure AR/Kalman lr. No tuned constant.
             xs, xsv = self._xsec_fill(resid_c, obs, miss)
             if xs is not None:
-                v_lr = max(self.lr_var, EPS)
+                v_lr = max(self.lr_var, EPS) * _sens("_sens_blend_tilt")
                 w_xs = v_lr / (v_lr + xsv)
                 # the idiosyncratic carry belongs to the NON-cross-section channel: when
                 # the contemporaneous cross-section is informative (w_xs high) it already
@@ -654,7 +708,7 @@ class _UnifiedCore:
             # the whole cycle, as it must to extrapolate across gaps) and -> ~1 for a wide
             # panel (factors own the shared cycle, season only mops up the remainder). g
             # depends on N and R alone, so it stays point-in-time / causal-invariant.
-            g = N / (N + self.R)
+            g = N / (N + _sens("_sens_gate_r"))
             yrow[obs] = x_obs_row[obs] - mu[obs] - g * lr[obs] - time_fe
             # ROBUST season fit. The Fourier RLS is plain least-squares, so without
             # protection a single heavy-tailed outlier corrupts beta GLOBALLY -- every
@@ -663,7 +717,7 @@ class _UnifiedCore:
             # the per-feature robust scale and the learned dof nu: wide (a no-op) when nu
             # is large / near-Gaussian, tight when heavy tails are learned -- the same
             # self-gating M-estimator the data term uses, so benign data is never clipped.
-            _bnd = (1.5 + self.nu / 4.0) * 1.4826 * (self.fsc_sum[obs] /
+            _bnd = (_sens("_sens_winsor_k") + self.nu / 4.0) * 1.4826 * (self.fsc_sum[obs] /
                                                      np.maximum(self.fsc_cnt[obs], 1e-3))
             yrow[obs] = np.clip(yrow[obs], -_bnd, _bnd)
             self.PtP = self.lam * self.PtP + np.outer(fourier_t, fourier_t)
@@ -978,7 +1032,8 @@ def _impute_panel(X, meta):
             if mc > 30.0:
                 kurt = (m4 / mc) / max((m2 / mc) ** 2, EPS)
                 excess = kurt - 3.0
-                nu_hat = 4.0 + 6.0 / excess if excess > 0.2 else NU_MAX
+                nu_hat = (_sens("_sens_nu_base") + _sens("_sens_nu_slope") / excess
+                          if excess > 0.2 else NU_MAX)
                 nu = float(np.clip(0.7 * nu + 0.3 * nu_hat, NU_MIN, NU_MAX))
 
         # --- periodic ALS refit of Wt + ARD + AR coeff on the entity snapshot ---
@@ -1030,11 +1085,24 @@ def online_impute(X, meta):
     # missing so the solver never sees Inf (guards the SVD/least-squares path).
     if not np.all(np.isfinite(X)):
         X = np.where(np.isfinite(X), X, np.nan)
-    if meta and "entity_ids" in meta and "time_ids" in meta \
-            and len(np.unique(meta["entity_ids"])) > 1:
-        out = _impute_panel(X, meta)
+    # ws3 sensitivity sweep: pull any `_sens_*` overrides out of meta into the active
+    # snapshot for the duration of THIS call, then restore. Absent any such key, the
+    # snapshot is empty and every _sens() getter returns its default -> bit-identical.
+    global _SENS_ACTIVE
+    _prev_sens = _SENS_ACTIVE
+    if meta:
+        ov = {k: meta[k] for k in _SENS_DEFAULTS if k in meta}
+        _SENS_ACTIVE = ov if ov else {}
     else:
-        out = _impute_2d(X, meta)
+        _SENS_ACTIVE = {}
+    try:
+        if meta and "entity_ids" in meta and "time_ids" in meta \
+                and len(np.unique(meta["entity_ids"])) > 1:
+            out = _impute_panel(X, meta)
+        else:
+            out = _impute_2d(X, meta)
+    finally:
+        _SENS_ACTIVE = _prev_sens
     out = np.asarray(out, float)
     if not np.all(np.isfinite(out)):                 # final safety net: never emit NaN/Inf
         col = np.nanmean(np.where(np.isfinite(X), X, np.nan), axis=0)
