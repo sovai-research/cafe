@@ -1,0 +1,20 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The factor-volatility niche.} Out-of-sample minimum-variance-portfolio realized variance (the standard MGARCH economic loss, lower better). \emph{Top}: complete data, $N{=}20$, 6 seeds (oracle $=0.185$); DCC wins statistical covariance-QLIKE but \cafe{}-FV's well-conditioned low-rank inverse wins the portfolio. \emph{Bottom}: $16\%$ asynchronous block gaps, $N{=}30$, 4 seeds; classical MGARCH needs a complete-data front-end.}
+\label{tab:panel}
+\begin{tabular}{@{}lcc@{}}\toprule
+Method & MV-port.\ var. & cov-QLIKE \\\midrule
+\multicolumn{3}{@{}l}{\emph{Complete data ($N{=}20$)}}\\
+\quad \textbf{\cafe{}-FV} \emph{(proposed)} & 0.192\,$\pm$\,0.055 & 1.24 \\
+\quad Sample cov. & 0.206\,$\pm$\,0.063 & 1.25 \\
+\quad DCC-GARCH & 0.213\,$\pm$\,0.067 & 1.14 \\
+\quad CCC-GARCH & 0.220\,$\pm$\,0.073 & 1.40 \\
+\quad EWMA cov. & 0.303\,$\pm$\,0.087 & 13.79 \\
+\addlinespace
+\multicolumn{3}{@{}l}{\emph{Asynchronous gaps (16\% missing, $N{=}30$)}}\\
+\quad \textbf{\cafe{}-FV} \emph{(native gaps)} & 0.134\,$\pm$\,0.032 & -- \\
+\quad DCC $+$ \cafe{}-impute & 0.154\,$\pm$\,0.040 & -- \\
+\quad DCC $+$ mean-impute & 0.820\,$\pm$\,0.165 & -- \\
+\quad CCC $+$ mean-impute & 0.935\,$\pm$\,0.148 & -- \\
+\bottomrule\end{tabular}
+\end{table}

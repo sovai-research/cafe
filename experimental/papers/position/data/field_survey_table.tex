@@ -1,0 +1,42 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{3.4pt}
+\caption{\textbf{The leakage field survey.} Every imputer, wrapped through the \emph{same} neutral standard (\texttt{cafe.audit.leakage\_report}), receives a binary causality certificate (max revision of an early fill under prefix truncation) and a leakage score $\Delta=\mathrm{MAE}_{\text{causal}}-\mathrm{MAE}_{\text{bidir}}$. Mean over 16 real tasks (beijing,airquality,fredmd,etth; block+MCAR; window $L{=}24$). \textbf{Top:} uncertified (leaky); \textbf{bottom:} certified strictly point-in-time. \cafe{} is the existence proof: certified, $\Delta\!=\!0$, and the lowest causal MAE.}
+\label{tab:fieldsurvey}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Method & Cert. & max$|$rev$|$ & $\Delta$ & Bidir & Causal \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Uncertified (leaky): future is borrowed or fills revise}}\\
+SplineInterp & $\times$ & $4.4{\times}10^{1}$ & +0.222 & 0.894 & 1.116 \\
+NOCB & $\times$ & $4.1{\times}10^{0}$ & +0.193 & 0.457 & 0.651 \\
+LinearInterp & $\times$ & $2.5{\times}10^{0}$ & +0.150 & 0.345 & 0.495 \\
+TRMF & $\times$ & $2.3{\times}10^{0}$ & +0.008 & 0.263 & 0.271 \\
+gcimpute & $\times$ & $4.9{\times}10^{-1}$ & +0.000 & 0.596 & 0.596 \\
+BayOTIDE & $\times$ & $3.4{\times}10^{-1}$ & +0.000 & 0.356 & 0.356 \\
+SoftImpute & $\times$ & $1.5{\times}10^{0}$ & -0.110 & 0.745 & 0.635 \\
+BRITS & $\times$ & $1.1{\times}10^{0}$ & -0.340 & 0.833 & 0.493 \\
+SAITS & $\times$ & $1.3{\times}10^{0}$ & -0.376 & 0.743 & 0.368 \\
+Transformer & $\times$ & $2.0{\times}10^{0}$ & -0.378 & 0.751 & 0.373 \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Certified strictly point-in-time ($\Delta\!=\!0$, max$|$rev$|\!=\!0$)}}\\
+\textbf{\cafe{}} & $\checkmark$ & $0$ & +0.000 & 0.286 & 0.286 \\
+SHASTA-PCA & $\checkmark$ & $0$ & +0.000 & 0.301 & 0.301 \\
+OnlineEWCov & $\checkmark$ & $0$ & +0.000 & 0.338 & 0.338 \\
+rGROUSE & $\checkmark$ & $0$ & +0.000 & 0.374 & 0.374 \\
+OSW-Net & $\checkmark$ & $0$ & +0.000 & 0.463 & 0.463 \\
+LOCF & $\checkmark$ & $0$ & +0.000 & 0.487 & 0.487 \\
+XSecMean & $\checkmark$ & $0$ & +0.000 & 0.487 & 0.487 \\
+KalmanLL & $\checkmark$ & $0$ & +0.000 & 0.518 & 0.518 \\
+EWMA & $\checkmark$ & $0$ & +0.000 & 0.536 & 0.536 \\
+NoTMF & $\checkmark$ & $0$ & +0.000 & 0.555 & 0.555 \\
+RollingMean & $\checkmark$ & $0$ & +0.000 & 0.583 & 0.583 \\
+RollingMedian & $\checkmark$ & $0$ & +0.000 & 0.595 & 0.595 \\
+OnlineMeanVar & $\checkmark$ & $0$ & +0.000 & 0.600 & 0.600 \\
+SeasonalNaive & $\checkmark$ & $0$ & +0.000 & 0.726 & 0.726 \\
+GROUSE & $\checkmark$ & $0$ & +0.000 & 0.842 & 0.842 \\
+Zero & $\checkmark$ & $0$ & +0.000 & 0.908 & 0.908 \\
+CausalMean & $\checkmark$ & $0$ & +0.000 & 0.988 & 0.988 \\
+Drift & $\checkmark$ & $0$ & +0.000 & 2.469 & 2.469 \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,20 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{\cafe{} as-is is the worst univariate volatility forecaster.} One-step variance forecasts on simulated GARCH(1,1) (8 seeds), scored by QLIKE against the \emph{true} latent variance (lower better), variance-MSE, and 1\% VaR violation rate (target 0.010). \cafe{}'s scale recursion is verified bit-identical ($0.0$e$+$0) to the library's \texttt{\_update\_robust\_scale}. Its optimal EW half-life is $\approx\!22$; it uses $200$.}
+\label{tab:univariate}
+\begin{tabular}{@{}lcccc@{}}\toprule
+Method & QLIKE & $\Delta$MLE & MSE & VaR \\\midrule
+\multicolumn{5}{@{}l}{\emph{Gaussian innov.}}\\
+\quad GARCH-$t$ MLE & 1.785 & $+0.000$ & 0.009 & 0.009 \\
+\quad GARCH-$\mathcal{N}$ MLE & 1.785 & $+0.000$ & 0.010 & 0.009 \\
+\quad EWMA(0.94) & 1.798 & $+0.012$ & 0.164 & 0.011 \\
+\quad \textbf{\cafe{} scale (HL200)} & 1.897 & $+0.112$ & 2.224 & 0.011 \\
+\addlinespace
+\multicolumn{5}{@{}l}{\emph{Student-$t$ innov.}}\\
+\quad GARCH-$t$ MLE & 1.682 & $+0.000$ & 0.030 & 0.010 \\
+\quad GARCH-$\mathcal{N}$ MLE & 1.683 & $+0.001$ & 0.044 & 0.015 \\
+\quad EWMA(0.94) & 1.706 & $+0.023$ & 0.329 & 0.018 \\
+\quad \textbf{\cafe{} scale (HL200)} & 1.962 & $+0.280$ & 5.269 & 0.023 \\
+\addlinespace
+\bottomrule\end{tabular}
+\end{table}

@@ -20,11 +20,10 @@ from __future__ import annotations
 
 import io
 import os
+import subprocess
 import sys
 import time
-import urllib.request
 import urllib.parse
-import urllib.error
 
 import numpy as np
 import pandas as pd
@@ -39,32 +38,28 @@ TARGET = "INDPRO"
 # Monthly FRED-MD predictors with confirmed ALFRED vintage coverage. Chosen to span
 # output, labour, income, consumption, and orders -- the standard nowcasting cross-section.
 PREDICTORS = [
+    "INDPRO",            # the target's own past releases (autoregressive content)
     "PAYEMS",            # nonfarm payroll employment
     "UNRATE",            # unemployment rate
     "RPI",               # real personal income
     "DPCERA3M086SBEA",   # real personal consumption expenditures
-    "INDPRO",            # the target's own past releases (autoregressive content)
-    "IPMANSICS",         # IP: manufacturing (SIC)
     "CUMFNS",            # capacity utilisation, manufacturing
     "DGORDER",           # manufacturers' new orders, durable goods
     "AWHMAN",            # average weekly hours, manufacturing
     "HOUST",             # housing starts
-    "PERMIT",            # building permits
-    "CE16OV",            # civilian employment
-    "USGOOD",            # goods-producing employment
     "MANEMP",            # manufacturing employment
-    "RETAILx",           # retail sales (may 404 on some vintages; handled)
-    "S&P 500",           # not a fred id; skip placeholder (filtered below)
+    "CE16OV",            # civilian employment
 ]
-PREDICTORS = [p for p in PREDICTORS if "&" not in p]
 
 BASE = "https://alfred.stlouisfed.org/graph/alfredgraph.csv"
 HDRS = {"User-Agent": "Mozilla/5.0 (research; real-time-nowcasting)"}
 
 
-def _vintage_dates(start="2015-07-01", end="2025-05-01"):
-    """Monthly vintage (nowcast-origin) dates: the 1st of each month in the window."""
-    return [d.strftime("%Y-%m-%d") for d in pd.date_range(start, end, freq="MS")]
+def _vintage_dates(start="2015-07-01", end="2025-05-01", step=1):
+    """Vintage (nowcast-origin) dates: the 1st of each month in the window, every
+    ``step`` months. ``step=1`` is monthly (full real-time cadence)."""
+    all_m = [d.strftime("%Y-%m-%d") for d in pd.date_range(start, end, freq="MS")]
+    return all_m[::step]
 
 
 def _fetch(series: str, vintage: str) -> pd.Series | None:
@@ -78,28 +73,35 @@ def _fetch(series: str, vintage: str) -> pd.Series | None:
             return None
     else:
         url = f"{BASE}?id={urllib.parse.quote(series)}&vintage_date={vintage}"
-        req = urllib.request.Request(url, headers=HDRS)
+        # curl is markedly more reliable against ALFRED than urllib (which the server
+        # intermittently throttles to a hang); retry a few times on transient failure.
         txt = None
-        for attempt in range(4):
+        for attempt in range(6):
             try:
-                with urllib.request.urlopen(req, timeout=45) as r:
-                    txt = r.read().decode("utf-8", "replace")
-                break
-            except urllib.error.HTTPError as e:
-                if e.code == 404:
-                    open(fn, "w").write("__404__")
-                    return None
-                time.sleep(1.5 * (attempt + 1))
+                # NB: plain curl (default HTTP/2, default UA) is what ALFRED serves
+                # reliably; --http1.1 and a custom UA get throttled to a hang here.
+                out = subprocess.run(
+                    ["curl", "-sL", "-m", "40", url],
+                    capture_output=True, text=True, timeout=55)
+                if out.returncode == 0 and out.stdout:
+                    txt = out.stdout
+                    break
             except Exception:
-                time.sleep(1.5 * (attempt + 1))
+                pass
+            # ALFRED rate-limits bursts (empty body / rc 92 / rc 000): back off, but
+            # cap the escalation so one transient failure does not stall the whole run.
+            time.sleep(min(5.0 + 3.0 * attempt, 20.0))
         if txt is None:
             return None  # transient failure: skip this (series, vintage); not cached
-        # sanity: must look like the ALFRED CSV, not an HTML wrapper
-        if not txt.lstrip().lower().startswith("observation_date"):
+        low = txt.lstrip().lower()
+        if low.startswith("404") or "<html" in low[:200]:
+            open(fn, "w").write("__404__")
+            return None
+        if not low.startswith("observation_date"):
             open(fn, "w").write("__404__")
             return None
         open(fn, "w").write(txt)
-        time.sleep(0.15)  # be polite to the server
+        time.sleep(3.0)  # be polite: ALFRED blocks bursts, so fetch slowly + serially
     df = pd.read_csv(io.StringIO(txt))
     df.columns = ["date", "value"]
     df["date"] = pd.to_datetime(df["date"])
@@ -107,18 +109,21 @@ def _fetch(series: str, vintage: str) -> pd.Series | None:
     return s
 
 
-def fetch_all(start="2015-07-01", end="2025-05-01"):
-    vintages = _vintage_dates(start, end)
+def fetch_all(start="2015-07-01", end="2025-05-01", step=2):
+    vintages = _vintage_dates(start, end, step=step)
     print(f"fetching {len(PREDICTORS)} series x {len(vintages)} vintages from ALFRED ...")
     # Per-vintage panel of predictors (each is the as-known-at-vintage path).
     panel = {}     # vintage -> DataFrame(date x series), real-time
     target_rt = {}  # vintage -> Series of INDPRO as known at that vintage
     for vi, v in enumerate(vintages):
         cols = {}
+        ok = 0
         for s in PREDICTORS:
             ser = _fetch(s, v)
             if ser is not None and ser.notna().sum() > 24:
                 cols[s] = ser
+                ok += 1
+        print(f"  vintage {v}: {ok}/{len(PREDICTORS)} series", flush=True)
         if TARGET in cols:
             target_rt[v] = cols[TARGET].dropna()
         if cols:

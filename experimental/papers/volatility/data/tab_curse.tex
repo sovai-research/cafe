@@ -1,0 +1,14 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Curse of dimensionality, fixed train $T{=}350$.} Sample-correlation condition number and MV-portfolio variance as $N$ grows. CCC/DCC degrade as the $N\times N$ correlation becomes ill-conditioned (DCC's $O(N^2)$/step fit becomes infeasible past $N{=}80$); \cafe{}-FV (rank $K{=}3$) keeps improving toward the oracle.}
+\label{tab:curse}
+\begin{tabular}{@{}lccccc@{}}\toprule
+$N$ & cond(corr) & \cafe{}-FV & CCC & DCC & oracle \\\midrule
+10 & 33 & 0.374 & 0.399 & 0.393 & 0.308 \\
+20 & 105 & 0.190 & 0.408 & 0.408 & 0.182 \\
+40 & 223 & 0.088 & 0.174 & 0.174 & 0.085 \\
+80 & 702 & 0.045 & 0.082 & 0.082 & 0.044 \\
+150 & 2525 & 0.025 & 1.069 & \emph{infeas.} & 0.024 \\
+250 & 17200 & 0.016 & 0.787 & \emph{infeas.} & 0.016 \\
+\bottomrule\end{tabular}
+\end{table}

@@ -1,0 +1,27 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{6pt}
+\caption{\textbf{Beating the right high-dimensional baselines, with the win
+decomposed.} Curse-of-dimensionality regime (short train $T{=}350$, $N{=}120$,
+4 seeds; mean correlation condition number $1276$).
+\emph{MV-port.\ var.}\ is the out-of-sample minimum-variance-portfolio realized
+variance (the economic loss, lower better; oracle floor
+$0.0351$); \emph{cov-QLIKE}\ is the covariance Stein loss
+vs.\ the true time-varying $\Sigma_t$ (lower better). Reading the gaps:
+\cafe{}-FV\,$-$\,StaticFactor isolates the score-driven \emph{dynamics} --- they
+roughly halve cov-QLIKE and also lower portfolio variance, and are the main source of the
+win. StaticFactor (the low-rank \emph{structure} with \emph{static} variances) is
+itself no better than NLS, so structure alone is not what wins; its role is to make the
+dynamics scalable ($O(NK)$), keep $\Sigma_t^{-1}$ well-conditioned as $N\!\to\!T$, and
+ingest gaps --- the regime where vanilla DCC is infeasible (at this $N$).}
+\label{tab:baselines}
+\begin{tabular}{@{}lcc@{}}\toprule
+Method & MV-port.\ var. & cov-QLIKE \\\midrule
+\textbf{\cafe{}-FV} \emph{(proposed: structure $+$ score dynamics)} & 0.0372\,$\pm$\,0.0054 & 4.73 \\
+\quad StaticFactor \emph{(ablation: structure, no dynamics)} & 0.0405\,$\pm$\,0.0062 & 9.02 \\
+NLS \emph{(nonlinear shrinkage)} & 0.0392\,$\pm$\,0.0055 & 6.70 \\
+LW \emph{(linear shrinkage)} & 0.0561\,$\pm$\,0.0071 & 38.28 \\
+DCC-GARCH & \emph{infeasible} & -- \\
+Sample covariance & 0.0605\,$\pm$\,0.0071 & 48.43 \\
+\emph{Oracle} ($\Sigma_t$ known) & 0.0351\,$\pm$\,0.0046 & 0 (def.) \\
+\bottomrule\end{tabular}
+\end{table*}

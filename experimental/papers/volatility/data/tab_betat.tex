@@ -1,0 +1,12 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The Beta-$t$-GARCH upgrade, built from \cafe{}'s own IRLS weight, is competitive and robust.} QLIKE vs.\ true variance (lower better), 8 seeds. \emph{Clean}: true GARCH-$t$ returns. \emph{Outliers}: $1\%$ additive jumps not part of the vol process. Last column: median variance over-shoot the step after a jump ($1.0$ ideal). The Beta-$t$ innovation $w\,r^2$ is bit-identical ($0.0$e$+$0) to \cafe{}'s weight.}
+\label{tab:betat}
+\begin{tabular}{@{}lccc@{}}\toprule
+Method & clean & outliers & overshoot \\\midrule
+\textbf{Beta-$t$-GARCH} & 1.688 & 1.784 & $\times2.64$ \\
+GARCH-$t$ MLE & 1.682 & 1.885 & -- \\
+GARCH-$\mathcal{N}$ MLE & -- & 1.927 & $\times6.05$ \\
+\cafe{} scale, HL$=$200 & 1.962 & 1.995 & -- \\
+\bottomrule\end{tabular}
+\end{table}

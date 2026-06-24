@@ -1,0 +1,20 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{When the leak bites, per panel.} Lag-1 memory $\hat a$ (point-in-time estimate) and the closed-form predicted look-ahead gap $\Delta(\hat a,g)$ from Eq.~\eqref{eq:deltaclosed} at gap lengths $g{=}3,10$. High-memory panels (FRED-MD, Beijing, AirQuality) have a large exploitable gap; near-memoryless panels (Traffic, Electric) give the future almost nothing. Closed form matches exact filter/smoother runs at $R^2={0.9996}$ (median rel.\ err.\ ${1.2}\%$).}
+\label{tab:gapband}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+Panel & $\hat a$ & $\Delta(\hat a,3)$ & $\Delta(\hat a,10)$ \\
+\midrule
+FRED-MD & 0.996 & 0.0351 & 0.0622 \\
+Exchange (FX) & 0.999 & 0.0168 & 0.0303 \\
+Appliances & 0.990 & 0.0505 & 0.0872 \\
+Beijing & 0.929 & 0.1137 & 0.1408 \\
+AirQuality & 0.892 & 0.1238 & 0.1248 \\
+Solar & 0.894 & 0.1236 & 0.1258 \\
+ETTh & 0.884 & 0.1248 & 0.1204 \\
+Traffic & 0.083 & 0.0009 & 0.0003 \\
+Electric & 0.048 & 0.0003 & 0.0001 \\
+\bottomrule
+\end{tabular}
+\end{table}
