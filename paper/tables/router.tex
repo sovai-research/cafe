@@ -1,0 +1,16 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{The learned dials are an automatic structure detector.} Live read-back of \texttt{cafe.CAFE().run(X)} on a no-structure FX control versus structured panels (no setting changed between rows): \textsc{eff.\ rank} $=$ \texttt{res.effective\_rank()} (factors ARD keeps active), $a$ and $\nu$ $=$ \texttt{res.params}. The FX control collapses to a thin, near-Gaussian ($\nu$ large), near-random-walk ($a{\to}1$) signature, so \cafe{} leans on the per-entity random-walk carry; the structured panels keep a heavy-tailed ($\nu$ small) or low-$a$ factor signature, so the joint cross-sectional factor engine leads. The \textsc{implied engine} is a post-hoc reading of \cafe{}'s own learned state -- \cafe{} fuses every channel each step regardless; nothing here is hand-set. All numbers are from live runs (caps 3000$\times$60).}
+\label{tab:router}
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+Dataset & $N$ & eff.\ rank & $a$ & $\nu$ & Implied engine \\
+\midrule
+Exchange (FX)$^{\dagger}$ & 8 & 2 & 0.96 & 60.0 & random-walk / per-entity carry \\
+Beijing air & 60 & 2 & 0.92 & 5.8 & factor $+$ AR carry (blended) \\
+Air quality & 12 & 3 & 0.94 & 5.2 & factor $+$ AR carry (blended) \\
+Traffic & 60 & 1 & 0.12 & 5.8 & joint cross-sectional factor \\
+\bottomrule
+\end{tabular}
+\\[2pt]{\footnotesize $^{\dagger}$ no-structure control (independent FX rates).}
+\end{table}

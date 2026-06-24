@@ -1,0 +1,22 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+% \rotcol: vertical column header; falls back gracefully if rotating is unavailable.
+\providecommand{\rotcol}[1]{\rotatebox{90}{#1}}
+\caption{\textbf{Closest contemporaries: a capability comparison.} Like Table~\ref{tab:special}, this is a \emph{qualitative feature checklist}, \emph{not} a metric run: each entry is a design property verified from the method's own paper, not a measured score. \ding{51}\,$=$\,has the capability, \ding{55}\,$=$\,does not. \cafe{} is the only method that simultaneously is causal-verified, learns its structure without per-dataset tuning, uses a heavy-tailed (Student-$t$) likelihood, carries explicit fixed-effects and seasonality, emits per-cell uncertainty, runs online, and stays CPU-only. Properties are scored on each method's \emph{default/headline} output.}
+\label{tab:contemporaries}
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+Method & \rotcol{Causal-verified} & \rotcol{Learned, not tuned} & \rotcol{Student-$t$ robust} & \rotcol{Fixed-effects $+$ season} & \rotcol{Per-cell UQ} & \rotcol{Online} & \rotcol{CPU-only} \\
+\midrule
+\cafe{} (ours) & \ding{51} & \ding{51} & \ding{51} & \ding{51} & \ding{51} & \ding{51} & \ding{51} \\
+TIDER & \ding{55} & \ding{55} & \ding{55} & \ding{51} & \ding{55} & \ding{55} & \ding{51} \\
+NoTMF & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{51} \\
+LATC & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{51} \\
+TRMF & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{51} \\
+BayOTIDE$^{a}$ & \ding{51} & \ding{55} & \ding{55} & \ding{51} & \ding{51} & \ding{51} & \ding{51} \\
+ImputeFormer & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} & \ding{55} \\
+Dyn.\,factor-EM$^{b}$ & \ding{55} & \ding{51} & \ding{55} & \ding{51} & \ding{51} & \ding{55} & \ding{51} \\
+\bottomrule
+\end{tabular}
+\\[2pt]{\footnotesize $^{a}$ Causal in its native online \emph{filtering} mode (scored here); the optional full-posterior \emph{smoother} mode is non-causal. \quad $^{b}$ Default output uses the Kalman \emph{smoother} over the full sample (non-causal); strictly causal only if restricted to the filtered pass.}
+\end{table}
