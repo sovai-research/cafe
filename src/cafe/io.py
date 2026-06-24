@@ -59,13 +59,14 @@ def _panel_meta(time_labels, entity_labels):
 
 
 def _is_pandas(x):
+    # pandas <3 reports e.g. "pandas.core.frame"; pandas 3.x reports just "pandas".
     m = type(x).__module__
-    return m.startswith("pandas.")
+    return m == "pandas" or m.startswith("pandas.")
 
 
 def _is_polars(x):
     m = type(x).__module__
-    return m.startswith("polars.")
+    return m == "polars" or m.startswith("polars.")
 
 
 def to_matrix(data, panel=None):
