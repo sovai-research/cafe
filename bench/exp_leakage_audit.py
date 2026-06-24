@@ -235,7 +235,7 @@ def write_table(agg, n_tasks):
     rows = sorted(agg.items(), key=lambda kv: -kv[1]["leakage_delta"])
     path = os.path.join(ROOT, "paper", "tables", "leakage_audit.tex")
     lines = [
-        r"\begin{table}[tbp]\centering\small",
+        r"\begin{table*}[tbp]\centering\small",
         r"\setlength{\tabcolsep}{4pt}",
         r"\caption{\textbf{The leakage leaderboard --- a model-agnostic look-ahead "
         r"audit (``the $\epsilon$ of imputation'').} Every method, wrapped through the "
@@ -263,7 +263,7 @@ def write_table(agg, n_tasks):
         dstr = ("%+.3f" % d) if d == d else "--"
         lines.append(f"{mname} & {cert} & {_fmt_rev(a['max_revision'])} & {dstr} & "
                      f"{a['bidir_mae']:.3f} & {a['causal_mae']:.3f} \\\\")
-    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table}"]
+    lines += [r"\bottomrule", r"\end{tabular}", r"\end{table*}"]
     txt = "\n".join(lines) + "\n"
     with open(path, "w") as f:
         f.write(txt)

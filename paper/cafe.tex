@@ -394,6 +394,27 @@ silently revises the \emph{same} past cells by $0.25$ standard deviations as the
 future arrives (Table~\ref{tab:causalverify}).
 \input{tables/causal_verify}
 
+\paragraph{From a CAFE-specific check to a neutral field standard.} The verifier above
+is not specific to \cafe{}: it wraps \emph{any} imputer $f(X)\!\to\!\hat X$ following the
+standard contract and reports two model-agnostic numbers---a binary \emph{causality
+certificate} (the maximum revision of an early imputed cell as the series grows, i.e.\
+truncation invariance) and a continuous \emph{leakage score}
+$\Delta=\mathrm{MAE}_{\text{causal}}-\mathrm{MAE}_{\text{bidir}}$, the accuracy a method
+silently borrows from the future (its bidirectional fill vs.\ the same model applied
+honestly as a right-edge filter). We package this as \texttt{cafe.audit.leakage\_report}
+and run it across the full method panel (Table~\ref{tab:leakageaudit}). The certificate
+cleanly partitions the field: every natively causal method certifies with zero revision
+and $\Delta\!\approx\!0$, while interpolation and batch low-rank methods incur positive
+revisions. Two honest nuances surface that a binary check would miss---published
+\emph{online} methods (gcimpute, BayOTIDE) borrow \emph{no accuracy}
+($\Delta\!\approx\!0$) yet are not bit-exactly truncation-invariant (a globally-shared
+posterior is refined as the stream advances), and the deep imputers (SAITS, BRITS) post a
+\emph{negative} $\Delta$---their honest right-edge filter beats their own bidirectional
+fill, direct evidence that the bidirectional objective is the wrong one for a sequential
+decision. We propose this audit as neutral community infrastructure: any new method can
+publish its certificate and $\Delta$ alongside its MAE.
+\input{tables/leakage_audit}
+
 \section{Benchmarks and Results}\label{sec:exp}
 We benchmark \cafe{} \emph{without retraining any competitor}: we run \cafe{} and
 classical CPU baselines live, and for deep models we cite only their
@@ -502,6 +523,32 @@ take over; on a structured panel such as Traffic it learns $a{=}0.12$ with a
 heavy-tailed ($\nu{\approx}5$) low-rank factor signature, so the joint cross-sectional
 engine leads---no manual switch required.
 \input{tables/router}
+
+\paragraph{Mixed-frequency causal nowcasting.} A low-frequency series living on a
+high-frequency grid---a quarterly target among monthly indicators---is just a column
+observed every $k$ steps and missing in between, with a ragged edge at the unreleased
+current period. This is precisely the structured missingness \cafe{} already imputes: the
+cross-sectional factor fill at the unobserved period \emph{is} a point-in-time nowcast,
+with no frequency-aware machinery. On FRED-MD with a quarterly target, \cafe{} nowcasts the
+activity/spread series central banks actually track at MAE~$0.350$ versus $0.551$ for
+persistence and $0.529$ for an eight-factor bridge (Table~\ref{tab:mixedfreq}), strictly
+causally (zero deviation under prefix truncation), and---as in real nowcasting---the
+estimate sharpens monotonically as more high-frequency data arrives within the period
+($0.376\!\to\!0.345\!\to\!0.296$; Fig.~\ref{fig:mixedfreq}). On smooth near-random-walk
+levels persistence is unbeatable and \cafe{} does not win---those series do not need
+nowcasting---so the gain is on exactly the low-persistence, high-factor series the
+nowcasting literature targets (targets chosen by an intrinsic, data-only rule). The classic
+dynamic-factor nowcasting problem~\cite{giannone2008nowcasting,banbura2013nowcasting,marianoMurasawa2003,ghysels2004midas}
+thus falls out of \cafe{} as a special case of imputation, reframing it as a zero-config,
+CPU-only, strictly point-in-time nowcaster.
+\input{tables/mixedfreq}
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/mixedfreq.pdf}
+\caption{\textbf{Zero-config causal nowcasting.} \emph{(a)} Point-in-time nowcast of a
+quarterly FRED-MD target vs.\ truth; \emph{(b)} nowcast MAE sharpens monotonically as more
+high-frequency months are observed within the quarter---the hallmark of real nowcasting.}
+\label{fig:mixedfreq}
+\end{figure}
 \begin{figure*}[t]\centering
 \includegraphics[width=\textwidth]{figures/causal_race_flip.pdf}
 \caption{\textbf{Forbid the future and the board collapses.} Each line is a
@@ -517,6 +564,61 @@ and rises to \#1 on the causal side even though TRMF edges it bidirectionally by
 reading the future. The causal column is the only one valid for a backtest.}
 \label{fig:causalrace}
 \end{figure*}
+
+\paragraph{Why the gap has the size it does (a closed form).}
+The look-ahead gap is not a property of any one architecture; for a linear-Gaussian
+source it is a property of the \emph{data}. Take a scalar stationary AR(1)
+$x_t=a\,x_{t-1}+w_t$, $\mathrm{Var}(x_t)=\sigma^2$, with a contiguous gap over interior
+offsets $k=1,\dots,g$ whose endpoints are observed. The Bayes-optimal causal estimator is
+the Kalman filter and the Bayes-optimal bidirectional estimator is the RTS
+smoother~\cite{kalman1960,rts1965,andersonmoore1979}; their posterior variances are exact:
+\begin{equation}
+V_f(k)=\sigma^2\bigl(1-a^{2k}\bigr),\qquad
+V_s(k)=\sigma^2\,\frac{(1-a^{2k})\,(1-a^{2(g+1-k)})}{1-a^{2(g+1)}} .
+\label{eq:filtsmooth}
+\end{equation}
+The filter sees only the left endpoint (a $k$-step AR forecast); the smoother adds the
+right endpoint (an AR(1) bridge). Since both posteriors are Gaussian,
+$\mathbb{E}|e|=\sqrt{2/\pi}\,\sqrt{V}$, so the gap-averaged look-ahead gap is the closed
+form
+\begin{equation}
+\Delta(a,g)=\sqrt{\tfrac{2}{\pi}}\;\frac1g\sum_{k=1}^{g}\Bigl(\sqrt{V_f(k)}-\sqrt{V_s(k)}\Bigr).
+\label{eq:deltaclosed}
+\end{equation}
+Three consequences. \emph{(i)~Memoryless data give nothing to the future:} at $a=0$,
+$V_f=V_s=\sigma^2$ and $\Delta=0$ exactly---causality is free for rough series.
+\emph{(ii)~A single point} ($g=1$) has variance ratio $V_s/V_f=1/(1+a^2)$, so the gap
+grows monotonically with memory. \emph{(iii)~The gap is largest at moderate-to-high memory
+and an intermediate gap length} comparable to the correlation time $1/(1-a)$, then decays
+as $\mathcal{O}(1/g)$. A controlled $(a,g)$ sweep confirms \eqref{eq:deltaclosed} against
+exact filter/smoother runs at $R^2=0.999$ (median relative error $1.5\%$,
+Fig.~\ref{fig:gaptheory}, Table~\ref{tab:gaptheory}); estimating $\hat a$ on each real
+panel places its predicted $\Delta$ on the same band as the measured horse-race gap
+(FRED-MD $\hat a{\approx}0.99$ and Beijing $0.93$ high; Traffic $0.09$ and Electric $0.05$
+$\approx0$). The rank-$R$ factor case is the same mechanism per latent factor---$\Delta$
+tracks the \emph{slowest-mixing} retained factor's memory---which we state as a conjecture
+(validated qualitatively, not derived in closed form here). \cafe{} and the online
+baselines sit at $\Delta=0$ by construction; the deep imputers' positive $\Delta$ in
+Table~\ref{tab:bidirrace} is the \eqref{eq:deltaclosed} surplus their bidirectional readout
+extracts from each panel's autocorrelation. The closed form is exact for the AR(1)-Gaussian
+single-gap case; with measurement noise the behaviour is the same shape with an added
+term, and a sub-optimal causal estimator (such as \cafe{} on a bare single-column AR(1),
+where it cannot use a cross-section) sits \emph{above} the optimal-filter line---model gap,
+not extra look-ahead, shown explicitly in Fig.~\ref{fig:gaptheory}.
+\begin{figure*}[t]\centering
+\includegraphics[width=\textwidth]{figures/gap_theory.pdf}
+\caption{\textbf{The look-ahead gap is predictable from autocorrelation.}
+\emph{(a)} Closed form \eqref{eq:deltaclosed} (curves) vs.\ measured $\Delta$ from exact
+Kalman filter / RTS smoother runs (points), per AR coefficient $a$; the gap vanishes for
+$a{=}0$ and peaks at moderate memory and intermediate gap length. \emph{(b)} Measured vs.\
+predicted $\Delta$ over the whole $(a,g)$ plane ($R^2{=}0.999$); triangles mark \cafe{} as
+the causal side, which sits \emph{above} the optimal-filter line---on a single-column AR(1)
+with no cross-section \cafe{} is a deliberately general, hence sub-optimal, causal
+estimator, so its excess is model gap, not extra look-ahead. \emph{(c)} Each real panel's
+estimated AR memory $\hat a$ places its predicted $\Delta$ on the band.}
+\label{fig:gaptheory}
+\end{figure*}
+\input{tables/gap_theory}
 \paragraph{The deep baselines are adequately trained (the collapse is protocol, not
 under-training).} A natural objection is that the causal collapse merely reflects
 feeble baselines. It does not (Table~\ref{tab:fairness}): each deep model's
@@ -729,6 +831,34 @@ even a spanned column collapses toward the mean---the matrix-completion identifi
 limit, disclosed rather than hidden, and the quantitative form of the recoverability
 lever of Cheng et al.~\cite{cheng2025causalview}.
 \input{tables/extreme_missing}
+
+\paragraph{Selective imputation: a recoverability certificate.} The recoverability
+frontier above is descriptive; we turn it into an operational, per-cell \emph{certificate}
+in $[0,1]$ that a downstream user can act on. From the same causal pass we combine the
+posterior $\sigma$, the split-conformal scale $q(\text{level})$, the cross-sectional anchor
+support behind a cell, the feature's loading energy (factor-spanned vs.\ idiosyncratic) and
+the Student-$t$ row weight into a single confidence score (Table~\ref{tab:recoverability},
+Fig.~\ref{fig:recoverability})---no held-out truth is used, so it is computable at
+deployment. Gating fills by the certificate---abstaining (returning \texttt{NaN}) on the
+least-confident cells rather than emitting a confident-but-wrong value---drops retained MAE
+by ${\sim}37\%$ at $50\%$ coverage versus $\approx0\%$ for random abstention, and on the
+spanned-vs-idiosyncratic frontier it ranks the idiosyncratic (no cross-sectional evidence)
+column well below the factor-spanned one: \cafe{} flags the cells it cannot recover.
+\emph{Honestly, the calibration is dataset-dependent}: it is sharp across regimes (pooled
+Spearman $\rho=+0.45$; FRED-MD $+0.54$) and drives the abstention win, but is nearly flat
+\emph{within} an already-homogeneous panel (Beijing/ETTh1 $\rho\approx0.03$--$0.05$). As a
+risk control (abstain rather than mislead) the certificate is deployable; as a fine-grained
+per-cell error rank inside one homogeneous panel it is partial, and we report both
+halves~\cite{elyaniv2010selective,geifman2017selectivenet,angelopoulos2024conformalrisk}.
+\input{tables/recoverability}
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/recoverability.pdf}
+\caption{\textbf{Selective imputation via the recoverability certificate.}
+\emph{(a)} Calibration: mean held-out $|\text{error}|$ falls monotonically as the
+certificate rises. \emph{(b)} Risk--coverage: abstaining on the least-confident cells
+(certificate-gated) drops retained MAE far faster than random abstention.}
+\label{fig:recoverability}
+\end{figure}
 
 \paragraph{MNAR scope (honest).} \cafe{} does not ``solve'' MNAR: when a value's
 missingness depends on its own (unobserved) magnitude, the complete-data
@@ -1124,6 +1254,32 @@ time-series imputation with disentangled temporal representations (TIDER).
 \bibitem{chen2022latc} X.~Chen, M.~Lei, N.~Saunier, L.~Sun. Low-rank
 autoregressive tensor completion for spatiotemporal traffic data imputation
 (LATC). \emph{IEEE T-ITS}, 2022. \emph{arXiv:2104.14936}.
+% --- look-ahead-gap theory (filter vs smoother) ---
+\bibitem{kalman1960} R.~E.~Kalman. A new approach to linear filtering and
+prediction problems. \emph{Trans.\ ASME J.\ Basic Eng.}, 82(1):35--45, 1960.
+\bibitem{rts1965} H.~E.~Rauch, F.~Tung, C.~T.~Striebel. Maximum likelihood
+estimates of linear dynamic systems. \emph{AIAA Journal}, 3(8):1445--1450, 1965.
+\bibitem{andersonmoore1979} B.~D.~O.~Anderson, J.~B.~Moore. \emph{Optimal
+Filtering}. Prentice-Hall, 1979.
+% --- selective / risk-controlled prediction (recoverability certificate) ---
+\bibitem{elyaniv2010selective} R.~El-Yaniv, Y.~Wiener. On the foundations of
+noise-free selective classification. \emph{JMLR}, 11:1605--1641, 2010.
+\bibitem{geifman2017selectivenet} Y.~Geifman, R.~El-Yaniv. Selective prediction
+with deep neural networks. \emph{NeurIPS}, 2017. \emph{arXiv:1705.08500}.
+\bibitem{angelopoulos2024conformalrisk} A.~N.~Angelopoulos, S.~Bates, A.~Fisch,
+L.~Lei, T.~Schuster. Conformal risk control. \emph{ICLR}, 2024. \emph{arXiv:2208.02814}.
+% --- mixed-frequency / dynamic-factor nowcasting ---
+\bibitem{giannone2008nowcasting} D.~Giannone, L.~Reichlin, D.~Small. Nowcasting:
+the real-time informational content of macroeconomic data. \emph{Journal of
+Monetary Economics}, 55(4):665--676, 2008.
+\bibitem{marianoMurasawa2003} R.~S.~Mariano, Y.~Murasawa. A new coincident index
+of business cycles based on monthly and quarterly series. \emph{Journal of
+Applied Econometrics}, 18(4):427--443, 2003.
+\bibitem{ghysels2004midas} E.~Ghysels, P.~Santa-Clara, R.~Valkanov. The MIDAS
+touch: mixed data sampling regression models. Working paper, 2004.
+\bibitem{banbura2013nowcasting} M.~Ba\'nbura, D.~Giannone, M.~Modugno,
+L.~Reichlin. Now-casting and the real-time data flow. In \emph{Handbook of
+Economic Forecasting}, vol.\ 2A, pp.\ 195--237, Elsevier, 2013.
 \end{thebibliography}
 
 \end{document}

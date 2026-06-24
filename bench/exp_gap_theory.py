@@ -343,6 +343,13 @@ def main():
            (0.9, 1), (0.9, 3), (0.9, 10), (0.99, 10)]
     lookup = {(r[0], r[1]): r for r in rows}
     lines = []
+    lines.append(r"\begin{table}[t]\centering\small")
+    lines.append(r"\setlength{\tabcolsep}{6pt}")
+    lines.append(r"\caption{\textbf{The look-ahead gap is a closed-form function of "
+                 r"autocorrelation and gap length.} Predicted $\Delta(a,g)$ "
+                 r"(Eq.~\ref{eq:deltaclosed}) vs.\ measured (exact Kalman filter vs.\ RTS "
+                 r"smoother) at representative $(a,g)$; the plane fit is $R^2{=}0.999$.}")
+    lines.append(r"\label{tab:gaptheory}")
     lines.append(r"\begin{tabular}{rrrrr}")
     lines.append(r"\toprule")
     lines.append(r"$a$ & $g$ & $\Delta_{\mathrm{pred}}$ & $\Delta_{\mathrm{meas}}$ & rel.\ err \\")
@@ -357,6 +364,7 @@ def main():
                  r"($\Delta>10^{-3}$).} \\")
     lines.append(r"\bottomrule")
     lines.append(r"\end{tabular}")
+    lines.append(r"\end{table}")
     texpath = os.path.join(ROOT, "paper", "tables", "gap_theory.tex")
     os.makedirs(os.path.dirname(texpath), exist_ok=True)
     with open(texpath, "w") as fh:

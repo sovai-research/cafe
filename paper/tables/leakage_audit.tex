@@ -1,4 +1,4 @@
-\begin{table}[tbp]\centering\small
+\begin{table*}[tbp]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{The leakage leaderboard --- a model-agnostic look-ahead audit (``the $\epsilon$ of imputation'').} Every method, wrapped through the same neutral standard (\texttt{cafe.audit.leakage\_report}), receives a binary \emph{causality certificate} (max revision of an early imputed cell under truncation invariance: re-impute on growing time-prefixes; a strictly point-in-time method never revises an early fill) and a continuous \emph{leakage score} $\Delta=$ causal$-$bidirectional MAE (the accuracy a method silently borrows from the future, measured by applying the same model as an honest right-edge filter). Sorted by $\Delta$ (most leaky first), mean over 8 real tasks. Natively causal methods (\cafe{}, LOCF, Kalman, the online filters) certify with $\Delta\!\approx\!0$; batch and interpolation methods borrow large $\Delta$ they cannot keep in a backtest.}
 \label{tab:leakageaudit}
@@ -35,4 +35,4 @@ BRITS & $\times$ & $7.9\mathrm{e}{-1}$ & -0.323 & 0.842 & 0.520 \\
 SAITS & $\times$ & $1.1\mathrm{e}{0}$ & -0.400 & 0.796 & 0.397 \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

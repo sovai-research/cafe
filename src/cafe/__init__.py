@@ -10,11 +10,14 @@ dependency network, and forecasts -- from the same forward pass.
     res    = cafe.CAFE().run(df)        # rich result
     res.uncertainty; res.factors(); res.anomaly_scores(); res.forecast  # ...
 """
-from . import baselines
+from . import audit, baselines
 from .benchmark import benchmark
 from .conformal import ConformalCalibrator, conformal_multipliers
 from .model import CAFE, CafeResult, impute
+from .recoverability import recoverability_score, score_from_result, selective_impute
 
-__all__ = ["CAFE", "CafeResult", "impute", "benchmark", "baselines",
-           "ConformalCalibrator", "conformal_multipliers", "__version__"]
+__all__ = ["CAFE", "CafeResult", "impute", "benchmark", "baselines", "audit",
+           "ConformalCalibrator", "conformal_multipliers",
+           "recoverability_score", "selective_impute", "score_from_result",
+           "__version__"]
 __version__ = "0.1.0"

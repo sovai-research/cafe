@@ -231,6 +231,33 @@ class CafeResult:
         return (from_matrix(self._filled - hw, self._ctx),
                 from_matrix(self._filled + hw, self._ctx))
 
+    # ---- per-cell recoverability certificate (selective / risk-controlled imputation) ----
+    def recoverability_score(self, conformal=True, weights=None, return_components=False,
+                             **conformal_kwargs):
+        """Per-cell recoverability certificate in [0,1] (1 = trustworthy fill, 0 = CAFE
+        cannot recover this cell), NaN where observed. Built from this run's own state
+        (posterior sigma, the causal conformal scale, cross-sectional anchor support,
+        factor/loading support, Student-t robustness) -- no held-out truth is used.
+        Needs the traced run (CAFE().run on 1D/2D). ``conformal=True`` expresses the
+        certificate on the calibrated q*sigma scale; extra kwargs go to the calibrator."""
+        from .recoverability import score_from_result
+        s = score_from_result(self, conformal=conformal, weights=weights,
+                              return_components=return_components, **conformal_kwargs)
+        if return_components:
+            score, comp = s
+            return from_matrix(score, self._ctx), comp
+        return from_matrix(s, self._ctx)
+
+    def selective_imputed(self, min_confidence=0.5, **kwargs):
+        """The imputation with NaN wherever the recoverability certificate
+        < ``min_confidence`` (abstain on cells CAFE cannot recover rather than return a
+        confident-but-wrong value). Observed cells are always kept. ``kwargs`` are
+        forwarded to :meth:`recoverability_score`."""
+        from .recoverability import score_from_result, selective_impute
+        sc = score_from_result(self, **kwargs)
+        out = selective_impute(self._filled, sc, min_confidence)
+        return from_matrix(out, self._ctx)
+
     # ---- latent common factors (streaming robust DFM / PCA) ----
     def factors(self):
         """The learned latent factor paths z_t as a (T, R) array."""

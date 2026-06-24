@@ -196,6 +196,39 @@ MANIFEST = {
         "what": "Learned (a, nu, effective-rank) signature as an automatic structure "
                 "detector: FX control vs structured panels.",
     },
+    # ---- '10x' capability experiments (2026) ----
+    "exp_leakage_audit.py": {
+        "tables":  ["paper/tables/leakage_audit.tex"],
+        "figures": ["paper/figures/leakage_audit.pdf"],
+        "tex_label": ["tab:leakageaudit"],
+        "what": "Model-agnostic leakage audit: per-method causality certificate (max "
+                "revision under truncation invariance) + continuous leakage Delta = "
+                "causal-bidir MAE across the full panel (the 'epsilon of imputation').",
+    },
+    "exp_gap_theory.py": {
+        "tables":  ["paper/tables/gap_theory.tex"],
+        "figures": ["paper/figures/gap_theory.pdf"],
+        "tex_label": ["tab:gaptheory", "fig:gaptheory"],
+        "what": "Closed-form theory of the look-ahead gap Delta(a,g): Kalman filter "
+                "(causal) vs RTS smoother (bidirectional) for AR(1); predicted vs "
+                "measured Delta over the (a,g) plane + real-dataset AR-memory band.",
+    },
+    "exp_recoverability.py": {
+        "tables":  ["paper/tables/recoverability.tex"],
+        "figures": ["paper/figures/recoverability.pdf"],
+        "tex_label": ["tab:recoverability", "fig:recoverability"],
+        "what": "Recoverability certificate / selective imputation: calibration (cert vs "
+                "realized error) + risk-coverage (cert-gated vs random) on real panels and "
+                "the factor-spanned vs idiosyncratic frontier.",
+    },
+    "exp_mixedfreq.py": {
+        "tables":  ["paper/tables/mixedfreq.tex"],
+        "figures": ["paper/figures/mixedfreq.pdf"],
+        "tex_label": ["tab:mixedfreq", "fig:mixedfreq"],
+        "what": "Mixed-frequency causal nowcasting (quarterly target in monthly FRED-MD): "
+                "CAFE vs persistence / bridge-OLS / factor-OLS, point-in-time + within-"
+                "quarter sharpening.",
+    },
     "exp_backtest_lookahead.py": {
         "tables":  ["paper/tables/backtest.tex"],
         "figures": [],
