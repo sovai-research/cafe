@@ -1,0 +1,15 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{6pt}
+\caption{\textbf{Zero-config causal nowcasting of a low-frequency target.} Nowcast error ($\downarrow$) on a quarterly target embedded in the monthly FRED-MD panel (observed at quarter ends, NaN otherwise; the current quarter is unreleased at nowcast time---a ragged edge). At each release the target is nowcast \emph{point-in-time} from the high-frequency cross-section on the time-truncated prefix; \cafe{} treats the low-freq column purely as structured missingness and reads off its cross-sectional factor fill---no frequency-aware code. Targets are the four series with the lowest persistence yet highest common-factor content (the activity/spread series central banks actually nowcast). \textbf{Bold} $=$ best. Averaged over 63 release times.}
+\label{tab:mixedfreq}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+Nowcaster & MAE & RMSE \\
+\midrule
+\textbf{\cafe{} (ours)} & $\textbf{0.350}$ & $\textbf{0.556}$ \\
+persistence & $0.551$ & $1.097$ \\
+bridge-OLS & $0.724$ & $0.958$ \\
+factor-OLS & $0.529$ & $0.638$ \\
+\bottomrule
+\end{tabular}
+\end{table}
