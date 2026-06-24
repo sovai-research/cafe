@@ -1,0 +1,22 @@
+\begin{table*}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Causal split-conformal recalibration of \cafe{}'s predictive intervals.} Held-out cells under $10\%$ MCAR, 3 seeds, scored with the same \texttt{metrics\_prob} PICP/sharpness as Table~\ref{tab:calibcrps}. For each nominal level we report observed coverage and mean interval width for the RAW Gaussian band ($\mu\pm z\sigma$) and the causal split-conformal band ($\mu\pm q\sigma$, $q$ the trailing-window $(1{-}\alpha)$ quantile of held-out calibration residuals). The raw Gaussian band over-covers (mean $|$coverage$-$nominal$|=.09$); the causal conformal band cuts that to $.02$, hitting nominal coverage with materially tighter intervals, while the imputation is bit-identical (MAE $\Delta=0$). Point-in-time is preserved (prefix vs.\ full bands agree to $0$). Calibrated $\Rightarrow$ coverage $=$ nominal; widths smaller is better \emph{given} calibration.}
+\label{tab:conformal}
+\begin{tabular}{@{}llcccccccc@{}}
+\toprule
+& & \multicolumn{2}{c}{@50} & \multicolumn{2}{c}{@80} & \multicolumn{2}{c}{@90} & \multicolumn{2}{c}{@95} \\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}\cmidrule(lr){7-8}\cmidrule(lr){9-10}
+Dataset & Band & cov & w & cov & w & cov & w & cov & w \\
+\midrule
+Beijing & raw $z\sigma$ & 0.88 & 0.53 & 0.97 & 1.01 & 0.98 & 1.29 & 0.99 & 1.54 \\
+& \textbf{conformal} & \textbf{0.53} & 0.15 & \textbf{0.81} & 0.41 & \textbf{0.91} & 0.63 & \textbf{0.95} & 0.88 \\
+\addlinespace[2pt]
+ETTh1 & raw $z\sigma$ & 0.59 & 0.38 & 0.83 & 0.73 & 0.89 & 0.93 & 0.93 & 1.11 \\
+& \textbf{conformal} & \textbf{0.48} & 0.29 & \textbf{0.79} & 0.65 & \textbf{0.89} & 0.92 & \textbf{0.94} & 1.17 \\
+\addlinespace[2pt]
+Synthetic & raw $z\sigma$ & 0.64 & 0.68 & 0.90 & 1.28 & 0.96 & 1.65 & 0.98 & 1.96 \\
+& \textbf{conformal} & \textbf{0.46} & 0.44 & \textbf{0.75} & 0.86 & \textbf{0.87} & 1.15 & \textbf{0.94} & 1.44 \\
+\addlinespace[2pt]
+\bottomrule
+\end{tabular}
+\end{table*}
