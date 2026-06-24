@@ -197,7 +197,7 @@ def write_table(R, path):
     live = R["live"]
     lines = []
     A = lines.append
-    A(r"\begin{table}[t]\centering\small")
+    A(r"\begin{table*}[t]\centering\small")
     A(r"\setlength{\tabcolsep}{4pt}")
     if live:
         meta = R["meta"]
@@ -253,7 +253,7 @@ def write_table(R, path):
               f"{reg} \\\\")
         A(r"\bottomrule")
         A(r"\end{tabular}")
-    A(r"\end{table}")
+    A(r"\end{table*}")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"\nwrote {path}")

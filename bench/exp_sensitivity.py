@@ -289,7 +289,7 @@ def write_table(R):
     res = R["results"]
     lines = []
     A = lines.append
-    A(r"\begin{table}[t]\centering\small")
+    A(r"\begin{table*}[t]\centering\small")
     A(r"\setlength{\tabcolsep}{5pt}")
     A(r"\caption{\textbf{Sensitivity to CAFE's fixed internal constants.} "
       r"Each constant is swept over a wide band while every other stays at its "
@@ -325,7 +325,7 @@ def write_table(R):
         A(r"Harmonic period menu & -- & -- & could not run \\")
     A(r"\bottomrule")
     A(r"\end{tabular}")
-    A(r"\end{table}")
+    A(r"\end{table*}")
     out = "\n".join(lines) + "\n"
     os.makedirs(TABDIR, exist_ok=True)
     path = os.path.join(TABDIR, "sensitivity.tex")
@@ -339,14 +339,14 @@ def write_placeholder(reason):
     os.makedirs(TABDIR, exist_ok=True)
     os.makedirs(FIGDIR, exist_ok=True)
     out = ("% placeholder -- could not run: " + reason + "\n"
-           r"\begin{table}[t]\centering\small" + "\n"
+           r"\begin{table*}[t]\centering\small" + "\n"
            r"\caption{Sensitivity to internal constants --- could not run: "
            + reason + r".}" + "\n"
            r"\label{tab:sensitivity}" + "\n"
            r"\begin{tabular}{@{}lccc@{}}\toprule" + "\n"
            r"Internal constant & Swept range & MAE @ default & max $\Delta$MAE \\\midrule" + "\n"
            r"--- & --- & --- & --- \\" + "\n"
-           r"\bottomrule\end{tabular}\end{table}" + "\n")
+           r"\bottomrule\end{tabular}\end{table*}" + "\n")
     with open(os.path.join(TABDIR, "sensitivity.tex"), "w") as f:
         f.write(out)
     print(f"[table] wrote placeholder ({reason})")

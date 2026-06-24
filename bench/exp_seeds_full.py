@@ -300,7 +300,7 @@ def write_table(R, path):
     has_bay = "BayOTIDE" in mnames
     lines = []
     A = lines.append
-    A(r"\begin{table}[t]\centering\small")
+    A(r"\begin{table*}[t]\centering\small")
     A(r"\setlength{\tabcolsep}{4pt}")
     rivals = "online TRMF" + (" and BayOTIDE" if has_bay else "")
     bay_clause = ("" if has_bay else
@@ -378,7 +378,7 @@ def write_table(R, path):
           r"\multicolumn{2}{c}{2 methods} \\")
     A(r"\bottomrule")
     A(r"\end{tabular}")
-    A(r"\end{table}")
+    A(r"\end{table*}")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
     print(f"wrote {path}")

@@ -281,6 +281,26 @@ and ARD on $\beta$ shrinks unsupported harmonics to zero, so ``no seasonality''
 is the learned default. No quantity in \eqref{eq:obj} is a constant fit to a
 benchmark.
 
+\paragraph{No tuned constants.} \cafe{} still carries a handful of \emph{fixed}
+internal defaults (the trailing window, the season gate $g{=}N/(N{+}R)$, the
+kurtosis$\to\nu$ map $\nu{=}4{+}6/\kappa$, the winsor band, the inverse-variance
+fusion). To show these are principled rather than tuned, Table~\ref{tab:sensitivity}
+and Fig.~\ref{fig:sensitivity} sweep each over a wide band: the mean causal MAE moves
+by at most $7.3\%$ (most by ${<}3\%$) anywhere in the band, so accuracy is flat in a
+broad neighbourhood of every default. The one genuine sensitivity is the seasonal
+\emph{harmonic menu}: on a lone periodic series under block gaps, where the cycle is
+the only way to fill a gap, a grossly wrong menu costs $+75.6\%$ MAE---reported here
+openly, and inert on wide panels where the shared factors absorb the cycle.
+\input{tables/sensitivity}
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/sensitivity}
+\caption{\textbf{Insensitivity to the fixed internal constants.} Mean causal MAE as
+each internal default is swept over a wide band (four structured panels, three
+seeds); the shaded region is $\pm5\%$ of the default MAE. Every curve stays inside a
+broad flat neighbourhood of its default---the defaults are principled, not tuned.}
+\label{fig:sensitivity}
+\end{figure}
+
 \begin{table}[t]\centering\small
 \setlength{\tabcolsep}{3pt}
 \caption{Classical imputers as special cases of \cafe{}, reached by its learned
@@ -330,6 +350,41 @@ induction so is every parameter and the fill $\hat x_\tau=W_{\!m}z_\tau$ (fused
 with a cross-sectional conditional mean built from time-$\le\tau$ statistics).
 Truncating the series at any $k$ therefore leaves $S_\tau$ and $\hat x_\tau$ for
 all $\tau<k$ literally unchanged. $\square$
+
+\begin{proposition}[Monotone descent to a stationary point]\label{prop:descent}
+Fix the Student-$t$ degrees of freedom $\nu$ and the latent AR coefficient $a$.
+Then the \cafe{} objective \eqref{eq:obj} is biconvex in the loadings $W$ and the
+factor path $Z$, and the iteration that alternates (i) the IRLS reweighting
+$w\!\leftarrow\!(\nu{+}1)/(\nu{+}u)$ on the standardised squared residuals $u$,
+(ii) the weighted ALS / Cholesky updates of $W$ and $Z$, and (iii) the closed-form
+ARD precision and ridge-AR refresh, is a block coordinate descent whose objective
+value is non-increasing at every step. Hence the iterates converge to a stationary
+point of \eqref{eq:obj}; each IRLS reweighting is the $E$-step of the Student-$t$
+scale mixture, so the sweep is a (generalised) EM that cannot increase the negative
+log-posterior.
+\end{proposition}
+\noindent\emph{Proof sketch.} With $(\nu,a)$ fixed, the penalised loss is convex in
+$W$ given $Z$ and convex in $Z$ given $W$ (weighted quadratics with the AR and ARD
+ridge penalties), so each ALS block solves its subproblem exactly and cannot raise
+the objective. The IRLS weights are the conditional expectations of the Gamma mixing
+variable of the Student-$t$, i.e.\ a majorise--minimise step on the $t$ negative
+log-likelihood, which is likewise non-increasing~\cite{bishop1999}. Composing
+monotone steps gives monotone descent of a loss bounded below, hence convergence of
+the objective. $\square$
+
+\paragraph{Recovery (consistency sketch).} Under \cafe{}'s own generative model
+\eqref{eq:decomp}--\eqref{eq:dyn}, with a bounded missing fraction, the shared
+component is a (dynamic) approximate factor model. As the trailing window and the
+cross-section $N$ both grow, the space spanned by $W$ and the factor path $Z$ are
+consistently recovered up to rotation, and the ARD criterion selects the true number
+of factors, by the panel factor-consistency theory of Bai--Ng~\cite{baing2002} and
+its dynamic-factor-EM extension with arbitrary missing patterns~\cite{barigozzi2025dfmem}.
+We state this as a sketch, not a theorem: a full \cafe{}-specific rate would track
+the joint effect of (a)~the redescending Student-$t$ weights, (b)~the online
+single-pass (filtered) estimation, and (c)~the cross-sectional fusion, which we leave
+to future work. The point is that \cafe{}'s estimator inherits a principled recovery
+guarantee in the well-studied factor-model limit rather than resting on benchmark fit
+alone.
 
 We also enforce this \emph{mechanically}: a verifier re-runs the estimator on
 every time prefix and compares each early fill against the full-series value.
@@ -417,6 +472,19 @@ by a last-value/Kalman prior ($0.50$ vs.\ $0.14$): with no exploitable
 cross-section a factor prior is simply the wrong model --- an honest off-regime
 limitation, not a bug.
 
+\paragraph{Scope and honest limitations.} \emph{(i)~Mixed types.} \cafe{}'s
+Gaussian/Student-$t$ measurement model targets real-valued series; categorical or
+count columns are handled only by pre-encoding (one-hot or a link transform) and are
+not modelled with a native discrete likelihood, so calibrated per-cell uncertainty on
+such columns is out of scope here. \emph{(ii)~Irregular sampling.} \cafe{} assumes a
+regular time grid; genuinely irregular or event-timestamped series must be resampled
+onto a grid (gaps then become ordinary missing cells), and continuous-time modelling
+of the sampling process itself---as in INR/state-space imputers---is left to future
+work. \emph{(iii)~Static covariates.} Time-invariant entity covariates are absorbed
+only through the per-entity fixed effect $\mu_e$; \cafe{} does not currently condition
+the loadings or season on external static features, which a covariate-aware extension
+could add.
+
 \paragraph{Which tool when (a practitioner's rule).} The race gives a clean
 decision rule. \textbf{When the panel shares structure --- the usual case for
 macro indicators, sensor networks, energy meters, or related asset prices --- use
@@ -425,9 +493,15 @@ boards. \textbf{When each series is an independent near-random walk with no
 informative contemporaneous cross-section --- FX being the canonical example --- a
 last-value or local-level Kalman filter is the right prior}, and if a \emph{learned}
 online prior is wanted, BayOTIDE is the strongest such rival. Crucially you do not
-have to guess: \cafe{} reports its own effective rank as a by-product, so a learned
-rank that collapses toward zero is itself the signal that the structure assumption
-does not hold and a random-walk prior should take over.
+have to guess: \cafe{} reports its own learned signature as a by-product, and that
+signature alone tells the regimes apart (Table~\ref{tab:router}). On the independent
+FX rates it learns a near-random-walk, near-Gaussian state ($a{=}0.96$, $\nu{=}60$,
+and only a thin effective rank relative to the cross-section), the signal that the
+shared-structure assumption does not hold and a random-walk / per-entity carry should
+take over; on a structured panel such as Traffic it learns $a{=}0.12$ with a
+heavy-tailed ($\nu{\approx}5$) low-rank factor signature, so the joint cross-sectional
+engine leads---no manual switch required.
+\input{tables/router}
 \begin{figure*}[t]\centering
 \includegraphics[width=\textwidth]{figures/causal_race_flip.pdf}
 \caption{\textbf{Forbid the future and the board collapses.} Each line is a
@@ -443,6 +517,17 @@ and rises to \#1 on the causal side even though TRMF edges it bidirectionally by
 reading the future. The causal column is the only one valid for a backtest.}
 \label{fig:causalrace}
 \end{figure*}
+\paragraph{The deep baselines are adequately trained (the collapse is protocol, not
+under-training).} A natural objection is that the causal collapse merely reflects
+feeble baselines. It does not (Table~\ref{tab:fairness}): each deep model's
+\emph{bidirectional} MAE sits in the adequately-trained band (best $\le 0.45$, far
+under the $\sim\!0.50$--$0.75$ under-trained floor of the same convergence harness),
+yet its \emph{causal} MAE in the \emph{same} run is far worse (gap $+0.12$ to
+$+0.38$). The models are competent in their native future-using setting; only the
+protocol breaks them. The published registry (full-data official split) is cited for
+context, on a different and easier protocol than our fast capped-slice run---not a
+head-to-head.
+\input{tables/baseline_fairness}
 \input{tables/horserace_perdataset}
 \input{tables/horserace_bidir}
 
@@ -464,6 +549,27 @@ two-of-three: \cafe{}'s $0.108$ lands in the deep-SOTA band \emph{while being ca
 and CPU-only}, which no published deep model is.
 \input{tables/published_refs}
 
+\paragraph{Why not just use a time-series foundation model?} A reader might ask
+whether a pretrained time-series foundation model (TSFM) already subsumes \cafe{}'s
+``no per-dataset tuning'' promise. Recent imputation-capable TSFMs---MOMENT~\cite{goswami2024moment},
+the continuous-modeling imputer MoTM~\cite{fons2025motm}, and tabular-prior models
+repurposed for time series (TabPFN-TS)~\cite{hoo2025tabpfnts}---do impute
+out-of-domain without retraining, and a recent study asks directly whether
+time-indexed foundation models are the future of imputation~\cite{leroy2025timeindexed}.
+They differ from \cafe{} on every axis this paper defends. \emph{(i)~Pretraining and
+hardware:} each needs a large pretraining corpus and GPU inference; \cafe{} has no
+training phase and runs on one CPU core. \emph{(ii)~Causality:} their windowed /
+attention readout is not strictly point-in-time, so an early fill can be silently
+revised as future context arrives---the exact leakage \cafe{}'s right-edge verifier
+rules out at $0$ deviation (Table~\ref{tab:causalverify}). \emph{(iii)~Uncertainty and
+by-products:} they return point reconstructions without per-cell posterior variance,
+and none expose \cafe{}'s free by-products (decomposition, anomaly score, dependency
+network, learned effective rank). A TSFM and \cafe{} are thus complementary, not
+competing: \cafe{} occupies the causal, CPU-only, per-cell-calibrated niche a
+pretrained GPU model does not. Table~\ref{tab:contemporaries} places \cafe{} against
+its closest \emph{non-foundation} contemporaries on the same axes.
+\input{tables/contemporaries}
+
 \paragraph{Relation to prior work.} The closest published rival to \cafe{}'s
 low-rank core is ImputeFormer~\cite{nie2024imputeformer} (KDD'24), which also
 imposes a low-rank inductive bias---but via a \emph{bidirectional}, GPU-trained
@@ -483,6 +589,17 @@ limit is the Gaussian conditional mean, its rank-tracking limit is GROUSE---insi
 Student-$t$ tails and seasonality, and we show it reaches the deep-SOTA accuracy
 band that this cluster does not, without leaving the causal/CPU regime.
 
+\paragraph{Racing the causal/online cluster (not just citing it).} Beyond citing
+this family we run its nearest statistical members live and strictly point-in-time on
+the eight structured panels: an online AR-factor model (NoTMF~\cite{chen2022notmf}),
+streaming heteroscedastic PPCA (SHASTA-PCA~\cite{gilman2023shasta}), robust subspace
+tracking (rGROUSE~\cite{he2012grasta}), and a compact switching-network filter in the
+spirit of MissNet~\cite{obata2024missnet}. Table~\ref{tab:causalrivals} shows \cafe{}
+leads every one on mean causal MAE (best rival SHASTA-PCA at $0.285$ vs.\ \cafe{}'s
+$0.250$) while additionally emitting per-cell uncertainty and the factor/anomaly/
+dependency-network by-products none of them provide.
+\input{tables/causal_rivals}
+
 \paragraph{Breadth across regimes (MAE/RMSE).} Our primary accuracy metric is
 error, not correlation: Pearson $r$ is affine-invariant and hides bias, so we lead
 with MAE/RMSE. Table~\ref{tab:maskgrid} sweeps missingness \emph{pattern}
@@ -500,7 +617,15 @@ mask seeds, both methods seeing the same mask each seed (Table~\ref{tab:seeds}).
 $p<10^{-11}$; on the short, smooth ETTh1 ($7$ series) the carry-forward AR target
 marginally favours TRMF ($-0.015$ MAE), which we report honestly rather than
 hide. All three paired differences are significant at $p<0.05$.
+Broadening the test from three datasets to all eight structured panels and adding a
+second causal rival (BayOTIDE, the online Bayesian imputer) confirms the picture
+(Table~\ref{tab:seedsfull}): over $12$ MCAR$(10\%)$ seeds \cafe{} has the best mean
+rank ($1.25$ vs.\ $2.12$ for online TRMF and $2.62$ for BayOTIDE; Friedman $p<0.05$)
+and is the best causal imputer on $6$ of $8$ panels, every paired difference
+significant at $p<0.05$. It cedes only ETTh (the short pure-AR regime, where
+carry-forward edges it by $0.036$ MAE) and marginally Solar---both reported as-is.
 \input{tables/seeds}
+\input{tables/seeds_full}
 
 \paragraph{Look-ahead inflates downstream evaluation.} The leak of
 \S\ref{sec:model} is most damaging downstream: features imputed with a non-causal
@@ -588,6 +713,20 @@ beating even the non-causal SoftImpute reference at every length.
 \input{tables/mnar}
 \input{tables/longgap}
 
+\paragraph{Extreme missingness and the recoverability frontier.} Pushed to
+pathological sparsity, \cafe{} degrades gracefully rather than failing: under global
+MCAR up to $99\%$ it stays finite and beats the naive causal fills, and a single
+near-empty feature (observed at only $k$ anchor rows in a $10{,}000$-row panel) is
+reconstructed \emph{exactly insofar as the surviving cross-section carries it}---when
+the feature is factor-spanned the margin over mean-fill grows with $k$, while an
+idiosyncratic feature is correctly tracked to its level rather than hallucinated
+(Table~\ref{tab:extrememissing}, Fig.~\ref{fig:extrememissing}). The honest floor is
+the few-anchor end ($k\!\le\!2$), where with almost no equations to fix the loading
+even a spanned column collapses toward the mean---the matrix-completion identifiability
+limit, disclosed rather than hidden, and the quantitative form of the recoverability
+lever of Cheng et al.~\cite{cheng2025causalview}.
+\input{tables/extreme_missing}
+
 \paragraph{MNAR scope (honest).} \cafe{} does not ``solve'' MNAR: when a value's
 missingness depends on its own (unobserved) magnitude, the complete-data
 distribution is non-identifiable without an explicit missingness model
@@ -611,12 +750,29 @@ coverage exceeds nominal at most dataset/level cells (mean excess $\approx+0.09$
 with only marginal undershoots (worst $\approx0.02$) at the tightest levels. Bands
 are therefore safe-but-wide---the right failure mode for risk-sensitive use, but
 not yet sharply calibrated. Per-cell $\sigma$ does widen correctly inside long
-gaps (Fig.~\ref{fig:unc}); tightening the absolute scale on smoother panels is
-explicit future work. This is the one capability we evaluate quantitatively beyond
-imputation---the remaining outputs (factors, anomaly score, decomposition,
-dependency network, forecasts) are exact readouts of the same fit, illustrated in
-App.~\ref{sec:appendix} rather than benchmarked against specialised tools.
+gaps (Fig.~\ref{fig:unc}). A thin causal recalibration layer then closes the
+over-coverage: we rescale the per-cell $\sigma$ by a single split-conformal
+multiplier $q(\text{level})$---the $(1{-}\alpha)$ empirical quantile of held-out
+calibration residuals collected by a second strictly online pass, so the multiplier
+at time $t$ uses only rows ${<}t$ and the layer is as point-in-time as \cafe{} itself.
+The recalibrated band $\mu\pm q(\text{level})\,\sigma$ hits nominal coverage---mean
+$|\text{coverage}-\text{nominal}|$ drops from $0.095$ to $0.019$ across datasets and
+levels---with materially tighter intervals, while the imputation $\mu$ is
+bit-identical (the change is $\sigma$-only), the causal analogue of conformalized
+matrix completion~\cite{gui2023cmc} and conformal prediction under missing
+values~\cite{zaffran2023cpmv} (Table~\ref{tab:conformal}). Beyond uncertainty, the
+remaining outputs (factors, anomaly score, decomposition, dependency network,
+forecasts) are exact readouts of the same fit; beyond illustration
+(App.~\ref{sec:appendix}) we now \emph{validate} them quantitatively against known
+ground truth and a specialised baseline each (Table~\ref{tab:byproduct}): the residual
+dependency network recovers a known sparse block graph that marginal correlation
+cannot (it is contaminated by the global factor), the free anomaly score nearly
+matches a dedicated causal Hampel detector, and the online factors recover the true
+rank exactly; forecasting is the one by-product that still trails its naive baseline
+(it reverts toward the level), which we flag as future work.
 \input{tables/calib_crps}
+\input{tables/conformal}
+\input{tables/byproduct}
 
 \paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
 $1.16$\,s on a single CPU core---the best \emph{causal} MAE among the methods we
@@ -628,6 +784,19 @@ imputers, which require a full training run (and, for diffusion models, hundreds
 of denoising steps per fill), this is the $\sim\!10^3\times$ compute gap
 referenced below.
 \input{tables/runtime}
+
+\paragraph{Scale and a clinical benchmark.} To show the sub-linear-in-$N$ behaviour
+is not an artifact of narrow panels, we re-measure on genuinely wide data: at the
+full $862$-sensor Traffic width (a decade more than the race panels) the empirical
+log--log time-vs-$N$ slope is $1.15$ (Table~\ref{tab:scale},
+Fig.~\ref{fig:scaling_wide})---\cafe{} stays near-linear in $N$ at scale, each row
+still doing only rank-$R$ Cholesky solves, never an $N\times N$ inverse. On the
+clinical PhysioNet-2012 ICU benchmark ($1000$ stays $\times48$h $\times36$ vars, $81\%$
+native missing) \cafe{} is competitive with simple causal fills but does \emph{not}
+beat last-observation carry-forward on these very short, sparsely-observed per-patient
+blocks---a regime with too little history for any low-rank/AR structure to help, which
+we report as-is.
+\input{tables/scale}
 
 \paragraph{Takeaway.} \cafe{} reaches accuracy in the band of GPU-trained deep
 imputers (under its named, reproducible Beijing protocol) and is the strongest
@@ -808,6 +977,29 @@ inverse.}
 
 \par\medskip
 \begin{center}\begin{minipage}{\textwidth}\centering
+\includegraphics[width=0.74\textwidth]{figures/scaling_wide.pdf}
+\captionof{figure}{\textbf{Scaling at real width (Table~\ref{tab:scale}).} Wall-clock
+vs.\ width $N$ on the full $862$-sensor Traffic panel (a decade wider than the race
+panels): the measured log--log slope is $\approx\!1.15$, confirming \cafe{} stays
+near-linear in $N$ at scale.}
+\label{fig:scaling_wide}
+\end{minipage}\end{center}
+
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
+\includegraphics[width=0.92\textwidth]{figures/extreme_missing.pdf}
+\captionof{figure}{\textbf{Extreme missingness and the recoverability frontier
+(Table~\ref{tab:extrememissing}).} \emph{Left:} MAE under global MCAR up to $99\%$---\cafe{}
+stays finite and beats the naive causal fills. \emph{Right:} reconstruction MAE of a
+single near-empty feature vs.\ the number of observed anchors $k$: when the feature is
+factor-spanned \cafe{} recovers it (margin over mean-fill grows with $k$), when it is
+idiosyncratic \cafe{} tracks the mean rather than hallucinating; $k\!\le\!2$ is the
+honest identifiability floor.}
+\label{fig:extrememissing}
+\end{minipage}\end{center}
+
+\par\medskip
+\begin{center}\begin{minipage}{\textwidth}\centering
 \includegraphics[width=0.92\textwidth]{figures/calibration.pdf}
 \captionof{figure}{\textbf{Calibration (Table~\ref{tab:calibcrps}).}
 \emph{(a)} Reliability diagram: empirical vs.\ nominal coverage---curves sit
@@ -886,6 +1078,48 @@ not at random data imputation. \emph{NeurIPS}, 2021.
 imputation. \emph{IJCAI}, 2025.
 \bibitem{bryzgalova2025missing} S.~Bryzgalova, S.~Lerner, M.~Lettau, M.~Pelger.
 Missing financial data. \emph{Review of Financial Studies}, 2025.
+% --- causal/online statistical rivals (raced live, Table~\ref{tab:causalrivals}) ---
+\bibitem{chen2022notmf} X.~Chen, C.~Zhang, X.-L.~Zhao, N.~Saunier, L.~Sun.
+Nonstationary temporal matrix factorization for multivariate time series
+forecasting (NoTMF). \emph{arXiv:2203.10651}, 2022.
+\bibitem{gilman2023shasta} K.~Gilman, D.~Hong, J.~A.~Fessler, L.~Balzano.
+Streaming heteroscedastic probabilistic PCA with missing data (SHASTA-PCA).
+\emph{arXiv:2310.06277}, 2023.
+\bibitem{he2012grasta} J.~He, L.~Balzano, A.~Szlam. Incremental gradient on the
+Grassmannian for online foreground/background separation in subsampled video
+(GRASTA; robust GROUSE). \emph{CVPR}, 2012. \emph{arXiv:1109.3827}.
+\bibitem{obata2024missnet} K.~Obata, K.~Kawabata, Y.~Matsubara, Y.~Sakurai.
+Mining of switching sparse networks for missing value imputation in multivariate
+time series (MissNet). \emph{KDD}, 2024. \emph{arXiv:2409.09930}.
+% --- conformal recalibration (Table~\ref{tab:conformal}) ---
+\bibitem{zaffran2023cpmv} M.~Zaffran, A.~Dieuleveut, J.~Josse, Y.~Romano.
+Conformal prediction with missing values. \emph{ICML}, 2023. \emph{arXiv:2306.02732}.
+\bibitem{gui2023cmc} Y.~Gui, R.~Foygel~Barber, C.~Ma. Conformalized matrix
+completion. \emph{NeurIPS}, 2023. \emph{arXiv:2305.10637}.
+% --- time-series foundation models (positioning) ---
+\bibitem{goswami2024moment} M.~Goswami, K.~Szafer, A.~Choudhry, Y.~Cai, S.~Li,
+A.~Dubrawski. MOMENT: a family of open time-series foundation models.
+\emph{ICML}, 2024. \emph{arXiv:2402.03885}.
+\bibitem{fons2025motm} E.~Fons et al. MoTM: towards a foundation model for time
+series imputation based on continuous modeling. \emph{AALTD@ECML-PKDD}, 2025.
+\emph{arXiv:2507.13207}.
+\bibitem{hoo2025tabpfnts} S.~B.~Hoo, S.~M\"uller, D.~Salinas, F.~Hutter.
+From tables to time: extending TabPFN-v2 to time series forecasting (TabPFN-TS).
+\emph{arXiv:2501.02945}, 2025.
+\bibitem{leroy2025timeindexed} Are time-indexed foundation models the future of
+time series imputation? \emph{arXiv:2511.05980}, 2025.
+% --- estimation theory + closest contemporaries ---
+\bibitem{baing2002} J.~Bai, S.~Ng. Determining the number of factors in
+approximate factor models. \emph{Econometrica}, 70(1):191--221, 2002.
+\bibitem{barigozzi2025dfmem} M.~Barigozzi, L.~Trapin. Estimation of large
+approximate dynamic matrix factor models based on the EM algorithm and Kalman
+filtering. \emph{arXiv:2502.04112}, 2025.
+\bibitem{liu2023tider} S.~Liu, X.~Li, G.~Cong, Y.~Chen, Y.~Jiang. Multivariate
+time-series imputation with disentangled temporal representations (TIDER).
+\emph{ICLR}, 2023.
+\bibitem{chen2022latc} X.~Chen, M.~Lei, N.~Saunier, L.~Sun. Low-rank
+autoregressive tensor completion for spatiotemporal traffic data imputation
+(LATC). \emph{IEEE T-ITS}, 2022. \emph{arXiv:2104.14936}.
 \end{thebibliography}
 
 \end{document}

@@ -1,4 +1,4 @@
-\begin{table}[t]\centering\small
+\begin{table*}[t]\centering\small
 \setlength{\tabcolsep}{5pt}
 \caption{\textbf{Sensitivity to CAFE's fixed internal constants.} Each constant is swept over a wide band while every other stays at its default; mean causal MAE\,$\downarrow$ over 4 structured real panels (beijing, etth, airquality, traffic2) $\times$ 3 mask seeds, 10\% MCAR. \textsc{max $\Delta$} is the largest MAE change anywhere in the swept band relative to the default---small everywhere, so the defaults are principled, not tuned. The lone genuine sensitivity (a grossly wrong harmonic menu on a periodic panel) is reported in the last row as an aliasing penalty, not hidden. The Beijing headline MAE is bit-identical with the sweep hooks dormant (additive overrides).}
 \label{tab:sensitivity}
@@ -17,4 +17,4 @@ Inverse-var fusion tilt & $0.25--4$ & $0.2133$ & $7.3\%$ \\
 Harmonic period menu & canonical vs wrong & $0.8075$ & $+75.6\%$ \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

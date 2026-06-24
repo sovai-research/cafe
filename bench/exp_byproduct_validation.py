@@ -293,7 +293,7 @@ def write_table(an, dn, fa, fc, path):
 
     L = []
     A = L.append
-    A(r"\begin{table}[t]\centering\small")
+    A(r"\begin{table*}[t]\centering\small")
     A(r"\setlength{\tabcolsep}{5pt}")
     A(r"\caption{\textbf{Quantitative validation of \cafe{}'s one-pass by-products.} "
       r"Each advertised by-product is scored against KNOWN ground truth on a small "
@@ -322,7 +322,7 @@ def write_table(an, dn, fa, fc, path):
     A(f"Forecast ($h{{=}}{fc['horizon']}$) & MAE$\\downarrow$ & {fc_cafe} & {fc_base} & Naive last-value \\\\")
     A(r"\bottomrule")
     A(r"\end{tabular}")
-    A(r"\end{table}")
+    A(r"\end{table*}")
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
     print(f"\nwrote {path}")

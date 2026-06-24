@@ -131,6 +131,71 @@ MANIFEST = {
         "tex_label": ["tab:calibcrps"],
         "what": "CRPS + coverage + sharpness uncertainty scoring (NLL dropped).",
     },
+    # ---- gap-closing experiments added by the related-work review (2026) ----
+    "exp_causal_rivals.py": {
+        "tables":  ["paper/tables/causal_rivals.tex"],
+        "figures": [],
+        "tex_label": ["tab:causalrivals"],
+        "what": "CAFE vs the closest causal/online statistical rivals (NoTMF, "
+                "SHASTA-PCA, rGROUSE, OSW-Net/MissNet stand-in) raced live, "
+                "point-in-time, on the 8 structured panels.",
+    },
+    "exp_conformal.py": {
+        "tables":  ["paper/tables/conformal.tex"],
+        "figures": [],
+        "tex_label": ["tab:conformal"],
+        "what": "Causal split-conformal recalibration: raw vs conformal PICP/sharpness "
+                "at 50/80/90/95, MAE unchanged, point-in-time preserved.",
+    },
+    "exp_sensitivity.py": {
+        "tables":  ["paper/tables/sensitivity.tex"],
+        "figures": ["paper/figures/sensitivity.pdf"],
+        "tex_label": ["tab:sensitivity", "fig:sensitivity"],
+        "what": "Sensitivity of causal MAE to each fixed internal constant (flat in a "
+                "wide band) + harmonic-menu aliasing penalty.",
+    },
+    "exp_scale.py": {
+        "tables":  ["paper/tables/scale.tex"],
+        "figures": ["paper/figures/scaling_wide.pdf"],
+        "tex_label": ["tab:scale", "fig:scaling_wide"],
+        "what": "Scale: CAFE on wide panels (up to 862 ch) + measured N-slope at "
+                "width; PhysioNet-2012 ICU clinical row.",
+    },
+    "exp_byproduct_validation.py": {
+        "tables":  ["paper/tables/byproduct.tex"],
+        "figures": [],
+        "tex_label": ["tab:byproduct"],
+        "what": "Quantitative validation of the one-pass by-products (anomaly/"
+                "dependency-net/factors/forecast) vs ground truth + a baseline each.",
+    },
+    "exp_seeds_full.py": {
+        "tables":  ["paper/tables/seeds_full.tex"],
+        "figures": [],
+        "tex_label": ["tab:seedsfull"],
+        "what": "Paired multi-seed CAFE vs online TRMF & BayOTIDE on all 8 panels "
+                "+ mean-rank/Friedman.",
+    },
+    "exp_baseline_fairness.py": {
+        "tables":  ["paper/tables/baseline_fairness.tex"],
+        "figures": [],
+        "tex_label": ["tab:fairness"],
+        "what": "Deep baselines adequately trained (bidir adequacy band); the causal "
+                "collapse is a protocol effect, not under-training.",
+    },
+    "exp_extreme_missing.py": {
+        "tables":  ["paper/tables/extreme_missing.tex"],
+        "figures": ["paper/figures/extreme_missing.pdf"],
+        "tex_label": ["tab:extrememissing"],
+        "what": "Extreme missingness: graceful degradation to 99% MCAR + near-empty-"
+                "feature recoverability frontier (factor-spanned vs idiosyncratic).",
+    },
+    "exp_router.py": {
+        "tables":  ["paper/tables/router.tex"],
+        "figures": [],
+        "tex_label": ["tab:router"],
+        "what": "Learned (a, nu, effective-rank) signature as an automatic structure "
+                "detector: FX control vs structured panels.",
+    },
     "exp_backtest_lookahead.py": {
         "tables":  ["paper/tables/backtest.tex"],
         "figures": [],

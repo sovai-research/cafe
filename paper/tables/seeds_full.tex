@@ -1,4 +1,4 @@
-\begin{table}[t]\centering\small
+\begin{table*}[t]\centering\small
 \setlength{\tabcolsep}{4pt}
 \caption{\textbf{Seed rigor across all 8 structured panels.} Mean MAE\,$\downarrow$ $\pm$ 95\% CI (Student-$t$) over 12 independent MCAR\,(10\%) mask seeds; every method sees the \emph{same} mask each seed. All methods are causal / point-in-time (CAFE, online TRMF and BayOTIDE); no deep bidirectional models, no published numbers. \textsc{diff} columns are mean(rival\,$-$\,CAFE) per seed (positive $\Rightarrow$ CAFE lower error) with the paired $t$-test star; the per-panel best mean is \textbf{bold}. Stars: $^{*}p{<}0.05$, $^{**}p{<}0.01$, $^{***}p{<}0.001$. The mean-rank row (1 = best) and the Friedman omnibus $p$ summarize rank stability across panels. CAFE is not uniformly best -- on ETTh (7 columns, pure AR) the online-TRMF core wins, reported as-is.}
 \label{tab:seedsfull}
@@ -18,4 +18,4 @@ Electric & \textbf{$0.350\pm0.003$} & $0.419\pm0.002$ & $0.452\pm0.002$ & $+0.07
 \textbf{Mean rank} & \textbf{1.25} & 2.12 & 2.62 & \multicolumn{2}{c}{Friedman $p=2.1e-2$} \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}

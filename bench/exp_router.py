@@ -106,7 +106,7 @@ def run():
 def write_table(rows, path):
     L = []
     A = L.append
-    A(r"\begin{table}[t]\centering\small")
+    A(r"\begin{table*}[t]\centering\small")
     A(r"\setlength{\tabcolsep}{5pt}")
     A(r"\caption{\textbf{The learned dials are an automatic structure detector.} "
       r"Live read-back of \texttt{cafe.CAFE().run(X)} on a no-structure FX "
@@ -136,7 +136,7 @@ def write_table(rows, path):
     A(r"\end{tabular}")
     A(r"\\[2pt]{\footnotesize $^{\dagger}$ no-structure control "
       r"(independent FX rates).}")
-    A(r"\end{table}")
+    A(r"\end{table*}")
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
     print(f"\nwrote {path}")

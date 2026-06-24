@@ -1,4 +1,4 @@
-\begin{table}[t]\centering\small
+\begin{table*}[t]\centering\small
 \setlength{\tabcolsep}{5pt}
 \caption{\textbf{Quantitative validation of \cafe{}'s one-pass by-products.} Each advertised by-product is scored against KNOWN ground truth on a small synthetic panel and compared to a simple specialised baseline. \emph{Anomaly}: ROC-AUC (PR-AUC in text) of the free per-time score vs injected outlier rows (point spikes $+$ contiguous bursts); the free score nearly matches a specialised \emph{causal} rolling robust (Hampel/MAD) $z$-score detector. \emph{Dependency net}: ROC-AUC of recovering a known sparse block adjacency by $|\text{corr}|$ on a panel with a strong global factor; \cafe{}'s \emph{residual} network beats marginal Pearson correlation, which the shared global factor contaminates (driving it below chance). \emph{Factors}: mean canonical correlation (CCA) of the learned factor subspace vs the true latent AR paths, baseline $=$ raw-data PCA. \emph{Forecast}: $h$-step MAE, baseline $=$ naive last-value. Higher is better except MAE; the better entry is \textbf{bold}. Numbers are live readouts of \texttt{res.anomaly\_scores() / .dependency\_network() / .factors() / CAFE().forecast()}; no quantity is illustrative.}
 \label{tab:byproduct}
@@ -12,4 +12,4 @@ Factors & CCA$\uparrow$ & 0.904 & \textbf{0.998} & Raw-data PCA \\
 Forecast ($h{=}12$) & MAE$\downarrow$ & 0.591 & \textbf{0.281} & Naive last-value \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
