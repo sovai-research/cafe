@@ -373,7 +373,12 @@ def make_figure(p1, p2):
     lab = {"CAFE": "CAFÉ (causal, ours)", "MeanFill": "Mean-fill (causal)",
            "LOCF": "LOCF (causal)", "LinInterp": "Linear interp (non-causal)",
            "SoftImpute": "SoftImpute (non-causal)"}
-    for mlabel, _, _ in P2_METHODS:
+    # Causal-only panel: show just the strictly point-in-time methods so the curve
+    # is a clean like-for-like comparison (the non-causal LinInterp/SoftImpute remain
+    # in the table as italic references, per the paper's convention).
+    for mlabel, _, _causal in P2_METHODS:
+        if not _causal:
+            continue
         axL.plot(x, p2[mlabel], label=lab[mlabel],
                  markeredgecolor="white", markeredgewidth=0.5, **style[mlabel])
     style_ax(axL)
