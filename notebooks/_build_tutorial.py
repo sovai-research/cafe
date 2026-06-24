@@ -441,6 +441,35 @@ out_pd = cafe.impute(pdf)                      # <-- same call
 print(type(out_pd).__name__, "| nulls after:", int(out_pd.isna().sum().sum()))
 out_pd.head(3)"""))
 
+cells.append(md(r"""## 8 · Calibrated bands and the classical toolbox
+
+**Calibrated uncertainty (causal conformal).** CAFÉ's raw posterior band is honest but
+*over-conservative*. A thin, strictly point-in-time split-conformal layer rescales each
+cell's σ so the band hits its nominal coverage — across datasets the mean
+|coverage − nominal| drops from ≈ 0.095 to ≈ 0.019 — while the imputed value itself is
+**bit-identical** (the change is σ-only, and the multiplier at time *t* uses only
+calibration residuals from rows < *t*, so it stays as point-in-time as CAFÉ)."""))
+cells.append(code(r"""# raw vs. calibrated 90% band — point-in-time; mu (the imputation) is unchanged
+lo90, hi90 = res.calibrated_interval(0.90)              # mu ± q(0.90)·sigma
+hw90       = res.calibrated_uncertainty(0.90)           # calibrated half-width per cell
+print("calibrated 90% half-width (mean):",
+      float(np.nanmean(hw90.select(num_cols).to_numpy())))
+print("imputation unchanged by calibration:",
+      bool(np.allclose(res.imputed.select(num_cols).to_numpy(),
+                       cafe.CAFE().run(gappy).imputed.select(num_cols).to_numpy(),
+                       equal_nan=True)))"""))
+cells.append(md(r"""**The classical toolbox ships in the box.** Every imputer CAFÉ
+generalises is also available as a first-class, container-native method under
+`cafe.baselines` — each labelled *causal* (point-in-time) or *batch* (uses the future),
+so the distinction central to this library is explicit in code. Same point-and-shoot API
+as `cafe.impute`, same container type back."""))
+cells.append(code(r"""from cafe import baselines
+print("causal :", baselines.list_methods(causal=True))
+print("batch  :", baselines.list_methods(causal=False))
+locf_fill = baselines.impute(gappy, method="locf")          # causal carry-forward
+soft_fill = baselines.impute(gappy, method="softimpute")    # batch low-rank (non-causal)
+locf_fill.head(3)"""))
+
 cells.append(md(r"""## Recap — every claim was checked, not asserted
 
 | Capability | What we *proved* above |
@@ -452,7 +481,9 @@ cells.append(md(r"""## Recap — every claim was checked, not asserted
 | `.decompose()` | **faithful** attribution — parts sum to the data and `residual` is **genuinely ≈ 0 at imputed cells**; `full=True` itemises every channel |
 | `.missingness_features()` | causal MIM + time-since-observed + gap/run-length — point-in-time signal that **survives** imputation |
 | `.dependency_network()` | residual-correlation structure between sensors |
-| `.forecast(df, h)` | same model extrapolates; here it **edges naive persistence** |
+| `.forecast(df, h)` | same model extrapolates via the AR/Kalman state (live nMAE vs persistence shown above) |
+| `.calibrated_interval(level)` | causal split-conformal band that hits nominal coverage, **σ-only** (imputation unchanged) |
+| `cafe.baselines` | the classical imputers CAFÉ generalises, shipped as causal/batch-labelled methods |
 
 Zero configuration, pure `numpy`, CPU-only — and backtest-safe by construction. The
 honest headline is the **two-of-three**: causal / point-in-time **and** CPU-only / zero-
