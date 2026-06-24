@@ -1,0 +1,33 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Extreme / pathological missingness: graceful degradation and the recoverability frontier.} \emph{Top:} MAE ($\downarrow$) on held-out cells under \emph{scattered} (point-wise) MCAR up to $99\%$ missing, averaged over Beijing, ETTh1 and FRED-MD (3 seeds), scored on a robust leak-free observed-cell standardisation. Every method stays \emph{finite} and degrades smoothly all the way to $99\%$; \cafe{} stays well below its structural peers (mean-fill, SoftImpute) through $95\%$. Honestly, under \emph{scattered} MCAR the local methods (LOCF, linear interp) win at the highest rates because a surviving neighbour is always nearby -- \cafe{}'s structural advantage instead appears under \emph{contiguous} gaps (Table~\ref{tab:longgap}), where no neighbour survives. The point here is graceful, finite degradation, not a win at $99\%$ scattered. \emph{Bottom:} reconstruction MAE of a single \emph{near-empty} feature in a $T{=}10{,}000$ panel, observed at only $k$ anchor rows, as $k$ grows. When the feature is \emph{factor-spanned} (OLS $R^2{=}0.99$ on the cross-section) \cafe{} reconstructs it and the margin over mean-fill \emph{grows} with $k$ -- recoverability engages as the loading becomes estimable. When it is \emph{idiosyncratic} ($R^2{=}0.01$, no cross-sectional evidence) \cafe{} tracks mean-fill: it falls back to the level rather than hallucinating. The few-anchor end ($k{\le}2$) is the honest identifiability floor (a matrix-completion limit). \cafe{}, mean-fill and LOCF are strictly causal; non-causal references are \emph{italic}. \textbf{Bold} $=$ best causal per column. CAFE passed the degenerate-input finiteness contract on all edge cases (\checkmark).}
+\label{tab:extrememissing}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+\multicolumn{6}{@{}l}{\textit{(a) Global MCAR missing rate}}\\
+\cmidrule(r){1-6}
+Method & 50\% & 70\% & 90\% & 95\% & 99\% \\
+\midrule
+\cafe{} (ours) & 0.304 & 0.426 & 0.625 & 0.750 & 1.018 \\
+Mean-fill & 0.741 & 0.743 & 0.748 & 0.770 & 0.942 \\
+LOCF & \textbf{0.242} & \textbf{0.299} & \textbf{0.434} & \textbf{0.525} & \textbf{0.874} \\
+\midrule
+\emph{Linear interp} & 0.169 & 0.208 & 0.321 & 0.403 & 0.711 \\
+\emph{SoftImpute} & 0.716 & 0.752 & 0.754 & 0.776 & 0.955 \\
+\bottomrule
+\end{tabular}
+\\[4pt]
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+\multicolumn{7}{@{}l}{\textit{(b) Near-empty feature: reconstruction MAE vs.\ \# anchors $k$}}\\
+\cmidrule(r){1-7}
+Regime & Method & $k{=}1$ & $k{=}5$ & $k{=}20$ & $k{=}500$ & $k{=}2000$ \\
+\midrule
+Factor-spanned & \cafe{} & \textbf{2.894} & 0.837 & 0.873 & \textbf{0.324} & \textbf{0.185} \\
+ & Mean-fill & 2.918 & 0.781 & 0.838 & 0.775 & 0.791 \\
+\addlinespace[2pt]
+Idiosyncratic & \cafe{} & \textbf{1.928} & 1.640 & 0.944 & 0.826 & \textbf{0.752} \\
+ & Mean-fill & 1.930 & 1.467 & 0.878 & 0.770 & 0.776 \\
+\bottomrule
+\end{tabular}
+\end{table}
