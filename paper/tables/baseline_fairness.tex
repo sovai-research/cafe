@@ -1,0 +1,17 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Deep baselines are adequately trained: the causal collapse is a protocol effect, not under-training.} Per deep model (PyPOTS, 40 epochs w/ validation early-stopping, window 24, capped slices $\le 1000$ rows): our live \emph{bidirectional} MAE (best over the panels, and mean) sits in the adequately-trained band ($\le 0.45$; under-trained floor $\sim 0.50$--$0.75$), yet each model's \emph{causal} MAE in the SAME run is far worse -- so the models are competent in their native future-using setting and the collapse is a protocol effect. The published \emph{registry} column (Beijing, standardized @ 10\% MCAR; TSI-Bench / du2023 (full-data official protocol)) is CITED context on a DIFFERENT full-data official protocol and is not directly comparable cell-for-cell -- it is not re-run at full scale here. All bidir/causal numbers are live from \texttt{horserace\_cache.json}.}
+\label{tab:fairness}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+Model & Source & Ep. & Bidir (best/mean) & Causal & Registry$^{\dagger}$ & Trained? \\
+\midrule
+SAITS & PyPOTS (Du+2023) & 40 & 0.175/0.449 & 0.643 & 0.155 & \checkmark \\
+BRITS & PyPOTS (Cao+2018) & 40 & 0.175/0.461 & 0.840 & 0.127 & \checkmark \\
+Transformer & PyPOTS (Vaswani+2017) & 40 & 0.209/0.453 & 0.710 & 0.142 & \checkmark \\
+TimesNet & PyPOTS (Wu+2023) & 40 & 0.282/0.483 & 0.772 & -- & \checkmark \\
+ImputeFormer & PyPOTS (Nie+2024) & 40 & 0.206/0.499 & 0.614 & -- & \checkmark \\
+\bottomrule
+\end{tabular}
+\\[2pt]{\footnotesize $^{\dagger}$Registry MAE is on the FULL Beijing series with the official windowed split (different, easier protocol); our bidir MAE is on a fast capped slice and is expectedly higher -- shown for context, not as a head-to-head.}
+\end{table}

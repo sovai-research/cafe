@@ -1,0 +1,21 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{Seed rigor across all 8 structured panels.} Mean MAE\,$\downarrow$ $\pm$ 95\% CI (Student-$t$) over 12 independent MCAR\,(10\%) mask seeds; every method sees the \emph{same} mask each seed. All methods are causal / point-in-time (CAFE, online TRMF and BayOTIDE); no deep bidirectional models, no published numbers. \textsc{diff} columns are mean(rival\,$-$\,CAFE) per seed (positive $\Rightarrow$ CAFE lower error) with the paired $t$-test star; the per-panel best mean is \textbf{bold}. Stars: $^{*}p{<}0.05$, $^{**}p{<}0.01$, $^{***}p{<}0.001$. The mean-rank row (1 = best) and the Friedman omnibus $p$ summarize rank stability across panels. CAFE is not uniformly best -- on ETTh (7 columns, pure AR) the online-TRMF core wins, reported as-is.}
+\label{tab:seedsfull}
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+Panel & CAFE MAE & TRMF MAE & BayOTIDE MAE & diff (TRMF) & diff (Bay) \\
+\midrule
+FRED-MD & \textbf{$0.077\pm0.002$} & $0.207\pm0.005$ & $0.163\pm0.002$ & $+0.130$$^{***}$ & $+0.086$$^{***}$ \\
+AirQuality & \textbf{$0.166\pm0.002$} & $0.214\pm0.003$ & $0.364\pm0.002$ & $+0.048$$^{***}$ & $+0.198$$^{***}$ \\
+Appliances & \textbf{$0.232\pm0.002$} & $0.455\pm0.006$ & $0.311\pm0.002$ & $+0.223$$^{***}$ & $+0.079$$^{***}$ \\
+Beijing & \textbf{$0.146\pm0.002$} & $0.328\pm0.003$ & $0.277\pm0.002$ & $+0.182$$^{***}$ & $+0.130$$^{***}$ \\
+Traffic2 & \textbf{$0.238\pm0.002$} & $0.296\pm0.002$ & $0.416\pm0.003$ & $+0.058$$^{***}$ & $+0.178$$^{***}$ \\
+ETTh & $0.292\pm0.005$ & \textbf{$0.256\pm0.007$} & $0.403\pm0.006$ & $-0.036$$^{***}$ & $+0.111$$^{***}$ \\
+Solar & $0.130\pm0.002$ & \textbf{$0.125\pm0.002$} & $0.172\pm0.002$ & $-0.005$$^{***}$ & $+0.042$$^{***}$ \\
+Electric & \textbf{$0.350\pm0.003$} & $0.419\pm0.002$ & $0.452\pm0.002$ & $+0.070$$^{***}$ & $+0.103$$^{***}$ \\
+\midrule
+\textbf{Mean rank} & \textbf{1.25} & 2.12 & 2.62 & \multicolumn{2}{c}{Friedman $p=2.1e-2$} \\
+\bottomrule
+\end{tabular}
+\end{table}
