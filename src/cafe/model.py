@@ -175,6 +175,62 @@ class CafeResult:
         return (from_matrix(self._filled - z * sd, self._ctx),
                 from_matrix(self._filled + z * sd, self._ctx))
 
+    # ---- CAUSAL split-conformal recalibration of the predictive band ----
+    def _calibrator(self, cal_rate, cal_seed, window, min_scores):
+        """Lazily fit (and cache) the causal split-conformal calibrator for THIS run's
+        data. A second internal causal pass hides a fraction ``cal_rate`` of observed
+        cells and scores them as held-out; the original imputation is untouched."""
+        from .conformal import ConformalCalibrator
+        if self._trace is None or len(self._trace) == 0:
+            raise NotImplementedError(
+                "calibrated intervals need the traced run; use CAFE().run(...) "
+                "(not impute) on 1D/2D data. Panel calibration is future work.")
+        key = (round(float(cal_rate), 6), int(cal_seed), int(window), int(min_scores))
+        cache = getattr(self, "_calib_cache", None)
+        if cache is None:
+            cache = self._calib_cache = {}
+        if key not in cache:
+            cache[key] = ConformalCalibrator.from_data(
+                self._X, cal_rate=cal_rate, cal_seed=cal_seed,
+                window=window, min_scores=min_scores)
+        return cache[key]
+
+    def _conformal_multiplier_grid(self, level, cal_rate, cal_seed, window, min_scores):
+        """(T, N) point-in-time conformal multiplier q[t] for the central ``level``
+        interval. q[t] is the (1-alpha) empirical quantile of the calibration scores from
+        rows < t (trailing window) -- so appending future rows never changes an earlier
+        row's band, and the imputation itself is untouched. Falls back to the raw Gaussian
+        z while too few scores have accrued."""
+        cal = self._calibrator(cal_rate, cal_seed, window, min_scores)
+        q = cal.grid(level)
+        return q[:, None] * np.ones((1, self._N))
+
+    def calibrated_uncertainty(self, level=0.90, cal_rate=0.15, cal_seed=0,
+                               window=4000, min_scores=30):
+        """Calibrated HALF-WIDTH per cell for the central ``level`` interval (same
+        container; NaN where observed). This is ``q(level)*sigma`` -- the causal
+        split-conformal recalibration of CAFE's raw per-cell sigma, so the band hits
+        nominal ``level`` coverage instead of over-covering. Point-in-time: the
+        multiplier at row ``t`` uses only held-out calibration residuals from rows
+        ``< t`` (a second internal causal pass; ``res.imputed`` is unchanged)."""
+        sd = np.sqrt(self._comp()["cvar"])
+        q = self._conformal_multiplier_grid(level, cal_rate, cal_seed, window, min_scores)
+        return from_matrix(q * sd, self._ctx)
+
+    def calibrated_interval(self, level=0.90, cal_rate=0.15, cal_seed=0,
+                            window=4000, min_scores=30):
+        """(lower, upper) containers for the CALIBRATED central ``level`` predictive
+        interval ``mu +/- q(level)*sigma``. ``q(level)`` is the causal trailing-window
+        split-conformal multiplier (the (1-alpha) empirical quantile of held-out
+        calibration residuals). Strictly point-in-time and imputation-preserving: the
+        centre ``mu`` (``res.imputed``) is identical with or without calibration; only the
+        band width changes so that observed coverage approaches ``level``."""
+        sd = np.sqrt(self._comp()["cvar"])
+        q = self._conformal_multiplier_grid(level, cal_rate, cal_seed, window, min_scores)
+        hw = q * sd
+        return (from_matrix(self._filled - hw, self._ctx),
+                from_matrix(self._filled + hw, self._ctx))
+
     # ---- latent common factors (streaming robust DFM / PCA) ----
     def factors(self):
         """The learned latent factor paths z_t as a (T, R) array."""
