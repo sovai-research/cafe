@@ -260,6 +260,19 @@ class _UnifiedCore:
         self.rho_idio = 0.0
         self.ric_num = 0.0
         self.ric_den = 1e-3
+        # last OBSERVED level per feature (point-in-time). Anchors a pure forecast/blackout
+        # cell (a row with NO observed cell -- extrapolating off the end of the series, or a
+        # synchronized outage) on the persisted last level instead of letting the factor +
+        # carry decay back to mu+season, which mean-reverts a random-walk / persistent series
+        # and underperforms a naive last-value forecast. Causal: written only from observed
+        # cells at times <= t.
+        self.last_obs = np.full(N, np.nan)
+        self.have_obs = np.zeros(N, dtype=bool)
+        # absolute time at/after which rows are FORECASTS (extrapolation off the end), set
+        # only by the forecast path. The RW-anchor fires only here -- never on an interior
+        # gap (where the season/AR/cross-section fill is correct), so imputation is
+        # unaffected. None => imputation mode => anchor never applies.
+        self.forecast_from = None
         # per-feature EW robust scale (mean-abs-deviation proxy) of the de-FE,
         # de-season value, for per-cell winsorizing of the data term.
         self.fsc_sum = np.ones(N)
@@ -593,6 +606,22 @@ class _UnifiedCore:
 
         if miss.any():
             fill = mu[miss] + season[miss] + time_fe + lr[miss] + carry[miss]
+            # RW-anchor (forecast persistence). On a PURE blackout row (no observed cell
+            # anywhere -> we are extrapolating off the end / through a total outage, not
+            # filling an interior gap the cross-section will correct below) AND a persistent
+            # series, blend the (mean-reverting) model fill toward the last OBSERVED level.
+            # persist = max(learned AR a, idiosyncratic rho) in [0,1]: a~1 / rho~1 (random
+            # walk) -> trust the last value (naive-optimal); a~0 (stationary) -> keep the
+            # model's mean-reversion. Self-gating (no tuned constant) and strictly
+            # point-in-time (last_obs and a/rho use only data <= t). Only the no-cross-
+            # section path; ordinary interior-gap imputation is byte-identical. Gated on
+            # forecast_from so it fires ONLY on true forecast rows (extrapolation off the
+            # end), never on an interior block gap where the season/AR fill is correct.
+            if (not obs.any() and self.forecast_from is not None
+                    and abs_t >= self.forecast_from and self.have_obs[miss].any()):
+                w_anchor = float(np.clip(max(self.a, self.rho_idio), 0.0, 1.0))
+                anchor = np.where(self.have_obs[miss], self.last_obs[miss], mu[miss])
+                fill = (1.0 - w_anchor) * fill + w_anchor * anchor
             _carry_m = carry[miss]
             if record:
                 attr_carry[miss] = _carry_m        # pre-fusion: full low-rank+carry channel
@@ -714,6 +743,9 @@ class _UnifiedCore:
                 self.rho_idio = float(np.clip(self.ric_num / max(self.ric_den, 1e-6), 0.0, 0.995))
             self.idio_last[oi] = idio_now
             self.idio_age[oi] = 0.0
+            # record the last OBSERVED level (point-in-time) for the RW forecast anchor
+            self.last_obs[oi] = x_obs_row[oi]
+            self.have_obs[oi] = True
 
         # seasonal beta via online ridge (RLS), closed-form. Target is the FACTOR
         # RESIDUAL (x - mu - g*lowrank - time_fe), g = N/(N+R), so season explains only

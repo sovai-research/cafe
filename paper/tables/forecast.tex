@@ -1,0 +1,20 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{5pt}
+\caption{\textbf{Forecasting after the random-walk anchor.} Forecast MAE (mean over $4$ seeds) of \cafe{} vs.\ a naive last-value baseline at horizons $h{=}12,24$, across a persistence ladder (random walk $\to$ stationary AR) and three real series. The causal RW-anchor (\S\ref{sec:model}; weight $\max(a,\rho)$, self-gating) makes \cafe{} \emph{match} last-value on random-walk/persistent series -- where reverting to the mean was the old failure -- while keeping AR mean-reversion where it is correct (stationary). \cafe{} wins the suite mean at both horizons. It still does not extrapolate a deterministic \emph{trend} (a drift term is future work); the imputation is byte-identical (only the forecast path changed).}
+\label{tab:forecast}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+Series & \multicolumn{2}{c}{$h=12$} & \multicolumn{2}{c}{$h=24$} \\
+ & \cafe{} & naive & \cafe{} & naive \\
+\midrule
+Random walk & 2.073 & \textbf{2.073} & 2.759 & \textbf{2.751} \\
+AR(0.3) stat. & \textbf{0.951} & 1.203 & \textbf{0.975} & 1.037 \\
+AR(0.9) persist & \textbf{1.833} & 1.898 & \textbf{1.894} & 2.000 \\
+Exchange (FX) & 0.043 & \textbf{0.034} & \textbf{0.064} & 0.072 \\
+ETTh (OT) & \textbf{0.321} & 0.366 & \textbf{0.360} & 0.386 \\
+FRED-MD & 0.074 & \textbf{0.062} & 0.159 & \textbf{0.136} \\
+\midrule
+\emph{mean} & \textbf{0.882} & 0.939 & \textbf{1.035} & 1.064 \\
+\bottomrule
+\end{tabular}
+\end{table}

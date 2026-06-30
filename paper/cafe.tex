@@ -334,6 +334,21 @@ data with time $\le\tau$ using warm-started alternating least squares with
 Cholesky solves; no matrix inverse is ever formed. For panels the latent state
 $z$ is reset per entity while $W,a,\nu$ are pooled across entities.
 
+\paragraph{Forecasting (a causal random-walk anchor).} Forecasting is imputing
+appended all-missing rows. On such a pure-blackout row there is no cross-section to
+condition on, so the fill is $\mu+\text{season}+Wz_\tau+\text{carry}$ with the factor
+state propagated by $z_\tau=a z_{\tau-1}$ and the idiosyncratic carry decayed by
+$\rho^{\text{age}}$. For a stationary series this correctly mean-reverts, but for a
+persistent / random-walk series both terms shrink geometrically toward their priors and
+the forecast collapses to $\mu+\text{season}$ -- reverting to the running mean rather than
+persisting the last level. We therefore blend the blackout fill toward the last
+\emph{observed} level with weight $\max(a,\rho)\in[0,1]$: the model's own learned
+persistence, so the anchor is self-gating (a random walk, $a\!\to\!1$, trusts the last
+value; a stationary series, $a\!\to\!0$, keeps the mean-reversion) and carries no tuned
+constant. It uses only observed values at times $\le\tau$, so it is as point-in-time as
+the rest of \cafe{} and leaves in-sample imputation byte-identical (only the
+no-cross-section path changes).
+
 \begin{proposition}[Point-in-time]\label{prop:causal}
 For every $\tau$, the imputation $\hat x_{\tau}$ and all parameters used to
 produce it are measurable functions of $\{x_{t}: t\le\tau\}$ only. Consequently,
@@ -439,6 +454,37 @@ CPU baselines we run live under the \emph{same} full-slice mask: the median
 baseline---under scattered point missingness a gap is flanked by observed
 neighbours, so a straight line between them is hard to beat---but it is
 \emph{non-causal} (it reads the next observed value), whereas \cafe{} is causal.
+(The headline is not a standardisation artefact: re-running with a strictly leak-free
+per-column $z$-score fit on the \emph{observed} cells only gives $0.1084$ versus the
+fit-once $0.1083$---identical to three decimals.)
+
+\paragraph{The easy regime is the one where \cafe{} looks weakest.} A fair worry is
+that $10\%$ \emph{point}-MCAR is easy---a one-cell gap is flanked by observed
+neighbours, so the non-causal linear interpolant nearly ties \cafe{} ($0.135$ vs
+$0.108$ above)---and that \cafe{}'s edge is an artefact of that easy regime. The
+opposite is true. Holding the missing rate fixed at $10\%$ and walking the mask from
+point-MCAR to short and then long contiguous blocks (a sensor outage / market closure),
+the cheap baselines collapse the moment a gap is no longer flanked by neighbours, while
+\cafe{}'s factor\,$+$\,AR\,$+$\,FE structure extrapolates across it: the
+linear-interpolation-to-\cafe{} MAE ratio grows from $\approx1.2\times$ at point-MCAR to
+$2$--$6\times$ at long-block (up to $6\times$ on Solar), and \cafe{}'s own error rises only
+$\sim\!1.1$--$1.5\times$
+(Table~\ref{tab:regimeladder}, Fig.~\ref{fig:regimeladder}). The separating variable is
+mask \emph{structure}, not rate (at $50\%$ \emph{point}-MCAR \cafe{} and linear stay
+near-tied). So the point-MCAR headline \emph{understates} \cafe{}: its value materialises
+exactly where easy interpolation breaks---the realistic block-missing regime that a
+deployment actually faces.
+\input{tables/regime_ladder}
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/regime_ladder.pdf}
+\caption{\textbf{Harder masks favour \cafe{}.} Causal MAE at a fixed $10\%$ missing rate
+as the mask walks point-MCAR $\to$ short block $\to$ long block. \cafe{}'s line stays
+nearly flat while the cheap baselines (linear interpolation and SoftImpute, both
+\emph{non-causal}; LOCF, causal) fan sharply upward---and end up worse than causal
+\cafe{} in every block cell. The point-MCAR headline is the regime where \cafe{} looks
+\emph{least} special.}
+\label{fig:regimeladder}
+\end{figure}
 
 \paragraph{The causal horse race (we run the deep models ourselves).}
 Beyond any published number, we run the strongest deep imputers
@@ -523,6 +569,46 @@ take over; on a structured panel such as Traffic it learns $a{=}0.12$ with a
 heavy-tailed ($\nu{\approx}5$) low-rank factor signature, so the joint cross-sectional
 engine leads---no manual switch required.
 \input{tables/router}
+
+\paragraph{What ``shared structure'' means, precisely: cointegration.} The
+practitioner's rule above can be sharpened from an intuition into a testable
+property. \cafe{}'s edge is a shared low-rank factor that lets the
+\emph{contemporaneous cross-section} fill a gap better than a series' own last
+value; a rank-$R$ factor model on non-stationary (I(1)) series is exactly the
+\emph{common-trends} representation of a cointegration system. If $N$ series share
+$R<N$ common stochastic trends there are $N-R$ cointegrating vectors, and the
+idiosyncratic part \cafe{} carries (the $\psi$ noise plus the AR carry) is
+\emph{stationary}---mean-reverting---which is precisely why the cross-section
+anchors a missing series across a gap. When that idiosyncratic part is itself a
+unit root (no cointegration), there is nothing to revert to and last-value is
+Bayes-optimal causally, so \cafe{}'s factor machinery cannot beat it. We verify
+this dial directly (Table~\ref{tab:cointegration}, Fig.~\ref{fig:cointegration}):
+on a controlled common-trends panel the causal block-gap MAE ratio \cafe{}/LOCF
+falls monotonically from $1.42$ to $0.96$ as the cointegration rank grows $0\to9$
+and crosses into a \cafe{} win, while a non-cointegrated (unit-root idiosyncratic)
+control stays $\approx1.3$ at every rank. The same dial explains the financial
+results without reference to ``finance'' at all: \emph{two real panels, both
+near-unit-root in levels under the same protocol}, land at opposite corners---a
+cointegrated rates/yield-curve panel (FRED-MD: one rate-level trend with stationary
+spreads) where \cafe{} \emph{halves} last-value's error ($0.097$ vs.\ $0.217$), and
+the independent-floating FX panel where last-value wins ($0.295$ vs.\ $0.100$). So
+\cafe{} is not beaten by ``financial data''; it is correctly beaten on independent
+random-walk \emph{levels}, and it wins on the cointegrated financial structures
+(yield curves, credit and volatility surfaces, characteristic panels) that are the
+matched regime---the same diagnostic the router reads off online.
+\input{tables/cointegration}
+\begin{figure}[t]\centering
+\includegraphics[width=\linewidth]{figures/cointegration.pdf}
+\caption{\textbf{The cross-section helps iff the panel is cointegrated.}
+\emph{(a)} On a controlled common-trends panel the causal block-gap MAE ratio
+\cafe{}/LOCF falls as the cointegration rank $N-r$ grows and crosses $1$ (\cafe{}
+wins); a unit-root, non-cointegrated idiosyncratic stays $>1$ at every rank.
+\emph{(b)} Two real financial panels, both near-unit-root in levels under the same
+protocol: \cafe{} wins on the cointegrated rates/yield-curve panel and loses on the
+independent FX panel. The discriminating property is cointegration, not whether the
+data is financial.}
+\label{fig:cointegration}
+\end{figure}
 
 \paragraph{Mixed-frequency causal nowcasting.} A low-frequency series living on a
 high-frequency grid---a quarterly target among monthly indicators---is just a column
@@ -802,6 +888,26 @@ single outlier cannot corrupt it. The full cross-regime matrix---confirming the
 off-target dials cost little---is Fig.~\ref{fig:ablation}.
 \input{tables/ablation}
 
+\paragraph{Does the tail estimator hold for genuinely fat tails?} The ablation
+shows the Student-$t$ dial pays for itself; a fair question is whether the
+\emph{online} estimator behind it---$\nu$ from the excess-kurtosis identity
+$\kappa=6/(\nu-4)\Rightarrow\nu=4+6/\kappa$ (\S\ref{sec:model})---survives the
+infinite-kurtosis regime where heavy-tailed financial returns live. We test it
+directly on pure Student-$t$ draws (Table~\ref{tab:fattail}). For $\nu>4$ the
+population kurtosis is finite and the moment map \emph{recovers} $\nu$ (e.g.\
+$\nu{=}6\to6.5$, $\nu{=}10\to10.6$). For $\nu\le4$ the population kurtosis is
+infinite, so the inversion cannot resolve the tail index---but it degrades
+\emph{gracefully}: it \emph{saturates} just above $4$ ($\nu{=}3\to4.3$,
+$\nu{=}2.5\to4.1$) rather than diverging, the clamp $[2.5,60]$ holds it in range,
+and imputation MAE stays bounded across the whole tail range (spread $16\%$). So
+the honest scope is: $\nu$ is a calibrated tail index only for $\nu>4$, but the
+robustness it drives (redescending IRLS down-weighting, which needs only ``$\nu$
+small'') remains intact for arbitrarily fat tails---\cafe{} stays robust where it
+cannot estimate, and we do not market $\nu$ as a tail index on raw returns. A
+profile-likelihood $\nu$ estimator would extend calibration below $4$ and is left
+to future work.
+\input{tables/fattail}
+
 \paragraph{Robustness: mechanisms and long gaps.} \cafe{} is the best
 \emph{causal} method under all four missingness mechanisms
 (Table~\ref{tab:mnar}). Under self-masking MNAR every estimator degrades---a
@@ -901,11 +1007,23 @@ ground truth and a specialised baseline each (Table~\ref{tab:byproduct}): the re
 dependency network recovers a known sparse block graph that marginal correlation
 cannot (it is contaminated by the global factor), the free anomaly score nearly
 matches a dedicated causal Hampel detector, and the online factors recover the true
-rank exactly; forecasting is the one by-product that still trails its naive baseline
-(it reverts toward the level), which we flag as future work.
+rank exactly. Forecasting, after the random-walk anchor (\S\ref{sec:model}), now
+\emph{matches} naive last-value on random-walk/persistent series and \emph{beats} it on
+stationary and structured ones, winning the suite mean at $h{=}12$ and $h{=}24$
+(Table~\ref{tab:forecast}); it still does not extrapolate a deterministic trend, the one
+remaining forecast gap (a drift term is future work), which is why on the trend-plus-season
+by-product synthetic of Table~\ref{tab:byproduct} naive still edges it. The anomaly read-out is
+the model's own \emph{point-in-time conditional-likelihood} test---given a value
+(observed or proposed), the Student-$t$ row weight scores how surprising it is under
+everything seen so far, i.e.\ ``does this value belong to the series so far?''---so the
+same causal pass doubles as a streaming data-quality / error detector at near-specialist
+quality (ROC-AUC $0.963$ vs.\ $0.991$, Table~\ref{tab:byproduct}); we present it as a
+free by-product at parity with a dedicated detector, not as a stand-alone
+anomaly-detection claim.
 \input{tables/calib_crps}
 \input{tables/conformal}
 \input{tables/byproduct}
+\input{tables/forecast}
 
 \paragraph{Compute.} \cafe{} fills the $3000\times132$ BeijingAir slice in
 $1.16$\,s on a single CPU core---the best \emph{causal} MAE among the methods we
@@ -975,6 +1093,20 @@ something readable from the data's shape, so \cafe{} exposes the choice and defa
 the always-safe \texttt{joint}. This mirrors the headline race's structure-vs-no-structure
 rule (\S\ref{sec:exp}): the same diagnostic --- is there exploitable shared structure? ---
 governs both \cafe{}-vs-random-walk and \texttt{joint}-vs-\texttt{per\_entity}.
+
+\paragraph{By-products on panels.} \texttt{CAFE().run} on a panel returns a
+\texttt{PanelResult} that surfaces the same by-products as the 2D path---per-cell
+uncertainty, latent factors, an additive decomposition, a Student-$t$ anomaly score and a
+pooled residual dependency network---by routing each entity through the 2D traced pass, so
+every quantity is real and strictly point-in-time \emph{per entity} (truncating the future
+leaves earlier values bit-identical; on a controlled panel with injected outlier rows the
+free anomaly score reaches ROC-AUC $\approx\!0.9$ and the decomposition sums to the fill to
+machine precision). The one by-product we do \emph{not} expose for panels is a single
+cross-entity \emph{joint} factor path: the panel engine's ARD currently collapses the
+shared time-factor toward rank zero (imputing through entity/time fixed effects and the
+residual cross-section), so a panel-native factor view would be degenerate---we report the
+per-entity factors and the pooled dependency network instead, and leave the identified
+joint panel factor to future work.
 
 The \emph{same} causal pass exposes every capability visualised in Appendix~\ref{sec:appendix}
 (Figures~\ref{fig:moat}--\ref{fig:bench}):

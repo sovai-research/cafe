@@ -27,7 +27,7 @@ try:
 except Exception:  # pragma: no cover - defensive; absence must never break impute()
     _missingness_features = None
 
-__all__ = ["CAFE", "CafeResult", "impute"]
+__all__ = ["CAFE", "CafeResult", "PanelResult", "impute"]
 
 
 def _is_panel(meta):
@@ -35,12 +35,14 @@ def _is_panel(meta):
         and len(np.unique(meta["entity_ids"])) > 1
 
 
-def _forward(X, record):
+def _forward(X, record, forecast_from=None):
     """Forward-run the core over a 2D matrix; return (filled, core). With ``record=False``
     (the lean path used by ``impute``/``forecast``) the per-row introspection trace and the
     predictive-band stats are skipped entirely -- the imputed values are bit-identical, but
     we avoid building ~T dicts of arrays, so it is a touch faster and far lighter in memory.
-    ``run`` uses ``record=True`` to expose uncertainty/factors/decomposition/etc."""
+    ``run`` uses ``record=True`` to expose uncertainty/factors/decomposition/etc.
+    ``forecast_from`` (set only by :meth:`CAFE.forecast`) marks the first row index that is a
+    forecast (extrapolation off the end), enabling the RW-anchor on those rows only."""
     X = np.ascontiguousarray(np.asarray(X, float))
     # Robustness parity with _core.online_impute: +/-Inf are not valid observations, so
     # treat any non-finite input cell as missing -- otherwise an Inf would propagate into
@@ -52,6 +54,7 @@ def _forward(X, record):
     periods = _core._fourier_periods(T)
     core = _core._UnifiedCore(N, periods, E=1)
     core.record = record
+    core.forecast_from = forecast_from
     out = X.copy()
     z_prev = None
     for t in range(T):
@@ -73,9 +76,9 @@ def _run_traced(X):
     return out, core.rows_trace, core
 
 
-def _run_fast(X):
+def _run_fast(X, forecast_from=None):
     """Forward-run without tracing (lean path); return just the filled matrix."""
-    out, _ = _forward(X, record=False)
+    out, _ = _forward(X, record=False, forecast_from=forecast_from)
     return out
 
 
@@ -92,6 +95,75 @@ def _impute_per_entity(X, meta):
         rows = idx[np.argsort(tids[idx], kind="stable")]   # time-ordered for causality
         out[rows] = _run_fast(X[rows])
     return out
+
+
+def _run_per_entity_traced(X, meta):
+    """Impute each entity through the 2D *traced* core, returning the reassembled filled
+    matrix and a dict ``{entity_id -> (row_index, CafeResult)}``. Each entity's series is
+    run point-in-time, so every by-product (uncertainty, factors, anomaly, decomposition)
+    is strictly causal per entity; nothing crosses the entity boundary."""
+    X = np.ascontiguousarray(np.asarray(X, float))
+    eids = np.asarray(meta["entity_ids"])
+    tids = np.asarray(meta["time_ids"])
+    out = X.copy()
+    per_entity = {}
+    for e in np.unique(eids):
+        idx = np.where(eids == e)[0]
+        rows = idx[np.argsort(tids[idx], kind="stable")]   # time-ordered for causality
+        filled, trace, core = _run_traced(X[rows])
+        out[rows] = filled
+        # a lightweight 2D context so the per-entity CafeResult returns numpy arrays
+        sub_ctx = Ctx("numpy", False, None, None, None, None, None)
+        per_entity[int(e)] = (rows, CafeResult(sub_ctx, X[rows], filled, trace, core))
+    return out, per_entity
+
+
+class PanelResult:
+    """Panel by-products, surfaced by running each entity through the same 2D *traced*
+    causal pass used for 2-D data (the per-entity engine). Every per-entity quantity is
+    strictly point-in-time. By-products are keyed by entity id (panels are inherently
+    keyed by entity, and entities may have different time coverage), except the pooled
+    dependency network which is a single ``(N, N)`` matrix averaged across entities."""
+
+    def __init__(self, ctx, X_in, filled, per_entity):
+        self._ctx = ctx
+        self._X = X_in
+        self._filled = filled
+        self._pe = per_entity            # {eid -> (rows, CafeResult)}
+
+    @property
+    def imputed(self):
+        """The filled panel, in the original container type/labels."""
+        return from_matrix(self._filled, self._ctx)
+
+    @property
+    def uncertainty(self):
+        """``{entity_id -> per-cell posterior std array}`` (NaN where observed)."""
+        return {e: np.asarray(r.uncertainty) for e, (_, r) in self._pe.items()}
+
+    def factors(self):
+        """``{entity_id -> (T_e, R) latent factor paths}``."""
+        return {e: r.factors() for e, (_, r) in self._pe.items()}
+
+    def anomaly_scores(self):
+        """``{entity_id -> per-time outlier score in [0,1]}`` (causal per entity)."""
+        return {e: np.asarray(r.anomaly_scores()) for e, (_, r) in self._pe.items()}
+
+    def decompose(self, full=False):
+        """``{entity_id -> {level, season, factor, residual}}`` (each sums to the fill)."""
+        return {e: r.decompose(full=full) for e, (_, r) in self._pe.items()}
+
+    def dependency_network(self):
+        """A single pooled ``(N, N)`` residual-correlation network, averaged over the
+        per-entity residual covariances (the shared cross-feature dependency structure)."""
+        nets = [r.dependency_network() for _, (_, r) in self._pe.items()]
+        nets = [n for n in nets if np.all(np.isfinite(n))]
+        return np.mean(nets, axis=0) if nets else None
+
+    @property
+    def params(self):
+        """``{entity_id -> {nu, ar, effective_rank}}``."""
+        return {e: r.params for e, (_, r) in self._pe.items()}
 
 
 def _impute_panel(X, meta, engine="joint"):
@@ -446,8 +518,12 @@ class CAFE:
             raise NotImplementedError("CAFE is causal by design; non-causal smoothing TBD.")
         self.causal = causal
 
-    def run(self, data, meta=None, panel=None) -> CafeResult:
-        """Full traced run -> a CafeResult exposing every capability. 1D/2D inputs.
+    def run(self, data, meta=None, panel=None):
+        """Full traced run exposing every capability. For 1D/2D inputs returns a
+        :class:`CafeResult`; for panel inputs (3D array or ``panel=(time_col, entity_col)``)
+        returns a :class:`PanelResult` whose by-products (uncertainty, factors, anomaly,
+        decomposition, dependency network) are produced by running each entity through the
+        same 2D traced causal pass -- strictly point-in-time per entity.
 
         ``panel=(time_col, entity_col)`` routes a long-format DataFrame through the panel
         path; a 3D ``(entity, time, feature)`` array is detected automatically. Either way
@@ -456,11 +532,13 @@ class CAFE:
         X, ctx = to_matrix(data, panel=panel)
         meta = meta or ctx.panel_meta
         if _is_panel(meta):
-            # panel: impute via the core's panel path (rich trace is 2D-only in v1)
-            filled = _core.online_impute(X, meta)
-            res = CafeResult(ctx, X, np.asarray(filled, float), [], None)
-            res._C = {}                                  # capabilities limited for panels
-            return res
+            # Panel by-products are surfaced via the per-entity traced engine: each entity's
+            # series goes through the full 2D traced core, so uncertainty/factors/anomaly/
+            # decomposition are real and strictly causal per entity. (The cross-entity joint
+            # factor view is future work -- the joint engine's ARD currently collapses the
+            # shared time-factor to rank ~0; we expose the residual-derived network instead.)
+            filled, per_entity = _run_per_entity_traced(X, meta)
+            return PanelResult(ctx, X, np.asarray(filled, float), per_entity)
         filled, trace, core = _run_traced(X)
         return CafeResult(ctx, X, filled, trace, core)
 
@@ -506,7 +584,9 @@ class CAFE:
         X, ctx = to_matrix(data)
         T, N = X.shape
         Xf = np.vstack([X, np.full((horizon, N), np.nan)])
-        fc = _run_fast(Xf)[T:]
+        # forecast_from=T marks the appended rows as forecasts, enabling the RW-anchor
+        # there only (interior-gap imputation is untouched).
+        fc = _run_fast(Xf, forecast_from=T)[T:]
         # rebuild a container for just the forecast rows
         fctx = Ctx(ctx.kind, ctx.was_1d, None, ctx.columns, ctx.name, ctx.dtypes, ctx.schema)
         return from_matrix(fc, fctx)

@@ -1,0 +1,28 @@
+\begin{table}[t]\centering\footnotesize
+\setlength{\tabcolsep}{4pt}
+\caption{\textbf{The easy-regime critique backfires: \cafe{}'s margin grows with mask difficulty.} Causal MAE (mean, 3 seeds, leak-free standardisation) at a \emph{fixed} $10\%$ missing rate as the mask walks point-MCAR $\to$ short block $\to$ long block. \cafe{} is causal; linear interpolation and SoftImpute are \emph{non-causal} references (they may read the gap's future endpoint); LOCF is a causal cheap baseline. On point-MCAR cheap interpolation nearly ties \cafe{} (a one-cell gap is flanked by neighbours) -- the regime where \cafe{} looks \emph{least} special. As gaps become contiguous outages the baselines collapse while \cafe{}'s factor/AR structure extrapolates, so the linear/\cafe{} margin (last column) grows $2$--$6\times$. The separating variable is mask \emph{structure}, not rate.}
+\label{tab:regimeladder}
+\begin{tabular}{@{}llrrrrr@{}}
+\toprule
+Dataset & regime & \cafe{} & LinInt$^{\dagger}$ & SoftImp$^{\dagger}$ & LOCF & lin/\cafe{} \\
+\midrule
+Beijing & point & \textbf{0.124} & \emph{0.153} & \emph{0.632} & 0.218 & 1.23$\times$ \\
+ & short block & \textbf{0.157} & \emph{0.377} & \emph{0.635} & 0.510 & 2.40$\times$ \\
+ & long block & \textbf{0.182} & \emph{0.545} & \emph{0.647} & 0.670 & 3.00$\times$ \\
+\addlinespace[2pt]
+AirQuality & point & \textbf{0.199} & \emph{0.196} & \emph{0.740} & 0.315 & 0.99$\times$ \\
+ & short block & \textbf{0.252} & \emph{0.545} & \emph{0.743} & 0.721 & 2.16$\times$ \\
+ & long block & \textbf{0.292} & \emph{0.669} & \emph{0.777} & 0.832 & 2.29$\times$ \\
+\addlinespace[2pt]
+Electricity & point & \textbf{0.332} & \emph{0.952} & \emph{0.620} & 1.049 & 2.87$\times$ \\
+ & short block & \textbf{0.328} & \emph{0.887} & \emph{0.643} & 0.936 & 2.70$\times$ \\
+ & long block & \textbf{0.350} & \emph{0.863} & \emph{0.618} & 0.939 & 2.47$\times$ \\
+\addlinespace[2pt]
+Solar & point & \textbf{0.128} & \emph{0.151} & \emph{0.532} & 0.262 & 1.18$\times$ \\
+ & short block & \textbf{0.142} & \emph{0.692} & \emph{0.548} & 0.916 & 4.89$\times$ \\
+ & long block & \textbf{0.143} & \emph{0.900} & \emph{0.547} & 0.896 & 6.31$\times$ \\
+\addlinespace[2pt]
+\bottomrule
+\end{tabular}
+\\[2pt]{\footnotesize $^{\dagger}$ non-causal reference (reads the gap's future endpoint); shown for context, never bold.}
+\end{table}

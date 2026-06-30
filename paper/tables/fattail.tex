@@ -1,0 +1,24 @@
+\begin{table}[t]\centering\footnotesize
+\setlength{\tabcolsep}{6pt}
+\caption{\textbf{The kurtosis$\to\nu$ map recovers the tail for $\nu>4$ and saturates safely below.} CAFE estimates the Student-$t$ degrees of freedom online by inverting $\kappa=6/(\nu{-}4)\Rightarrow\nu=4+6/\kappa$ (\texttt{\_update\_robust\_scale}). For $\nu>4$ the population excess kurtosis is finite and the moment map recovers $\nu$; for $\nu\le4$ (infinite-kurtosis regime, where fat-tailed returns live) the read-out \emph{saturates} just above $4$ rather than diverging, and the clamp $[2.5,60]$ plus redescending IRLS down-weighting keep imputation MAE bounded across the whole range. Learned $\nu$: mean$\pm$sd over $200$ seeds, $n{=}5000$ pure Student-$t$ samples. CAFE MAE: held-out imputation error on a low-rank factor panel with $t_\nu$ noise (3 seeds).}
+\label{tab:fattail}
+\begin{tabular}{rccc}
+\toprule
+true $\nu$ & exc.\ kurt & learned $\nu$ & CAFE MAE \\
+\midrule
+\multicolumn{4}{@{}l}{\emph{$\nu>4$ (finite kurtosis): map recovers $\nu$}} \\
+$30.0$ & $0.23$ & $38.77\pm17.03$ & $0.3323$ \\
+$10.0$ & $1.00$ & $10.60\pm1.69$ & $0.3560$ \\
+$6.0$ & $3.00$ & $6.53\pm0.82$ & $0.3481$ \\
+$5.0$ & $6.00$ & $5.65\pm0.61$ & $0.3027$ \\
+$4.5$ & $12.00$ & $5.24\pm0.51$ & $0.3467$ \\
+\midrule
+\multicolumn{4}{@{}l}{\emph{$\nu\le4$ (infinite kurtosis): saturates $\approx4$, MAE bounded}} \\
+$4.0$ & $\infty$ & $4.84\pm0.40$ & $0.3145$ \\
+$3.0$ & $\infty$ & $4.27\pm0.19$ & $0.3257$ \\
+$2.5$ & $\infty$ & $4.11\pm0.09$ & $0.3578$ \\
+\midrule
+\multicolumn{4}{@{}l}{\scriptsize MAE spread over the tail range $=16.4\%$ of mean (robust where $\nu$ saturates).} \\
+\bottomrule
+\end{tabular}
+\end{table}

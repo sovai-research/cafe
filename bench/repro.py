@@ -63,6 +63,34 @@ for _v in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
 # --------------------------------------------------------------------------- #
 MANIFEST = {
     # ---- experiment tables + their companion figures ----
+    "exp_cointegration.py": {
+        "tables":  ["paper/tables/cointegration.tex"],
+        "figures": ["paper/figures/cointegration.pdf"],
+        "tex_label": ["tab:cointegration", "fig:cointegration"],
+        "what": "Cointegration dial: cross-section helps iff panel is cointegrated "
+                "(synthetic rank sweep + real rates-vs-FX anchors).",
+    },
+    "exp_fattail.py": {
+        "tables":  ["paper/tables/fattail.tex"],
+        "figures": [],
+        "tex_label": ["tab:fattail"],
+        "what": "Fat-tail scope of the kurtosis->nu map (recovers nu>4, saturates "
+                "safely below; imputation robustness preserved across the tail range).",
+    },
+    "exp_forecast.py": {
+        "tables":  ["paper/tables/forecast.tex"],
+        "figures": [],
+        "tex_label": ["tab:forecast"],
+        "what": "Forecasting after the RW-anchor: matches naive on random walks, "
+                "beats it on stationary/structured series, wins the suite mean.",
+    },
+    "exp_regime_ladder.py": {
+        "tables":  ["paper/tables/regime_ladder.tex"],
+        "figures": ["paper/figures/regime_ladder.pdf"],
+        "tex_label": ["tab:regimeladder", "fig:regimeladder"],
+        "what": "Mask-difficulty ladder: CAFE's margin over cheap baselines GROWS "
+                "from point-MCAR to long-block (the easy-regime critique backfires).",
+    },
     "exp_ablation.py": {
         "tables":  ["paper/tables/ablation.tex"],
         "figures": ["paper/figures/ablation.pdf"],

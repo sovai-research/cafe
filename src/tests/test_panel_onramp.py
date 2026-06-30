@@ -138,3 +138,32 @@ def test_2d_path_unchanged_regression():
     assert a.shape == Xm[0].shape
     assert np.array_equal(a, b)
     assert not np.isnan(a).any()
+
+
+def test_panel_result_byproducts():
+    # CAFE().run on a panel returns a PanelResult exposing real, per-entity by-products
+    X, Xm, _ = _tensor(E=6, T=50, F=5, seed=3)
+    res = cafe.CAFE().run(Xm)
+    assert type(res).__name__ == "PanelResult"
+    imp = np.asarray(res.imputed)
+    assert imp.shape == Xm.shape and not np.isnan(imp).any()
+    # by-products are keyed by entity and have sane shapes
+    fac = res.factors(); unc = res.uncertainty; anom = res.anomaly_scores()
+    assert len(fac) == X.shape[0] and len(unc) == X.shape[0] and len(anom) == X.shape[0]
+    assert np.asarray(anom[0]).shape == (X.shape[1],)            # one score per time
+    # decomposition sums to the fill (machine precision)
+    parts = res.decompose()[0]
+    recon = sum(np.asarray(parts[k]) for k in ("level", "season", "factor", "residual"))
+    assert np.max(np.abs(recon - imp[0])) < 1e-9
+    # pooled dependency network is (F, F)
+    net = res.dependency_network()
+    assert net is None or net.shape == (X.shape[2], X.shape[2])
+
+
+def test_panel_byproducts_point_in_time():
+    # per-entity by-product fills are strictly causal: truncating the future leaves
+    # earlier imputations bit-identical
+    _, Xm, _ = _tensor(E=6, T=60, F=5, seed=12)
+    full = np.asarray(cafe.CAFE().run(Xm).imputed)
+    trunc = np.asarray(cafe.CAFE().run(Xm[:, :35, :]).imputed)
+    assert np.max(np.abs(full[:, :35, :] - trunc)) < 1e-9
