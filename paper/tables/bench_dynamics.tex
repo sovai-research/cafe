@@ -1,0 +1,94 @@
+% bench/exp_bench_dynamics.py -- CausalDynamics head-to-head.
+% Self-loop convention: the FULL P x P matrix is scored (the
+% CausalDynamics convention: the ground truth is a Jacobian sparsity
+% pattern whose diagonal is a real self-dynamics edge).  Columns marked
+% 'off' exclude the diagonal and are the structure-only numbers.
+% Ground-truth orientation: 'simple' stores [effect,cause]; 'coupled'
+% and 'climate' store [cause,effect] and are transposed before scoring.
+% CAFE-CD: PROVISIONAL. CAFE-CD numbers are PROVISIONAL: scores() currently emits a two-tier step rather than continuous evidence, so its AUROC/AUPRC are lower bounds and no ranking claim is made from them. F1/SHD come from adjacency() and are less affected but still reflect a low-recall selection.
+
+\begin{table}[t]\centering\small
+\caption{Reproduction of published CausalDynamics cells (\texttt{simple}, \texttt{noise=0.00\_confounder=False}, 54 scored systems, $\tau_{\max}=1$, self-loops scored). Rows without a published counterpart show what the same estimator does once the upstream wrapper's defects are removed.}
+\label{tab:bench-dynamics-calibration}
+\begin{tabular}{lrrrrr}\toprule
+variant & AUROC & AUPRC & pub.\ AUROC & pub.\ AUPRC & $\Delta$AUROC\\\midrule
+dynotears / upstream wrapper (binarised, transposed) & 0.4251 & 0.6750 & 0.4259 & 0.6752 & -0.0008 \\
+dynotears / orientation corrected & 0.4892 & 0.6954 & -- & -- & -- \\
+varlingam / upstream wrapper (binarised, prune off) & 0.5000 & 0.6872 & 0.5000 & 0.6927 & 0.0000 \\
+varlingam / lingam library defaults (prune on, BIC lag order) & 0.5149 & 0.6992 & 0.5000 & 0.6927 & 0.0150 \\
+varlingam / continuous scores, prune on & 0.4477 & 0.7142 & -- & -- & -- \\
+var\_ols / \textbar{}coef\textbar{}, lag-1 slice & 0.5245 & 0.7265 & -- & -- & -- \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table*}[t]\centering\small
+\caption{CausalDynamics batch board: 12 external baselines plus the measured chance control, per tier. AUPRC is the lead metric on the sparse (\texttt{coupled}) tier as the benchmark authors recommend; on \texttt{simple} the ground truth is \emph{dense}, so AUPRC is bounded below by a high base rate and neither metric separates anything. `off' columns exclude self-loops. Every method gets the same lag budget $K=3$, the same preprocessing and the same 600\,s timeout.}
+\label{tab:bench-dynamics-h2h}
+\begin{tabular}{lrrrrrrrrrrrr}\toprule
+ & \multicolumn{4}{c}{\texttt{simple}} & \multicolumn{4}{c}{\texttt{coupled}} & \multicolumn{4}{c}{\texttt{climate}}\\
+method & AUPRC & off & AUROC & off & AUPRC & off & AUROC & off & AUPRC & off & AUROC & off\\\midrule
+\textbf{cafe\_cd} (provisional) & 0.738 & 0.711 & 0.508 & 0.491 & 0.445 & 0.382 & 0.561 & 0.522 & 0.835 & 0.775 & 0.660 & 0.595\\
+dagma\_linear & 0.674 & 0.711 & 0.494 & 0.497 & 0.358 & 0.330 & 0.499 & 0.517 & 0.760 & 0.740 & 0.548 & 0.572\\
+directlingam & 0.681 & 0.699 & 0.479 & 0.447 & 0.359 & 0.339 & 0.472 & 0.507 & 0.761 & 0.744 & 0.547 & 0.577\\
+dynotears & 0.718 & 0.692 & 0.494 & 0.534 & 0.521 & 0.324 & 0.638 & 0.538 & 0.782 & 0.721 & 0.606 & 0.534\\
+fci & 0.674 & 0.648 & 0.484 & 0.460 & 0.367 & 0.365 & 0.497 & 0.567 & 0.717 & 0.697 & 0.382 & 0.450\\
+fci\_ts & 0.667 & 0.671 & 0.479 & 0.482 & 0.421 & 0.308 & 0.622 & 0.532 & 0.721 & 0.662 & 0.415 & 0.342\\
+granger\_pairwise & 0.725 & 0.747 & 0.494 & 0.459 & 0.559 & 0.387 & 0.630 & 0.521 & 0.848 & 0.815 & 0.714 & 0.686\\
+pc & 0.672 & 0.649 & 0.481 & 0.464 & 0.375 & 0.372 & 0.518 & 0.574 & 0.722 & 0.698 & 0.398 & 0.454\\
+pc\_ts & 0.666 & 0.669 & 0.479 & 0.478 & 0.420 & 0.301 & 0.619 & 0.524 & 0.720 & 0.660 & 0.413 & 0.339\\
+pcmci & 0.753 & 0.782 & 0.523 & 0.522 & 0.554 & 0.394 & 0.641 & 0.545 & 0.847 & 0.819 & 0.715 & 0.688\\
+pcmciplus & 0.740 & 0.721 & 0.510 & 0.537 & 0.586 & 0.449 & 0.686 & 0.621 & 0.846 & 0.815 & 0.712 & 0.684\\
+var\_ols & 0.746 & 0.746 & 0.534 & 0.489 & 0.526 & 0.381 & 0.586 & 0.530 & 0.801 & 0.761 & 0.617 & 0.601\\
+varlingam & 0.753 & 0.777 & 0.528 & 0.548 & 0.569 & 0.466 & 0.668 & 0.601 & 0.778 & 0.724 & 0.538 & 0.514\\
+\midrule
+\emph{random control} & 0.749 & 0.777 & 0.509 & 0.509 & 0.395 & 0.381 & 0.498 & 0.498 & 0.773 & 0.746 & 0.523 & 0.523\\
+\midrule settings / systems / $P$ / base rate & 3 & 156 & 2.7 & 0.649 & 11 & 19 & 0.9 & 0.058 & 2 & 12 & 7.0 & 0.739\\
+\bottomrule\end{tabular}\end{table*}
+
+\begin{table}[t]\centering\small
+\caption{Learnability verdict. A tier counts as learnable only if the best method's \emph{paired} off-diagonal AUROC lift over a uniform-random score drawn on the same system exceeds 0.05 with a paired $t$ above 3. AUROC rather than AUPRC because off-diagonal base rates span 0.15--0.80 across these tiers; $\Delta$AUPRC is shown alongside, and on \texttt{simple} it is small because the graph is dense, not because nothing is learned.}
+\label{tab:bench-dynamics-learnable}
+\begin{tabular}{llrrrrrl}\toprule
+tier & best method & AUROC$_\text{off}$ & lift & $t$ & win\% & $\Delta$AUPRC & verdict\\\midrule
+\texttt{simple} & varlingam & 0.548 & 0.039 & -- & -- & -- & \textbf{at chance}\\
+\texttt{coupled} & pcmciplus & 0.621 & 0.123 & -- & -- & -- & \textbf{at chance}\\
+\texttt{climate} & pcmci & 0.688 & 0.165 & -- & -- & -- & \textbf{at chance}\\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[t]\centering\small
+\caption{The CausalDynamics leaderboard, recovered by averaging the benchmark's own shipped per-system evaluation outputs rather than transcribed from the paper. The \emph{Null} column is a constant prediction: on \texttt{simple} every published method lies within $\pm0.02$ AUPRC of it.}
+\label{tab:bench-dynamics-published}
+\begin{tabular}{llrrrr}\toprule
+tier & method & AUROC & AUPRC & null AUPRC & $\Delta$AUPRC\\\midrule
+\texttt{simple} & fpcmci & 0.5157 & 0.6515 & 0.6273 & 0.0242\\
+ & dynotears & 0.4846 & 0.6491 & 0.6273 & 0.0218\\
+ & grasp & 0.5066 & 0.6464 & 0.6273 & 0.0191\\
+ & tsci & 0.4914 & 0.6453 & 0.6273 & 0.0180\\
+ & pcmciplus & 0.4995 & 0.6436 & 0.6273 & 0.0163\\
+ & varlingam & 0.5100 & 0.6424 & 0.6273 & 0.0150\\
+ & cutsplus & 0.4996 & 0.6345 & 0.6273 & 0.0071\\
+ & tcdf & 0.5009 & 0.6292 & 0.6273 & 0.0019\\
+ & ngc\_lstm & 0.4997 & 0.6280 & 0.6273 & 0.0007\\
+ & rcd & 0.5001 & 0.6275 & 0.6273 & 0.0002\\
+\midrule
+\texttt{coupled} & pcmciplus & 0.5822 & 0.3779 & 0.3037 & 0.0741\\
+ & tcdf & 0.5032 & 0.3690 & 0.3628 & 0.0063\\
+ & dynotears & 0.5463 & 0.3644 & 0.3037 & 0.0606\\
+ & tsci & 0.5374 & 0.3505 & 0.3037 & 0.0468\\
+ & fpcmci & 0.5471 & 0.3439 & 0.3037 & 0.0402\\
+ & grasp & 0.4977 & 0.3396 & 0.3226 & 0.0170\\
+ & varlingam & 0.5413 & 0.3352 & 0.3037 & 0.0315\\
+ & rcd & 0.4998 & 0.3059 & 0.3037 & 0.0022\\
+ & cutsplus & 0.5001 & 0.3051 & 0.3037 & 0.0013\\
+ & ngc\_lstm & 0.5002 & 0.3044 & 0.3037 & 0.0006\\
+\midrule
+\texttt{climate} & pcmciplus & 0.6306 & 0.7919 & 0.7394 & 0.0524\\
+ & tcdf & 0.4997 & 0.7837 & 0.7829 & 0.0008\\
+ & dynotears & 0.5951 & 0.7753 & 0.7394 & 0.0359\\
+ & fpcmci & 0.5349 & 0.7566 & 0.7394 & 0.0171\\
+ & tsci & 0.5424 & 0.7554 & 0.7394 & 0.0159\\
+ & varlingam & 0.5302 & 0.7541 & 0.7394 & 0.0147\\
+ & cutsplus & 0.5004 & 0.7446 & 0.7394 & 0.0052\\
+ & rcd & 0.5016 & 0.7415 & 0.7394 & 0.0021\\
+ & grasp & 0.4913 & 0.7390 & 0.7394 & -0.0004\\
+ & ngc\_lstm & 0.4987 & 0.7389 & 0.7394 & -0.0005\\
+\bottomrule\end{tabular}\end{table}

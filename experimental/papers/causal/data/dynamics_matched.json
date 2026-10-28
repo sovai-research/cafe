@@ -1,0 +1,184 @@
+{
+ "setting": "simple/noise=0.00_confounder=False",
+ "n_systems": 54,
+ "systems": [
+  "Arneodo_N10_T1000",
+  "BurkeShaw_N10_T1000",
+  "Chen_N10_T1000",
+  "Chua_N10_T1000",
+  "Coullet_N10_T1000",
+  "DequanLi_N10_T1000",
+  "Duffing_N10_T1000",
+  "Finance_N10_T1000",
+  "GenesioTesi_N10_T1000",
+  "Hadley_N10_T1000",
+  "JerkCircuit_N10_T1000",
+  "KawczynskiStrizhak_N10_T1000",
+  "Laser_N10_T1000",
+  "LiuChen_N10_T1000",
+  "Lorenz84_N10_T1000",
+  "Lorenz_N10_T1000",
+  "LuChen_N10_T1000",
+  "MooreSpiegel_N10_T1000",
+  "PanXuZhou_N10_T1000",
+  "PehlivanWei_N10_T1000",
+  "QiChen_N10_T1000",
+  "RayleighBenard_N10_T1000",
+  "RikitakeDynamo_N10_T1000",
+  "Rossler_N10_T1000",
+  "Rucklidge_N10_T1000",
+  "Sakarya_N10_T1000",
+  "SanUmSrisuchinwong_N10_T1000",
+  "ShimizuMorioka_N10_T1000",
+  "SprottA_N10_T1000",
+  "SprottB_N10_T1000",
+  "SprottC_N10_T1000",
+  "SprottD_N10_T1000",
+  "SprottE_N10_T1000",
+  "SprottF_N10_T1000",
+  "SprottG_N10_T1000",
+  "SprottH_N10_T1000",
+  "SprottI_N10_T1000",
+  "SprottJ_N10_T1000",
+  "SprottK_N10_T1000",
+  "SprottM_N10_T1000",
+  "SprottN_N10_T1000",
+  "SprottO_N10_T1000",
+  "SprottP_N10_T1000",
+  "SprottQ_N10_T1000",
+  "SprottR_N10_T1000",
+  "SprottS_N10_T1000",
+  "SprottTorus_N10_T1000",
+  "ThomasLabyrinth_N10_T1000",
+  "Thomas_N10_T1000",
+  "Tsucs2_N10_T1000",
+  "WangSun_N10_T1000",
+  "YuWang2_N10_T1000",
+  "YuWang_N10_T1000",
+  "ZhouChen_N10_T1000"
+ ],
+ "max_lag": 3,
+ "board": {
+  "var_ols": {
+   "auprc": 0.7707492861342066,
+   "auroc": 0.5488734567901236,
+   "f1": 0.7657879847095533,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "granger_pairwise": {
+   "auprc": 0.7467279777651797,
+   "auroc": 0.4935199882422104,
+   "f1": 0.7723181865338725,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "varlingam": {
+   "auprc": 0.7567760246073737,
+   "auroc": 0.5164046884185773,
+   "f1": 0.7876818189073089,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "directlingam": {
+   "auprc": 0.7250911228689007,
+   "auroc": 0.4942030423280424,
+   "f1": 0.3009396878841323,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "dynotears": {
+   "auprc": 0.7048316431510877,
+   "auroc": 0.4618852880658436,
+   "f1": 0.5227161316050205,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "dagma_linear": {
+   "auprc": 0.712825543797766,
+   "auroc": 0.49084251910640797,
+   "f1": 0.21543370210036877,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "pc": {
+   "auprc": 0.6977516901822456,
+   "auroc": 0.47274360670194004,
+   "f1": 0.10522192827748383,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "fci": {
+   "auprc": 0.6998445767195767,
+   "auroc": 0.4740075690770136,
+   "f1": 0.0,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "pc_ts": {
+   "auprc": 0.6890045403964057,
+   "auroc": 0.47327050264550263,
+   "f1": 0.5342137492137492,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "fci_ts": {
+   "auprc": 0.6894848303518939,
+   "auroc": 0.4706047912992357,
+   "f1": 0.518948273948274,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "pcmci": {
+   "auprc": 0.7743857289829513,
+   "auroc": 0.5353916813639036,
+   "f1": 0.7661849270917898,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "pcmciplus": {
+   "auprc": 0.7995148862013942,
+   "auroc": 0.5500216784244562,
+   "f1": 0.6520613612361978,
+   "source": "bench/bench_dynamics_cache.json (tag batch)"
+  },
+  "cafe_cd": {
+   "auprc": 0.7289035073906105,
+   "auroc": 0.46240410052910047,
+   "f1": 0.7516570236831673,
+   "source": "live re-run, this script"
+  }
+ },
+ "cafe_cd_variants": {
+  "live (this script, post scores() fix)": {
+   "auprc": 0.7289035073906105,
+   "auroc": 0.46240410052910047,
+   "f1": 0.7516570236831673,
+   "source": "live re-run, this script"
+  },
+  "cached tag cafecd (pre scores() fix)": {
+   "auprc": 0.7275862439111447,
+   "auroc": 0.462908583186361,
+   "f1": 0.7516570236831673,
+   "n": 54
+  },
+  "cached tag batch (stale pipeline)": {
+   "auprc": 0.6854420666414714,
+   "auroc": 0.4242813051146384,
+   "f1": 0.7338798139043238,
+   "n": 18
+  }
+ },
+ "identity_check_vs_cached_cafecd": {
+  "n": 54,
+  "same_support": 54,
+  "d_auprc": 0.0013172634794658595,
+  "d_auroc": -0.0005044826572604364
+ },
+ "rank_auprc": [
+  "pcmciplus",
+  "pcmci",
+  "var_ols",
+  "varlingam",
+  "granger_pairwise",
+  "cafe_cd",
+  "directlingam",
+  "dagma_linear",
+  "dynotears",
+  "fci",
+  "pc",
+  "fci_ts",
+  "pc_ts"
+ ],
+ "wall_s": 60.396239042282104,
+ "note": "CAFE-CD re-run live with the current src/cafe; the 12 baselines are read unchanged from the batch board. Matched systems only."
+}

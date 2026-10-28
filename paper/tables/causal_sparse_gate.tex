@@ -1,0 +1,36 @@
+\begin{table}[t]\centering\small
+\setlength{\tabcolsep}{3.4pt}
+\caption{\textbf{Where the factor-adjustment crossover sits, and whether a genuinely sparse downstream estimator moves it.} Off-diagonal lagged-edge AUC (\texttt{auc\_cross}) against the common-variance share $\chi$, for the identical four representations fed to three downstream estimators: an unpenalised pooled OLS-VAR, the lag-grouped panel group lasso and a per-target $L_1$ VAR. The sparse estimators are scored threshold-free by \emph{lambda entry order}, so no model-selection rule enters. $\Delta$ is the paired mean (\textsc{cafe}$-$\textsc{raw}) over seeds, `w' the paired win count and $p$ an exact one-sided sign-flip permutation test. $\chi^\star$ is the interpolated crossover. The \textsc{pca} arm (omitted for width; always the weakest) is non-causal. $n/\mathrm{col}=E(T-K)/(KP)$.}
+\label{tab:causalsparsegate}
+\begin{tabular}{r|rrrr@{\ }r@{\ }r|rrrr@{\ }r@{\ }r|rrrr@{\ }r@{\ }r}
+\toprule
+ & \multicolumn{6}{c}{OLS-VAR (unpenalised)} & \multicolumn{6}{c}{panel group lasso} & \multicolumn{6}{c}{L1 VAR (per target)} \\
+$\chi$ & raw & cafe & orc & $\Delta$ & w & $p$ & raw & cafe & orc & $\Delta$ & w & $p$ & raw & cafe & orc & $\Delta$ & w & $p$ \\
+\midrule
+\multicolumn{19}{l}{\textbf{base}: $E{=}10$, $T{=}60$, $P{=}24$, $n/\mathrm{col}{=}12.1$} \\
+0.40 & 0.979 & 0.907 & 0.992 & -0.072 & 0 & 1.000 & 0.941 & 0.875 & 0.966 & -0.066 & 0 & 1.000 & 0.982 & 0.923 & 0.995 & -0.059 & 0 & 1.000 \\
+0.50 & 0.971 & 0.907 & 0.992 & -0.063 & 0 & 1.000 & 0.922 & 0.866 & 0.966 & -0.056 & 0 & 1.000 & 0.971 & 0.922 & 0.995 & -0.049 & 0 & 1.000 \\
+0.60 & 0.958 & 0.917 & 0.992 & -0.041 & 0 & 1.000 & 0.893 & 0.871 & 0.966 & -0.022 & 1 & 0.996 & 0.951 & 0.927 & 0.995 & -0.024 & 1 & 0.992 \\
+0.70 & 0.938 & 0.903 & 0.992 & -0.035 & 0 & 1.000 & 0.852 & \textbf{0.856} & 0.966 & +0.005 & 6 & 0.336 & 0.919 & 0.911 & 0.995 & -0.009 & 2 & 0.727 \\
+0.80 & 0.906 & 0.897 & 0.992 & -0.009 & 2 & 0.953 & 0.798 & \textbf{0.838} & 0.966 & +0.039 & 8 & 0.004 & 0.871 & \textbf{0.900} & 0.995 & +0.028 & 8 & 0.004 \\
+0.90 & 0.835 & \textbf{0.854} & 0.992 & +0.018 & 7 & 0.008 & 0.717 & \textbf{0.777} & 0.966 & +0.060 & 8 & 0.004 & 0.782 & \textbf{0.847} & 0.995 & +0.065 & 8 & 0.004 \\
+0.95 & 0.753 & \textbf{0.790} & 0.992 & +0.037 & 7 & 0.008 & 0.643 & \textbf{0.701} & 0.966 & +0.058 & 8 & 0.004 & 0.692 & \textbf{0.767} & 0.995 & +0.075 & 8 & 0.004 \\
+\cmidrule{2-19}
+\multicolumn{1}{r|}{routed} & \multicolumn{6}{c}{$\chi^\star_{\mathrm{routed}}=0.83$} & \multicolumn{6}{c}{$\chi^\star_{\mathrm{routed}}=0.68$} & \multicolumn{6}{c}{$\chi^\star_{\mathrm{routed}}=0.72$} \\
+\multicolumn{1}{r|}{per-ent.} & \multicolumn{6}{c}{$\chi^\star_{\mathrm{perent}}=0.83$} & \multicolumn{6}{c}{$\chi^\star_{\mathrm{perent}}=0.65$} & \multicolumn{6}{c}{$\chi^\star_{\mathrm{perent}}=0.68$} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]\centering\small
+\caption{\textbf{Crossover $\chi^\star$ is set by the regime, not by the downstream estimator.} Interpolated $\chi$ at which the paired \textsc{cafe}$-$\textsc{raw} advantage in \texttt{auc\_cross} turns positive, for each downstream estimator and for both CAFE loading engines (\emph{routed} = the half-sample subspace-alignment diagnostic; \emph{per-entity} = the engine pinned, as in the OLS reference).}
+\label{tab:causalsparsegatecross}
+\begin{tabular}{llrrr}
+\toprule
+config & CAFE engine & OLS-VAR (unpenalised) & panel group lasso & L1 VAR (per target) \\
+\midrule
+base & routed & 0.83 & 0.68 & 0.72 \\
+ & per-entity & 0.83 & 0.65 & 0.68 \\
+\bottomrule
+\end{tabular}
+\end{table}

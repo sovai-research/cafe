@@ -37,11 +37,49 @@ pandas = ["pandas>=1.3"]
 polars = ["polars>=0.20"]
 viz = ["matplotlib>=3.5"]
 all = ["pandas>=1.3", "polars>=0.20", "matplotlib>=3.5"]
-# Head-to-head causal horse race only (NOT needed to use CAFE). Installs the deep
-# baselines via PyPOTS + the online Gaussian copula. Keep these OUT of the core so the
-# library stays numpy-only. BayOTIDE has no PyPI release -- git-clone it separately.
+# Head-to-head horse race only (NOT needed to use CAFE). Installs the deep imputation
+# baselines via PyPOTS + the online Gaussian copula, and the external CAUSAL-DISCOVERY
+# baselines used by bench/causal_baselines.py + bench/datasets_causal.py. Keep ALL of
+# these OUT of the core so the library stays numpy-only. BayOTIDE has no PyPI release --
+# git-clone it separately.
 # Recommended in an isolated venv: python -m venv .venv-bench && .venv-bench/bin/pip install -e ".[bench]"
-bench = ["pypots>=1.4", "torch>=2.2", "gcimpute>=0.0.4", "matplotlib>=3.5"]
+#
+# LICENCES (see docs/causal_baselines.md):
+#   lingam MIT | causal-learn MIT | dagma Apache-2.0  -> imported in-process, fine.
+#   tigramite GPL-3.0                                 -> NEVER imported in-process;
+#       bench/causal_baselines.py runs it in a subprocess (npz in / npz out) so no GPL
+#       code shares an interpreter with the MIT-licensed `cafe` package. The same rule
+#       applies to any Tetrad-based tool (py-tetrad / causal-cmd, GPL-3.0).
+#   dagma pulls python-igraph (GPL-2.0+) as a dependency, but only `dagma.utils` imports
+#       it; the wrapper imports `dagma.linear` exclusively.
+#
+# PYTHON 3.13 CAVEAT: lingam 1.13.0 still declares `scipy<=1.13.1`, which has no cp313
+# wheel, so a plain resolve tries to build scipy from source (needs gfortran) and fails.
+# lingam itself works fine on scipy 1.18. On 3.13 install the extra in two steps:
+#   pip install causal-learn dagma tigramite semopy autograd psy pypots torch gcimpute
+#   pip install --no-deps lingam pygam && pip install "progressbar2>=4.2,<5"
+# (semopy / pygam / psy / autograd are UNDECLARED runtime imports of lingam/__init__.py;
+#  pygam's own `scipy<1.17` pin is why it also needs --no-deps.)
+bench = [
+    "pypots>=1.4",
+    "torch>=2.2",
+    "gcimpute>=0.0.4",
+    "matplotlib>=3.5",
+    # --- causal discovery baselines (bench-only) ---
+    "lingam>=1.13",          # MIT      -- VARLiNGAM, DirectLiNGAM
+    "causal-learn>=0.1.4",   # MIT      -- PC, FCI
+    "dagma>=1.1",            # Apache-2 -- DAGMA-linear
+    "tigramite>=5.2",        # GPL-3.0  -- PCMCI/PCMCI+, SUBPROCESS ONLY
+    "semopy>=2.3",           # undeclared lingam import
+    "psy>=0.0.1",            # undeclared lingam import
+    "autograd>=1.6",         # undeclared lingam import
+    "pygam>=0.9",            # undeclared lingam import
+    # --- causal benchmark datasets (bench/datasets_causal.py) ---
+    "networkx>=3.0",         # CausalRivers ground-truth graphs (pickled DiGraphs)
+    "h5py>=3.8",             # CausalDynamics netCDF4 files
+    "statsmodels>=0.14",
+    "pandas>=1.3",
+]
 dev = [
     "pandas>=1.3",
     "polars>=0.20",

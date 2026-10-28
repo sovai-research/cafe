@@ -39,7 +39,7 @@ import numpy as np
 
 __all__ = [
     "trailing_windows", "right_edge",
-    "verify_causal", "make_causal_variant",
+    "verify_causal", "verify_causal_series", "make_causal_variant",
     "leakage_delta", "leakage_report", "audit_panel",
 ]
 
@@ -104,6 +104,63 @@ def verify_causal(impute_fn, X: np.ndarray, n_prefixes: int = 6,
         n_cmp += int(d.size)
         if d.size:
             max_rev = max(max_rev, float(d.max()))
+    return {"causal": max_rev <= tol, "max_revision": max_rev,
+            "n_comparisons": n_cmp}
+
+
+def verify_causal_series(fn, X: np.ndarray, n_prefixes: int = 6, tol: float = 1e-6,
+                         checkpoints=None) -> dict:
+    """Certify that a REPORTED TIME-INDEXED OBJECT is point-in-time.
+
+    ``verify_causal`` audits an imputed MATRIX -- one value per cell. Discovery reports
+    something else: an object *as of* a time (a covariance, a candidate set, a skeleton, an
+    oriented graph). ``fn(X, t) -> ndarray`` must return whatever the method reports at
+    time ``t`` using rows ``<= t``. This grows the input one prefix at a time and checks
+    that ``fn(X_full, t) == fn(X[:k+1], t)`` for every checkpoint ``t <= k`` -- i.e. that
+    what was reported at ``t`` never gets rewritten once the future arrives.
+
+    Set-valued outputs (candidate sets, supports, adjacency/graphs) are passed as 0/1
+    INDICATOR arrays, so ``max_revision`` reads directly as "did the reported object
+    change": 0.0 means no reported object was ever revised, 1.0 means an edge flipped.
+
+    Parameters
+    ----------
+    fn : callable ``(X, t) -> ndarray``
+        The reporting function. Must be deterministic and shape-stable in ``t``.
+    X : ndarray ``(T, N)``
+    n_prefixes : int, default 6
+        How many growing prefixes to re-run on.
+    tol : float, default 1e-6
+        Revision tolerance.
+    checkpoints : sequence of int, optional
+        Times at which the object is compared. Default: the prefix cut points themselves,
+        so every prefix is checked against every earlier checkpoint it contains.
+
+    Returns
+    -------
+    dict ``{"causal": bool, "max_revision": float, "n_comparisons": int}``
+    """
+    X = np.asarray(X, float)
+    T = X.shape[0]
+    cuts = np.unique(np.linspace(T // 3, T - 1, n_prefixes).astype(int))
+    cps = np.unique(np.asarray(cuts if checkpoints is None else checkpoints, int))
+    cps = cps[(cps >= 0) & (cps < T)]
+    ref = {int(t): np.asarray(fn(X.copy(), int(t)), float) for t in cps}
+    max_rev = 0.0
+    n_cmp = 0
+    for k in cuts:
+        Xp = X[: int(k) + 1].copy()
+        for t in cps[cps <= k]:                       # only objects the prefix can report
+            got = np.asarray(fn(Xp, int(t)), float)
+            exp = ref[int(t)]
+            if got.shape != exp.shape:                # a shape change IS a revision
+                return {"causal": False, "max_revision": float("inf"),
+                        "n_comparisons": n_cmp}
+            d = np.abs(got - exp)
+            d = d[np.isfinite(d)]
+            n_cmp += int(d.size)
+            if d.size:
+                max_rev = max(max_rev, float(d.max()))
     return {"causal": max_rev <= tol, "max_revision": max_rev,
             "n_comparisons": n_cmp}
 

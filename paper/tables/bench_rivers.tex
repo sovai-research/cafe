@@ -1,0 +1,216 @@
+% bench/exp_bench_rivers.py --report   (generated; do not edit by hand)
+% Shared cell for EVERY method: resolution=6h, normalize=False, max_lag=3, timeout=120.0s.
+% Diagonal REMOVED before scoring (the CausalRivers convention);
+% F1max is the PER-SAMPLE mean (the variant Table 7's magnitudes match).
+\begin{table}[t]
+\centering\small
+\caption{CausalRivers head-to-head, per configuration.  Mean per-sample AUROC/AUPRC with the diagonal removed (the benchmark's own convention), oracle-threshold max-F1, mean SHD at each method's own decision threshold, and CPU wall-clock over the whole sample set.  \textbf{AUPRC is the metric to read}: these graphs are sparse, so AUROC is dominated by the negative class.  The two arms must not be collapsed: the \emph{scale-exploiting} arm is the published protocol, in which the raw discharge magnitude encodes edge direction and largely produces the published VAR $0.85$; the \emph{scale-free} arm removes that prior and is the actual causal-discovery comparison.  Every method gets the same lag budget, preprocessing and timeout; failures and timeouts are reported, not dropped.}
+\label{tab:bench_rivers}
+\begin{tabular}{llrrrrrr}
+\toprule
+Configuration & Method & AUROC & AUPRC & F1$_{\max}$ & SHD & CPU (s) & fail/TO \\
+\midrule
+\multicolumn{8}{c}{\textbf{scale-exploiting (published protocol)}}\\
+\midrule
+flood\_full/random\_5 & DYNOTEARS & 0.766 & 0.625 & 0.686 & 11.1 & 145.1 & 0/0 \\
+ & VAR (OLS) & 0.849 & 0.614 & 0.684 & 10.6 & 0.1 & 0/0 \\
+ & DAGMA (linear) & 0.823 & 0.594 & 0.668 & 5.4 & 486.5 & 0/0 \\
+ & VARLiNGAM & 0.743 & 0.540 & 0.619 & 12.8 & 130.5 & 0/0 \\
+ & DirectLiNGAM & 0.742 & 0.540 & 0.618 & 12.9 & 168.0 & 0/0 \\
+ & Granger (pairwise) & 0.709 & 0.472 & 0.576 & 15.5 & 3.7 & 0/0 \\
+ & PCMCI & 0.595 & 0.401 & 0.498 & 11.0 & 435.8 & 0/0 \\
+ & PCMCI+ & 0.532 & 0.315 & 0.449 & 6.7 & 597.9 & 0/0 \\
+ & FCI & 0.511 & 0.267 & 0.403 & 4.2 & 1.3 & 0/0 \\
+ & FCI (window) & 0.489 & 0.263 & 0.373 & 4.7 & 206.4 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.452 & 0.257 & 0.407 & 9.9 & 667.4 & 0/0 \\
+ & PC & 0.511 & 0.255 & 0.396 & 5.3 & 0.9 & 0/0 \\
+ & PC (window) & 0.515 & 0.240 & 0.365 & 5.9 & 135.0 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.426 & 0.238 & 0.400 & 8.9 & 364.2 & 0/0 \\
+\addlinespace
+east/random\_3 & VAR (OLS) & 0.819 & 0.792 & 0.838 & 3.2 & 0.1 & 0/0 \\
+ & VARLiNGAM & 0.804 & 0.779 & 0.820 & 3.5 & 1253.5 & 1/1 \\
+ & DirectLiNGAM & 0.802 & 0.777 & 0.820 & 3.5 & 36.1 & 0/0 \\
+ & DAGMA (linear) & 0.813 & 0.765 & 0.813 & 1.1 & 256.4 & 0/0 \\
+ & Granger (pairwise) & 0.702 & 0.697 & 0.759 & 3.6 & 1.8 & 0/0 \\
+ & PCMCI & 0.667 & 0.677 & 0.731 & 3.5 & 178.9 & 0/0 \\
+ & DYNOTEARS & 0.650 & 0.645 & 0.705 & 2.8 & 64.7 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.547 & 0.549 & 0.645 & 3.0 & 257.0 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.546 & 0.516 & 0.621 & 2.7 & 184.3 & 0/0 \\
+ & FCI (window) & 0.606 & 0.506 & 0.604 & 1.8 & 24.0 & 1/0 \\
+ & PCMCI+ & 0.625 & 0.505 & 0.641 & 2.3 & 174.6 & 0/0 \\
+ & PC (window) & 0.615 & 0.501 & 0.609 & 1.7 & 15.9 & 1/0 \\
+ & FCI & 0.509 & 0.346 & 0.511 & 2.0 & 0.2 & 0/0 \\
+ & PC & 0.508 & 0.345 & 0.509 & 2.0 & 0.2 & 0/0 \\
+\addlinespace
+east/random\_5 & VAR (OLS) & 0.805 & 0.561 & 0.656 & 11.4 & 0.0 & 0/0 \\
+ & DYNOTEARS & 0.704 & 0.553 & 0.620 & 10.3 & 69.0 & 0/0 \\
+ & DAGMA (linear) & 0.777 & 0.546 & 0.645 & 5.2 & 207.8 & 0/0 \\
+ & DirectLiNGAM & 0.766 & 0.540 & 0.637 & 13.2 & 103.0 & 0/0 \\
+ & VARLiNGAM & 0.766 & 0.539 & 0.636 & 13.2 & 76.5 & 0/0 \\
+ & Granger (pairwise) & 0.698 & 0.526 & 0.587 & 14.5 & 2.2 & 0/0 \\
+ & PCMCI & 0.657 & 0.496 & 0.558 & 12.3 & 139.3 & 0/0 \\
+ & PCMCI+ & 0.620 & 0.368 & 0.494 & 6.3 & 304.4 & 0/0 \\
+ & FCI (window) & 0.576 & 0.324 & 0.432 & 4.2 & 70.7 & 2/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.514 & 0.305 & 0.441 & 10.0 & 241.5 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.520 & 0.304 & 0.444 & 11.0 & 239.0 & 0/0 \\
+ & PC (window) & 0.586 & 0.303 & 0.427 & 4.8 & 50.3 & 2/0 \\
+ & FCI & 0.521 & 0.252 & 0.389 & 4.4 & 0.7 & 0/0 \\
+ & PC & 0.528 & 0.245 & 0.387 & 5.7 & 0.4 & 0/0 \\
+\addlinespace
+east/close\_5 & DirectLiNGAM & 0.773 & 0.568 & 0.657 & 14.5 & 107.3 & 0/0 \\
+ & VARLiNGAM & 0.772 & 0.567 & 0.657 & 14.5 & 77.3 & 0/0 \\
+ & VAR (OLS) & 0.788 & 0.552 & 0.648 & 13.2 & 0.0 & 0/0 \\
+ & DAGMA (linear) & 0.756 & 0.510 & 0.641 & 4.3 & 144.7 & 0/0 \\
+ & DYNOTEARS & 0.621 & 0.482 & 0.556 & 7.7 & 49.6 & 0/0 \\
+ & PCMCI & 0.633 & 0.478 & 0.539 & 14.5 & 134.7 & 0/0 \\
+ & Granger (pairwise) & 0.632 & 0.476 & 0.543 & 14.6 & 2.2 & 0/0 \\
+ & PCMCI+ & 0.648 & 0.372 & 0.513 & 7.0 & 369.9 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.564 & 0.360 & 0.469 & 12.4 & 184.3 & 0/0 \\
+ & FCI (window) & 0.602 & 0.349 & 0.447 & 3.9 & 67.5 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.547 & 0.337 & 0.452 & 11.6 & 186.7 & 0/0 \\
+ & PC (window) & 0.596 & 0.296 & 0.425 & 4.7 & 45.3 & 0/0 \\
+ & FCI & 0.513 & 0.245 & 0.391 & 4.6 & 0.6 & 0/0 \\
+ & PC & 0.514 & 0.241 & 0.384 & 5.8 & 0.4 & 0/0 \\
+\addlinespace
+east/root\_cause\_3 & DAGMA (linear) & 0.783 & 0.741 & 0.785 & 1.1 & 166.3 & 0/0 \\
+ & VAR (OLS) & 0.779 & 0.739 & 0.787 & 3.2 & 0.1 & 0/0 \\
+ & Granger (pairwise) & 0.731 & 0.733 & 0.766 & 3.5 & 1.1 & 0/0 \\
+ & PCMCI & 0.733 & 0.731 & 0.766 & 3.4 & 140.8 & 0/0 \\
+ & VARLiNGAM & 0.764 & 0.729 & 0.783 & 3.5 & 57.0 & 0/0 \\
+ & DirectLiNGAM & 0.764 & 0.727 & 0.783 & 3.6 & 34.1 & 0/0 \\
+ & DYNOTEARS & 0.644 & 0.640 & 0.700 & 3.0 & 48.9 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.641 & 0.613 & 0.682 & 2.8 & 239.8 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.637 & 0.562 & 0.657 & 2.5 & 198.1 & 0/0 \\
+ & FCI (window) & 0.622 & 0.527 & 0.609 & 1.7 & 19.1 & 0/0 \\
+ & PCMCI+ & 0.667 & 0.517 & 0.648 & 2.2 & 173.2 & 0/0 \\
+ & PC (window) & 0.627 & 0.508 & 0.602 & 1.6 & 13.1 & 0/0 \\
+ & FCI & 0.516 & 0.351 & 0.519 & 2.0 & 0.2 & 0/0 \\
+ & PC & 0.515 & 0.350 & 0.516 & 2.0 & 0.1 & 0/0 \\
+\addlinespace
+east/confounder\_3 & DirectLiNGAM & 0.735 & 0.731 & 0.749 & 3.0 & 9.4 & 0/0 \\
+ & VARLiNGAM & 0.735 & 0.731 & 0.749 & 3.0 & 16.8 & 0/0 \\
+ & Granger (pairwise) & 0.681 & 0.709 & 0.755 & 2.9 & 0.4 & 0/0 \\
+ & VAR (OLS) & 0.675 & 0.696 & 0.719 & 2.9 & 0.0 & 0/0 \\
+ & PCMCI & 0.630 & 0.661 & 0.710 & 3.0 & 48.7 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.529 & 0.565 & 0.642 & 2.8 & 65.4 & 0/0 \\
+ & DAGMA (linear) & 0.582 & 0.558 & 0.629 & 1.6 & 47.7 & 0/0 \\
+ & PC (window) & 0.617 & 0.516 & 0.608 & 1.6 & 2.9 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.501 & 0.506 & 0.617 & 2.5 & 28.2 & 0/0 \\
+ & DYNOTEARS & 0.459 & 0.499 & 0.604 & 2.6 & 9.5 & 0/0 \\
+ & PCMCI+ & 0.568 & 0.484 & 0.627 & 2.0 & 40.6 & 0/0 \\
+ & FCI (window) & 0.537 & 0.462 & 0.575 & 2.0 & 5.1 & 0/0 \\
+ & FCI & 0.504 & 0.408 & 0.568 & 2.2 & 0.0 & 0/0 \\
+ & PC & 0.483 & 0.387 & 0.547 & 2.1 & 0.1 & 0/0 \\
+\addlinespace
+\multicolumn{8}{l}{\emph{Point-in-time board -- the graph at time $t$ uses only data $\le t$.  Every rival above is batch and sees}}\\
+\multicolumn{8}{l}{\emph{the whole series, so no rival can enter this board honestly.  NOT comparable with the rows above.}}\\
+flood\_full/random\_5 & \textbf{CAF\'E-CD (point-in-time)} & 0.449 & 0.256 & 0.407 & 9.9 & 1546.8 & 0/0 \\
+east/random\_3 & \textbf{CAF\'E-CD (point-in-time)} & 0.548 & 0.550 & 0.645 & 3.0 & 835.2 & 0/0 \\
+east/random\_5 & \textbf{CAF\'E-CD (point-in-time)} & 0.520 & 0.304 & 0.444 & 11.0 & 3647.2 & 0/0 \\
+east/close\_5 & \textbf{CAF\'E-CD (point-in-time)} & 0.564 & 0.360 & 0.469 & 12.4 & 925.5 & 0/0 \\
+east/root\_cause\_3 & \textbf{CAF\'E-CD (point-in-time)} & 0.642 & 0.614 & 0.683 & 2.8 & 811.8 & 0/0 \\
+east/confounder\_3 & \textbf{CAF\'E-CD (point-in-time)} & 0.534 & 0.566 & 0.645 & 2.8 & 81.3 & 0/0 \\
+\midrule
+\multicolumn{8}{c}{\textbf{scale-free}}\\
+\midrule
+flood\_full/random\_5 & Granger (pairwise) & 0.709 & 0.472 & 0.576 & 15.5 & 5.2 & 0/0 \\
+ & VAR (OLS) & 0.596 & 0.416 & 0.509 & 10.6 & 0.1 & 0/0 \\
+ & PCMCI & 0.595 & 0.401 & 0.498 & 11.0 & 343.2 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.554 & 0.345 & 0.456 & 12.6 & 588.8 & 0/0 \\
+ & DirectLiNGAM & 0.497 & 0.334 & 0.441 & 12.9 & 237.6 & 0/0 \\
+ & VARLiNGAM & 0.497 & 0.334 & 0.441 & 12.9 & 195.3 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.544 & 0.324 & 0.448 & 12.2 & 232.3 & 0/0 \\
+ & DAGMA (linear) & 0.536 & 0.323 & 0.402 & 5.4 & 145.7 & 0/0 \\
+ & PCMCI+ & 0.532 & 0.315 & 0.449 & 6.7 & 581.7 & 0/0 \\
+ & DYNOTEARS & 0.458 & 0.273 & 0.363 & 7.6 & 53.9 & 0/0 \\
+ & FCI & 0.511 & 0.267 & 0.403 & 4.2 & 2.0 & 0/0 \\
+ & FCI (window) & 0.489 & 0.263 & 0.373 & 4.7 & 200.6 & 0/0 \\
+ & PC & 0.511 & 0.255 & 0.396 & 5.3 & 1.3 & 0/0 \\
+ & PC (window) & 0.515 & 0.240 & 0.365 & 5.9 & 183.3 & 0/0 \\
+\addlinespace
+east/random\_3 & Granger (pairwise) & 0.700 & 0.694 & 0.757 & 3.6 & 0.8 & 0/0 \\
+ & VAR (OLS) & 0.691 & 0.692 & 0.752 & 3.3 & 0.0 & 0/0 \\
+ & PCMCI & 0.667 & 0.677 & 0.731 & 3.5 & 96.7 & 0/0 \\
+ & DirectLiNGAM & 0.596 & 0.608 & 0.703 & 3.5 & 23.4 & 0/0 \\
+ & VARLiNGAM & 0.595 & 0.608 & 0.703 & 3.5 & 39.4 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.605 & 0.590 & 0.671 & 2.6 & 172.3 & 0/0 \\
+ & DYNOTEARS & 0.634 & 0.561 & 0.643 & 2.2 & 13.9 & 0/0 \\
+ & DAGMA (linear) & 0.540 & 0.530 & 0.616 & 1.7 & 52.2 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.595 & 0.528 & 0.645 & 2.3 & 172.4 & 0/0 \\
+ & PCMCI+ & 0.626 & 0.505 & 0.641 & 2.3 & 112.2 & 0/0 \\
+ & FCI (window) & 0.604 & 0.504 & 0.603 & 1.8 & 15.2 & 0/0 \\
+ & PC (window) & 0.614 & 0.501 & 0.609 & 1.7 & 10.0 & 0/0 \\
+ & FCI & 0.508 & 0.345 & 0.511 & 2.0 & 0.1 & 0/0 \\
+ & PC & 0.507 & 0.344 & 0.509 & 2.0 & 0.1 & 0/0 \\
+\addlinespace
+east/random\_5 & Granger (pairwise) & 0.697 & 0.525 & 0.586 & 14.5 & 2.2 & 0/0 \\
+ & VAR (OLS) & 0.675 & 0.523 & 0.585 & 11.4 & 0.0 & 0/0 \\
+ & PCMCI & 0.656 & 0.496 & 0.558 & 12.3 & 140.0 & 0/0 \\
+ & VARLiNGAM & 0.587 & 0.380 & 0.493 & 13.2 & 78.9 & 0/0 \\
+ & DirectLiNGAM & 0.587 & 0.380 & 0.492 & 13.2 & 107.9 & 0/0 \\
+ & DYNOTEARS & 0.579 & 0.374 & 0.462 & 6.3 & 24.1 & 0/0 \\
+ & PCMCI+ & 0.620 & 0.368 & 0.494 & 6.3 & 304.1 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.544 & 0.333 & 0.450 & 11.3 & 169.7 & 0/0 \\
+ & FCI (window) & 0.576 & 0.324 & 0.432 & 4.2 & 311.7 & 2/2 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.536 & 0.318 & 0.449 & 12.1 & 170.2 & 0/0 \\
+ & PC (window) & 0.586 & 0.303 & 0.427 & 4.8 & 292.6 & 2/2 \\
+ & DAGMA (linear) & 0.515 & 0.297 & 0.384 & 5.0 & 59.2 & 0/0 \\
+ & FCI & 0.519 & 0.251 & 0.389 & 4.4 & 0.6 & 0/0 \\
+ & PC & 0.526 & 0.245 & 0.387 & 5.7 & 0.4 & 0/0 \\
+\addlinespace
+east/close\_5 & VAR (OLS) & 0.671 & 0.522 & 0.574 & 13.2 & 0.0 & 0/0 \\
+ & PCMCI & 0.633 & 0.478 & 0.539 & 14.5 & 138.2 & 0/0 \\
+ & Granger (pairwise) & 0.632 & 0.476 & 0.543 & 14.6 & 2.2 & 0/0 \\
+ & DYNOTEARS & 0.627 & 0.404 & 0.517 & 7.8 & 29.3 & 0/0 \\
+ & PCMCI+ & 0.648 & 0.372 & 0.513 & 7.0 & 374.0 & 0/0 \\
+ & DirectLiNGAM & 0.577 & 0.368 & 0.488 & 14.5 & 102.0 & 0/0 \\
+ & VARLiNGAM & 0.577 & 0.368 & 0.488 & 14.5 & 75.1 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.553 & 0.354 & 0.454 & 12.8 & 236.7 & 0/0 \\
+ & FCI (window) & 0.602 & 0.349 & 0.447 & 3.9 & 69.1 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.545 & 0.338 & 0.459 & 13.4 & 166.8 & 0/0 \\
+ & PC (window) & 0.596 & 0.296 & 0.425 & 4.7 & 47.6 & 0/0 \\
+ & DAGMA (linear) & 0.518 & 0.291 & 0.386 & 4.8 & 61.6 & 0/0 \\
+ & FCI & 0.513 & 0.245 & 0.391 & 4.6 & 0.7 & 0/0 \\
+ & PC & 0.514 & 0.241 & 0.384 & 5.8 & 0.4 & 0/0 \\
+\addlinespace
+east/root\_cause\_3 & VAR (OLS) & 0.742 & 0.744 & 0.772 & 3.2 & 0.0 & 0/0 \\
+ & Granger (pairwise) & 0.731 & 0.733 & 0.766 & 3.5 & 0.8 & 0/0 \\
+ & PCMCI & 0.733 & 0.731 & 0.766 & 3.4 & 129.1 & 0/0 \\
+ & DirectLiNGAM & 0.672 & 0.659 & 0.728 & 3.6 & 23.9 & 0/0 \\
+ & VARLiNGAM & 0.672 & 0.659 & 0.728 & 3.6 & 41.4 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.607 & 0.588 & 0.669 & 2.7 & 247.2 & 0/0 \\
+ & DYNOTEARS & 0.629 & 0.568 & 0.645 & 2.1 & 14.2 & 0/0 \\
+ & DAGMA (linear) & 0.557 & 0.557 & 0.636 & 1.6 & 54.8 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.609 & 0.546 & 0.648 & 2.3 & 247.9 & 0/0 \\
+ & FCI (window) & 0.621 & 0.528 & 0.610 & 1.8 & 13.4 & 0/0 \\
+ & PCMCI+ & 0.667 & 0.517 & 0.648 & 2.2 & 158.1 & 0/0 \\
+ & PC (window) & 0.627 & 0.508 & 0.602 & 1.6 & 9.3 & 0/0 \\
+ & FCI & 0.516 & 0.351 & 0.519 & 2.0 & 0.1 & 0/0 \\
+ & PC & 0.515 & 0.350 & 0.516 & 2.0 & 0.1 & 0/0 \\
+\addlinespace
+east/confounder\_3 & Granger (pairwise) & 0.681 & 0.709 & 0.755 & 2.9 & 0.2 & 0/0 \\
+ & VAR (OLS) & 0.681 & 0.709 & 0.748 & 2.9 & 0.0 & 0/0 \\
+ & DirectLiNGAM & 0.649 & 0.668 & 0.700 & 3.0 & 5.0 & 0/0 \\
+ & VARLiNGAM & 0.649 & 0.668 & 0.700 & 3.0 & 8.4 & 0/0 \\
+ & PCMCI & 0.630 & 0.661 & 0.710 & 3.0 & 20.8 & 0/0 \\
+ & DAGMA (linear) & 0.626 & 0.628 & 0.688 & 1.5 & 10.4 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch)} & 0.576 & 0.541 & 0.639 & 2.4 & 25.7 & 0/0 \\
+ & PC (window) & 0.617 & 0.516 & 0.608 & 1.6 & 1.6 & 0/0 \\
+ & \textbf{CAF\'E-CD (batch, lagged only)} & 0.586 & 0.503 & 0.638 & 2.0 & 25.8 & 0/0 \\
+ & DYNOTEARS & 0.558 & 0.485 & 0.590 & 2.2 & 2.8 & 0/0 \\
+ & PCMCI+ & 0.568 & 0.484 & 0.627 & 2.0 & 16.4 & 0/0 \\
+ & FCI (window) & 0.537 & 0.462 & 0.575 & 2.0 & 2.5 & 0/0 \\
+ & FCI & 0.504 & 0.408 & 0.568 & 2.2 & 0.0 & 0/0 \\
+ & PC & 0.483 & 0.387 & 0.547 & 2.1 & 0.0 & 0/0 \\
+\addlinespace
+\multicolumn{8}{l}{\emph{Point-in-time board -- the graph at time $t$ uses only data $\le t$.  Every rival above is batch and sees}}\\
+\multicolumn{8}{l}{\emph{the whole series, so no rival can enter this board honestly.  NOT comparable with the rows above.}}\\
+flood\_full/random\_5 & \textbf{CAF\'E-CD (point-in-time)} & 0.554 & 0.345 & 0.458 & 12.6 & 766.3 & 0/0 \\
+east/random\_3 & \textbf{CAF\'E-CD (point-in-time)} & 0.605 & 0.590 & 0.671 & 2.6 & 542.5 & 0/0 \\
+east/random\_5 & \textbf{CAF\'E-CD (point-in-time)} & 0.536 & 0.318 & 0.449 & 12.1 & 846.7 & 0/0 \\
+east/close\_5 & \textbf{CAF\'E-CD (point-in-time)} & 0.545 & 0.338 & 0.459 & 13.4 & 849.7 & 0/0 \\
+east/root\_cause\_3 & \textbf{CAF\'E-CD (point-in-time)} & 0.607 & 0.588 & 0.669 & 2.7 & 843.2 & 0/0 \\
+east/confounder\_3 & \textbf{CAF\'E-CD (point-in-time)} & 0.576 & 0.541 & 0.639 & 2.4 & 80.9 & 0/0 \\
+\bottomrule
+\end{tabular}
+\end{table}

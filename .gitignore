@@ -30,3 +30,7 @@ build/
 .venv-bench/
 bench/deep_horserace_cache.json
 bench/horserace_cache_block.json
+
+# Causal-discovery benchmark downloads (bench-only, ~1.2 GB: CausalRivers
+# product.zip 133 MB -> 1.0 GB, CausalDynamics simple 44 MB -> 109 MB)
+data/causal/

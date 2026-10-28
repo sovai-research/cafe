@@ -178,6 +178,15 @@ class _UnifiedCore:
         self.R = R_MAX
         rng = np.random.default_rng(0)
         self.W = 0.01 * rng.standard_normal((N, self.R))     # loadings (pooled)
+        # --- loading-version bookkeeping (INTROSPECTION ONLY -- never read by the
+        # imputation arithmetic). W is piecewise-constant between _refit_W() calls, so a
+        # monotone version counter plus ONE snapshot PER REFIT records everything a
+        # downstream consumer needs at ~1/REFIT_EVERY the memory of storing W per row
+        # (T=2000, N=60: 390 KB of snapshots vs 7.7 MB of per-row copies, for exactly
+        # the same information). Snapshots are only appended when record=True.
+        self.W_ver = 0
+        self.W_snapshots = []
+        self.s_fac_snapshots = []
         self.alpha = np.ones(self.R)                          # ARD precisions on W cols
         self.beta = np.zeros((self.P, N)) if self.P else np.zeros((0, N))
         self.beta_alpha = np.ones(max(self.P, 1))             # ARD on Fourier basis
@@ -327,6 +336,24 @@ class _UnifiedCore:
         A = self.A_buf_store[sl]               # view: in-place refinement writes back
         Rf = np.where(Wobs, R, 0.0)
         ent = self.ent_store[sl]
+        # --- (entity, time) regrouping of the trailing window (panel streams only) ---
+        # A POOLED panel stream arrives in (time, entity) order, so consecutive buffered
+        # rows belong to DIFFERENT entities and the `same`-entity test below would be
+        # False almost everywhere: the AR coupling would silently vanish, and the `a`
+        # estimator's fallback would then regress the factor state ACROSS entity
+        # boundaries -- a meaningless quantity. Sorting the window by (entity, time)
+        # restores "previous row == previous time of the SAME entity" for every block, so
+        # both the ALS coupling and the AR fit are within-entity again. This is a
+        # <=WINDOW x R gather done once per REFIT_EVERY rows (tens of microseconds).
+        # E == 1 (every 2D / per-entity run) is ALREADY in this order, so the reorder is
+        # skipped entirely there and that path is byte-for-byte untouched.
+        reord = None
+        if self.E > 1:
+            reord = np.lexsort((self.tidx_store[sl], ent))
+            Rf = Rf[reord]
+            Wobs = Wobs[reord]
+            ent = ent[reord]
+            A = A[reord]                       # a COPY -- scattered back after the sweeps
         # --- batched ALS (vectorized rewrite of the per-row/per-column solve loops) ---
         # The old loops issued ~(n + N) tiny R x R cho_factor/cho_solve calls PER SWEEP,
         # each paying ~25us of scipy wrapper overhead on ~1us of actual flops. Here every
@@ -379,6 +406,10 @@ class _UnifiedCore:
             Wsol = np.linalg.solve(Gc, rhs_c[..., None])[..., 0]
             self.W[col_has] = Wsol[col_has]                # empty columns keep prior W
         # A is a view into the ring store; the in-place updates above already persist it.
+        # When the window was regrouped, A is a COPY in (entity, time) order -- scatter the
+        # refined row factors back to their original ring slots.
+        if reord is not None:
+            self.A_buf_store[self._bh + reord] = A
         # --- ARD empirical-Bayes update of per-column precisions alpha_l ---
         #   alpha_l = (N) / (||W[:,l]||^2 + eps)   (evidence-style; unused cols -> huge)
         col_e = np.sum(self.W ** 2, axis=0)
@@ -398,12 +429,24 @@ class _UnifiedCore:
                 pair = ent[1:] == ent[:-1]
                 zt = zt[pair]; ztm = ztm[pair]
             if zt.shape[0] < 1:
-                zt = A[1:]; ztm = A[:-1]
-            num = float(np.sum(zt * ztm))
-            den = float(np.sum(ztm * ztm)) + 1.0
-            a_hat = num / den
-            self.a = float(np.clip(a_hat, 0.0, 0.999))
+                # No consecutive SAME-entity factor pair in the window (e.g. a pooled panel
+                # whose trailing window spans a single time step). The old fallback
+                # regressed A[1:] on A[:-1] regardless, i.e. across entity boundaries --
+                # a quantity with no meaning. KEEP the previously learned `a` instead;
+                # unreachable for E == 1 (where every pair is same-entity and n >= 2), so
+                # the 2D path is unaffected.
+                zt = ztm = None
+            if zt is not None:
+                num = float(np.sum(zt * ztm))
+                den = float(np.sum(ztm * ztm)) + 1.0
+                a_hat = num / den
+                self.a = float(np.clip(a_hat, 0.0, 0.999))
         self.W_ready = True
+        # --- introspection bookkeeping (no effect on any imputed value) ---
+        self.W_ver += 1
+        if getattr(self, "record", False):
+            self.W_snapshots.append(self.W.copy())
+            self.s_fac_snapshots.append(np.asarray(self.s_fac, float).copy())
 
     # -- cross-section conditional mean+variance from pooled EW residual cov --
     #    Returns (cond_mean[miss], cond_var[miss]) for inverse-variance blending with
@@ -586,6 +629,11 @@ class _UnifiedCore:
         else:
             z_t = self.a * z_prev if z_prev is not None else np.zeros(self.R)
             lr = self.W @ z_t
+        # Loading version that ACTUALLY produced `lr` on this row. Captured here and not
+        # in the trace block at the bottom because _refit_W() runs in between (and bumps
+        # the counter), so reading self.W_ver down there would attribute this row's factor
+        # term to the NEXT loadings. Introspection only.
+        _w_ver_used = self.W_ver
 
         # per-feature idiosyncratic AR carry for missing cells: last idiosyncratic level
         # decayed by rho^age (age = steps since last observation). Vanishes for scattered
@@ -847,6 +895,14 @@ class _UnifiedCore:
                 row_w=float(row_w), r2row=(float(r2row) if obs.any() else float("nan")),
                 nu=float(self.nu), a=float(self.a), scale2=float(self.scale2),
                 rho=float(self.rho_idio), alpha=self.alpha.copy(), psi=self.psi.copy(),
+                # winsorized, de-FE/de-season/de-time-FE residual that FED the factor
+                # solve (0 at unobserved cells by construction). Kept for the robust
+                # residual view; NEVER the default -- winsorizing kills exactly the tail
+                # that identifies edge direction in LiNGAM-family orientation rules.
+                resid_c=resid_c.copy(),
+                # version of the loadings that produced `lr` here; the matrix itself is
+                # core.W_snapshots[w_ver - 1] (w_ver == 0 => the pre-first-refit init).
+                w_ver=int(_w_ver_used),
             ))
             self._cvar_row = None
         return out, z_t

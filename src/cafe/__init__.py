@@ -13,11 +13,21 @@ dependency network, and forecasts -- from the same forward pass.
 from . import audit, baselines
 from .benchmark import benchmark
 from .conformal import ConformalCalibrator, conformal_multipliers
+from .discovery import (
+    CausalGraph,
+    Edge,
+    PitGraphs,
+    discover,
+    loading_homogeneity_ratio,
+    max_edge_revision,
+)
 from .model import CAFE, CafeResult, impute
 from .recoverability import recoverability_score, score_from_result, selective_impute
 
 __all__ = ["CAFE", "CafeResult", "impute", "benchmark", "baselines", "audit",
            "ConformalCalibrator", "conformal_multipliers",
            "recoverability_score", "selective_impute", "score_from_result",
+           "discover", "CausalGraph", "PitGraphs", "Edge",
+           "loading_homogeneity_ratio", "max_edge_revision",
            "__version__"]
 __version__ = "0.1.0"

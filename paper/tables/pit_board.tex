@@ -1,0 +1,26 @@
+\begin{table*}[tbp]\centering\small
+\setlength{\tabcolsep}{3.5pt}
+\caption{\textbf{The point-in-time board --- a look-ahead audit for causal \emph{discovery}.} Published time-series discovery methods are \emph{batch}: they consume the whole series before emitting a graph, so a graph used to decide anything at time $t$ carries information from after $t$. Every method here is run through one neutral standard --- \texttt{cafe.audit.verify\_causal\_series}, the same truncation-invariance certificate CAFE publishes for its imputations, with the graph support passed as the 0/1 indicator that function documents. Write $\mathrm{rep}(Z,t)$ for the graph a method asserts \emph{for time} $t$ when the analysis is run on rows $Z$. \textsc{rev} $=\max$ edge revision: $0$ iff $\mathrm{rep}(X_{:\tau},t)=\mathrm{rep}(X,t)$ for every checkpoint $t\le\tau$, i.e.\ nothing already asserted is ever rewritten. \textsc{churn} is the size of that revision (Jaccard distance between the two), averaged over prefixes and again at $\tau=0.9T$; \textsc{flip} counts edges whose orientation reverses. $\Delta$ is the \emph{leakage delta} on each method's own metric, own threshold and own data: quality fitted on the whole series (as published) minus right-edge honest quality (refitted on each prefix and read out at $t$). $\Delta_{\mathrm{m}}$ repeats it at \emph{identical sample size} --- a length-$L$ window straddling $t$ against a length-$L$ trailing window --- so the sample-size effect is removed and only look-ahead remains. Mean over 8 tasks (synthetic with known graphs, CausalRivers, CausalDynamics); $^{\dagger}$ marks a method that asserted no edges at all, whose zero revision is vacuous rather than point-in-time. $^{\ddagger}$ CAFE-CD's \emph{quality} columns are provisional --- its edge ranking is a two-tier step rather than a calibrated score, which understates any rank-based metric; the revision certificate reads the support under truncation and is unaffected, as is $F_1$. Every rival's $\Delta$ is computed entirely from that rival's own outputs on its own metric.}
+\label{tab:pitboard}
+\begin{tabular}{@{}lccccrrrrrr@{}}
+\toprule
+ & \multicolumn{4}{c}{revision certificate} & \multicolumn{4}{c}{AUPRC} & \multicolumn{2}{c}{$F_1$} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-11}
+Method & rev & churn & churn$_{.9}$ & flips & pub. & honest & $\Delta$ & $\Delta_{\mathrm{m}}$ & pub. & $\Delta$ \\
+\midrule
+VARLiNGAM & $1$ & 0.142 & -- & 20 & 0.919 & 0.766 & +0.153 & -0.009 & 0.804 & +0.142 \\
+DAGMA (linear) & $1$ & 0.156 & -- & 26 & 0.567 & 0.530 & +0.036 & -0.006 & 0.434 & +0.049 \\
+PC (time-lagged) & $1$ & 0.107 & -- & 27 & 0.634 & 0.597 & +0.036 & +0.012 & 0.664 & +0.081 \\
+VAR-OLS & $1$ & 0.095 & -- & 5 & 0.778 & 0.759 & +0.018 & -0.014 & 0.664 & +0.034 \\
+\textbf{CAFE-CD (pit)}$^{\ddagger}$ & $\mathbf{0}$ & 0.000 & 0.000 & 0 & 0.626 & 0.608 & +0.018 & -0.006 & 0.516 & +0.059 \\
+PCMCI & $1$ & 0.146 & -- & 10 & 0.787 & 0.770 & +0.017 & -0.005 & 0.687 & +0.025 \\
+DirectLiNGAM & $1$ & 0.258 & -- & 115 & 0.531 & 0.518 & +0.013 & -0.006 & 0.362 & +0.026 \\
+PCMCI+ & $1$ & 0.166 & -- & 54 & 0.671 & 0.659 & +0.013 & +0.016 & 0.682 & +0.009 \\
+Granger (pairwise) & $1$ & 0.115 & -- & 40 & 0.740 & 0.730 & +0.010 & -0.009 & 0.645 & -0.017 \\
+FCI (time-lagged) & $1$ & 0.109 & -- & 4 & 0.629 & 0.623 & +0.006 & +0.009 & 0.604 & +0.041 \\
+DYNOTEARS & $1$ & 0.061 & -- & 0 & 0.742 & 0.744 & -0.002 & -0.003 & 0.574 & +0.010 \\
+FCI & $1$ & 0.201 & -- & 1 & 0.424 & 0.433 & -0.010 & +0.004 & 0.042 & -0.020 \\
+PC & $1$ & 0.317 & -- & 54 & 0.400 & 0.423 & -0.023 & -0.001 & 0.101 & -0.075 \\
+\bottomrule
+\end{tabular}
+\end{table*}

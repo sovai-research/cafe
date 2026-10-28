@@ -1,0 +1,27 @@
+{
+ "cell": {
+  "region": "flood_full",
+  "n_vars": 5,
+  "strategy": "random",
+  "resolution": "6h",
+  "normalize": false,
+  "interpolate": true
+ },
+ "n_samples": 2139,
+ "n_skipped": 0,
+ "mean_true_edges": 4.0037400654511455,
+ "var_sortability": {
+  "mean": 0.9393174380551659,
+  "sd": 0.10985434587192,
+  "n": 2139,
+  "median": 1.0
+ },
+ "r2_sortability": {
+  "mean": 0.3762272089761571,
+  "sd": 0.2542105946846973,
+  "n": 2139,
+  "median": 0.25
+ },
+ "wall_s": 8.7827617090079,
+ "limit": null
+}

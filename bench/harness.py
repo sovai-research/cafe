@@ -4,6 +4,7 @@ Shared benchmark harness for TIMARA-Core experiments.
 EVERY candidate imputer is evaluated through THIS module so the data, masking,
 and metrics are byte-identical across methods. Do not fork data generation in a
 method file -- import from here.
+Causal ground truth (known lagged graph): bench/gen_causal_panel.py (imports from here).
 
 Interface a method must provide:
     def impute(X: np.ndarray, meta: dict) -> np.ndarray

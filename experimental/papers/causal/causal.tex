@@ -1,0 +1,730 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=0.66in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{pifont}
+\usepackage{float}
+\usepackage{flafter}
+\usepackage{microtype}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{authblk}
+\usepackage[inline]{enumitem}
+\setlist{topsep=2pt,itemsep=0pt,parsep=0pt,partopsep=0pt,leftmargin=*}
+
+% let LaTeX pack floats more tightly than the article defaults allow
+\setcounter{topnumber}{3}\setcounter{bottomnumber}{2}\setcounter{totalnumber}{4}
+\setcounter{dbltopnumber}{3}
+\renewcommand{\topfraction}{0.92}\renewcommand{\bottomfraction}{0.5}
+\renewcommand{\textfraction}{0.06}\renewcommand{\floatpagefraction}{0.80}
+\renewcommand{\dbltopfraction}{0.92}\renewcommand{\dblfloatpagefraction}{0.80}
+
+% Tables generated OUTSIDE this directory (tables/replication.tex, written by
+% bench/exp_causal_replication.py) do not set their own column separation, and a
+% \setlength inside a group would not survive to float-output time.  So the document
+% default is set narrow here; every locally generated table overrides it in its own body.
+\setlength{\tabcolsep}{2.6pt}
+
+\graphicspath{{figures/}}
+\newcommand{\cafe}{CAF\'E}
+% robust: \nobreakdash is fragile inside captions (moving arguments)
+\DeclareRobustCommand{\cd}{\cafe{}\nobreakdash-CD}
+
+\title{\textbf{\cd{}: Point-in-Time Causal Discovery on
+Factor-Adjusted Residuals}\\[3pt]
+  {\large\normalfont A short results paper --- where factor residualisation wins,
+  where it loses and why, what three public benchmarks are actually measuring, and
+  what a causality certificate costs}}
+\author[1]{Derek Snow}
+\author[1]{Matthew Lyberg}
+\author[1]{Eeshaan Asodekar}
+\affil[1]{Sovai Research \quad \texttt{d.snow@sov.ai}}
+\date{}
+
+\input{tables/macros}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+\cd{} runs causal discovery on the idiosyncratic residuals of a strictly
+point-in-time dynamic factor model: \cafe{} residualisation, engine routing,
+backward-only lag screening, a panel group-lasso skeleton, and assumption-routed
+orientation with explicit abstention. It is numpy-only and CPU-only; every stage reads
+rows $\le t$, so the graph reported at $t$ is truncation-invariant by construction. This
+paper reports what we measured, including the parts that do not favour us.
+\textbf{(1)~We win decisively on panel data.} On synthetic panels whose ground truth we
+audit ourselves, \cd{} is rank \HHrank{} at every common-variance share $\chi$ ---
+$\HHcafeA$ at $\chi{=}\HHchiA$ down to $\HHcafeB$ at $\chi{=}\HHchiB$, against a best
+baseline that never leaves $\HHbestLo$--$\HHbestHi$. A fairness arm re-runs every
+baseline on the \emph{identical} \cafe{} residual and moves it by $\HHresLo$ to
+$\HHresHi$, so the margin is the discovery machinery, not the preprocessing. The baselines
+are single-series methods applied per entity: pooling the entity dimension is a real
+advantage and it is most of what the table measures.
+\textbf{(2)~We lose on single-series benchmarks, and we measured why.} On the published
+CausalRivers cell \cd{} ranks $\CRFloodScaleRank$ of $\CRFloodScaleN$, behind a
+$1$\,ms OLS VAR. Holding the estimator
+and the moment tensor fixed and varying only two design choices decomposes the loss:
+residualising costs $\DGrep$ AUROC and conditioning on every other source rather than
+one costs a further $\DGcond$. Part of that first term is a \textbf{located library
+defect}: \cafe{}'s ARD rank selection is not scale-equivariant, so below unit scale the
+factor adjustment removes \emph{nothing}, and on unrescaled river discharge it is
+mis-scaled rather than merely idle. We report it with its measured cost and its
+re-certification requirement, not as a pending win --- no benchmark verdict changes. A
+second limit, measured on our own generator, is that the evidence blend's premium over
+its best single component is monotone in the number of entities and turns
+\emph{negative} at $E{=}1$ --- and every public single-series benchmark is $E{=}1$. We
+deliberately shipped no gate for it: the effect is a hundredth of an AUC and fitting one
+would be the benchmark-fitting we criticise. Three further hypotheses were tested and
+falsified, and are reported.
+\textbf{(3)~Benchmark forensics.} We reproduce five published CausalRivers cells, then
+show the same VAR moves $0.849\to0.593$ on all 2\,139 subgraphs by switching to a
+scale-free statistic; the true graphs have var-sortability $0.939$. We reproduce the
+CausalDynamics \texttt{coupled} leaderboard from the authors' own shipped artefacts, and
+then find that a \emph{constant identity matrix} scores $0.682/0.353$ there and no
+shipped method beats it. Two \texttt{simple} cells are broken and we reproduce both
+published AUROCs to $10^{-3}$ by replicating the defect; a third defect feeds an
+endpoint matrix to a ranking metric.
+\textbf{(4)~A point-in-time board}, now complete: every published method is batch, and
+churn and a leakage delta on each method's own metric say what that costs.
+\textbf{(5)~Runtime}: $\RTspeed\times$ faster than PCMCI$+$ on a real 12-variable
+series at the same dense submission. Limitations get their own section.
+\end{abstract}
+
+\section{The method}\label{sec:method}
+\cd{} is the discovery read-out of \cafe{}~\cite{cafe}, a causal (strictly
+point-in-time) dynamic factor model whose forward pass already produces imputations,
+factors and residuals. The pipeline is five stages behind one public call,
+\texttt{cafe.discover(df)}:
+
+\begin{enumerate}
+\item \textbf{Residualise.} Take the factor-adjusted residual of the causal one-pass
+  model. A latent common factor is a textbook confounder, so it is projected out by the
+  same point-in-time pass that did the imputation. The residual is deliberately
+  \emph{not} winsorised: the tail is exactly what identifies edge direction in every
+  LiNGAM-family branch downstream~\cite{shimizu2006,hyvarinen2010}.
+\item \textbf{Route the loading engine} (panels only), \S\ref{sec:eng}.
+\item \textbf{Screen lags} with a backward-only sign-correlation statistic whose
+  threshold comes from a circular-block permutation null, not a constant. The encoding
+  reads only indices $\le t$; a forward-looking control is asserted to fail that test.
+\item \textbf{Skeleton.} A panel group lasso on the surviving candidates fits a shared
+  $B_0$ plus sparse per-entity deviations and selects the support.
+\item \textbf{Orient.} Lagged edges are oriented by the arrow of time for free; only
+  the contemporaneous ambiguous graph is searched, per connected component. The
+  orienter \emph{abstains} --- emitting \texttt{o-o} or \texttt{<->} --- when no
+  branch's assumptions hold, rather than manufacturing a DAG.
+\end{enumerate}
+
+\noindent
+\texttt{mode="pit"} truncates the panel and runs the identical pipeline, so the
+reported graph is truncation-invariant by construction. Dependencies: numpy.
+
+\section{Scope, stated up front}\label{sec:gate}
+The obvious objection to residualising before discovery is that it can only help if
+there is a factor worth removing. That is right, and the interesting question is where
+the boundary sits. We generate panels with a tunable common-variance share $\chi$ and
+feed three \emph{identical} representations --- raw, \cd{} residual, oracle residual
+(true factors removed) --- to three downstream estimators. The sparse estimators are
+scored threshold-free by lambda entry order, so no model-selection rule enters
+anywhere. Table~\ref{tab:gate} and Figure~\ref{fig:gate} are the result.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{gate.pdf}
+\caption{The crossover: paired advantage of the \cafe{}-CD residual over raw against
+$\chi$, dotted lines at $\chi^\star$. The effect is a shallower decline, not a higher
+ceiling; Table~\ref{tab:gate} has the levels.}
+\label{fig:gate}
+\end{figure}
+
+\input{tables/gate}
+
+\paragraph{The crossover depends on the estimator, and that is the point.} Under an
+unpenalised OLS-VAR the crossover is $\chi^\star{=}0.83$; under the panel group lasso
+it drops to $0.68$ and under a per-target $L_1$ VAR to $0.72$. This is exactly the
+mechanism identified by the factor-adjusted network literature --- FNETS~\cite{fnets}
+and Krampe~\cite{krampe} --- made quantitative. A pervasive factor makes the
+\emph{observed} VAR dense: every series loads on the factor, so every series
+Granger-causes every other. Density is not a problem for unpenalised OLS, which simply
+absorbs the factor because it is spanned by its own lagged regressors. It is fatal for
+a \emph{sparse} estimator, whose entire premise is that the true transition matrix has
+few non-zeros. Removing the factor is therefore worth roughly $15$ points of $\chi$ to
+a sparse estimator and nothing to a dense one. At $\chi{=}0.90$ the group lasso gains
+$\Delta{=}+0.060$ with 8/8 paired wins and $p{=}0.004$; at $\chi{=}0.40$ it
+\emph{loses} $0.066$.
+
+\paragraph{Below the crossover the \emph{representation} is worse than raw.} There is
+no way to read Table~\ref{tab:gate} that hides this and we do not try. The routing rule
+is structural, not outcome-based (\S\ref{sec:eng}), so it cannot rescue a panel whose
+$\chi$ is low --- and it should not: at low $\chi$ the estimated factor is mostly
+estimation error, and subtracting it destroys signal. \textbf{But this is a statement
+about the representation in isolation, not about the pipeline}, and
+\S\ref{sec:h2h} is where the two come apart: the full \cd{} pipeline wins at
+$\chi{=}\HHchiA$ by $\HHgapA$ AUC even though residualisation \emph{alone} costs
+$0.056$ there. Table~\ref{tab:gate} fixes the downstream estimator and varies the input;
+Table~\ref{tab:h2h} varies the whole method. They are answering different questions and
+they do not contradict.
+
+\section{Head-to-head on ground truth we audit}\label{sec:h2h}
+The benchmarks in \S\ref{sec:forensics} turn out to measure things other than
+conditional-independence discovery, so the load-bearing comparison is the one where we
+control the data-generating process and can inspect the truth. We generate panels from
+\texttt{bench/gen\_causal\_panel.py} --- $E{=}10$ entities, $T{=}120$, $P{=}24$,
+rank-3 common component, $K{=}2$ true lags, heterogeneous coefficients, Laplace shocks
+--- sweep $\chi$, and run \HHnbase{} baseline configurations against \cd{}.
+Table~\ref{tab:h2h} is the result: \textbf{rank \HHrank{} at every $\chi$},
+$\HHcafeA$ at $\chi{=}\HHchiA$ falling only to $\HHcafeB$ at $\chi{=}\HHchiB$, against
+a best baseline that never leaves $\HHbestLo$--$\HHbestHi$.
+
+\input{tables/h2h}
+
+\paragraph{Two things a reader would rightly ask, answered in the table itself.}
+First, \textbf{is the margin just the preprocessing?} Every baseline is also run on the
+\emph{identical} \cafe{} residual (the \textsc{+res} column). If residualisation were
+doing the work, that arm would close the gap. It moves the baselines by $\HHresLo$ to
+$\HHresHi$ --- mean $\HHresMu$ --- against a gap of $\HHgapLo$--$\HHgapHi$. It helps
+some and hurts others in the pattern \S\ref{sec:gate} predicts rather than lifting
+everything: DYNOTEARS, already dense, is \emph{worse} on the residual at every $\chi$,
+while VAR-OLS crosses over and is better at high $\chi$. The margin is the discovery
+machinery, not the input.
+
+Second, \textbf{is the comparison fair?} Not in the sense of like-for-like
+architectures, and we would rather name that than let a reader find it. \cd{} is a
+panel method: it pools $E$ entities into one shared skeleton with sparse per-entity
+deviations. The baselines are single-series methods; they are applied per entity and
+averaged, because that is what they can do. So a large part of what
+Table~\ref{tab:h2h} measures is the value of the entity dimension. That \emph{is} the
+contribution --- a $T{=}120$, $P{=}24$ single series is hopeless and ten of them are
+not --- but it is a claim about panels, and it does not transfer to the single-series
+benchmarks in \S\ref{sec:losses}, where it does not.
+
+\section{Benchmark forensics}\label{sec:forensics}
+Before claiming anything on a public benchmark we reproduced it, and every criticism
+below is earned by a reproduction printed next to it. Our harness matches
+five published CausalRivers~\cite{causalrivers} cells across three graph sets and two
+metrics (Table~\ref{tab:rivers}a); DYNOTEARS --- re-implemented from the
+paper~\cite{dynotears}, since \texttt{causalnex} does not install on Python 3.13 ---
+and VARLiNGAM both land \emph{above} the published figures.
+
+\input{tables/rivers}
+\input{tables/eng}
+
+\paragraph{The CausalRivers leaderboard is substantially var-sortability.} Discharge
+volume grows downstream, so on unrescaled data the raw VAR coefficient magnitude
+encodes edge direction directly. Table~\ref{tab:rivers}b holds the estimator, the
+data, the preprocessing and the sample fixed at all 2\,139 flood/Random-5 subgraphs and
+changes only the scale convention. Scoring the same VAR with a scale-free $t$-statistic
+takes AUROC from $0.8493$ to $0.5931$. Rescaling in either of the two places a harness
+normally rescales --- the benchmark's own min--max step, or a wrapper $z$-score ---
+puts it \emph{below} chance, at $0.4773$ and $0.4256$.
+
+We then measured the prior rather than inferring it: over the same 2\,139 true graphs,
+varsortability~\cite{reisach2021} is $0.939$ --- in $94\%$ of true directed edges the
+effect has the larger marginal variance, so sorting nodes by variance \emph{is} the
+causal order --- and its scale-invariant counterpart
+$R^2$-sortability~\cite{reisach2023} is $0.376$, so the order also leaks through
+predictability, in the opposite direction (Table~\ref{tab:rivers}b). This is the failure mode Reisach et al.~\cite{reisach2021} and Lohse \&
+Wahl~\cite{lohse2024} found in \emph{simulated} DAGs, here in a live ICLR~2025
+benchmark on real data. It does not make CausalRivers a bad dataset --- the scale prior
+is a genuine hydrological fact and a practitioner may use it --- but the published
+$0.85$ is not a measurement of conditional-independence discovery, and a method that
+declines the prior is not being compared like for like. \textbf{The scale-free bar is
+$0.593$.}
+
+\input{tables/scaleprior}
+
+\paragraph{The prior, read method by method.} Table~\ref{tab:scaleprior} takes
+$\SPn$ of those subgraphs and asks what each method \emph{gains} from being handed
+unrescaled rather than $z$-scored data. The field splits into exactly three groups, and
+the split is the published ranking. \SPngain{} methods rank edges by coefficient
+magnitude and gain $\SPglo$--$\SPghi$ AUROC; they are precisely the top of the published
+board. \SPnflat{} rank by a test statistic or a conditional-independence test and are
+invariant to four decimal places --- Granger, PC, FCI, PCMCI and PCMCI$+$ move by exactly
+$0.0000$. And \cd{} alone is \emph{harmed}, by $\SPcafe$; \S\ref{sec:diag} shows that
+part of that is a library defect of ours rather than a property of the estimator. A
+leaderboard whose ordering is this cleanly predicted by a preprocessing convention is not
+primarily measuring discovery.
+
+\paragraph{Two CausalDynamics \texttt{simple} cells are broken.} On the
+\texttt{simple} split of CausalDynamics~\cite{causaldynamics} we reproduce two
+published AUROCs to $10^{-3}$ --- but only by replicating their defects
+(Table~\ref{tab:dynamics}). Their DYNOTEARS wrapper builds a cause-row matrix and
+scores it against effect-row ground truth, which is precisely why the published
+$0.426$ sits \emph{below} chance; correcting the orientation moves it to $0.489$,
+from ``clearly wrong'' to ``chance''. Their VARLiNGAM wrapper binarises an unpruned
+VAR-LiNGAM lag matrix, which is dense, so the prediction is all-ones and $0.500$ is
+true by construction rather than by measurement --- as it is for \texttt{cutsplus} and
+\texttt{rcd}, both also exactly $0.500$. More broadly, on this split nothing beats
+chance for anyone, so it is a fine stress test but not a place where a win means
+anything today.
+
+\input{tables/dynamics}
+
+\paragraph{On \texttt{coupled}, a constant beats the whole leaderboard.} The
+\texttt{coupled} tier is the one the benchmark leads with, and it is not degenerate the
+way \texttt{simple} is: four of the ten shipped methods are above $0.5$ on $96$--$100\%$
+of the $100$ Default-row systems individually. We re-derived that row from the authors'
+own shipped \texttt{outputs/coupled.tar.gz} --- five of seven published cells land
+within $0.026$, so the row is reproduced (Table~\ref{tab:coupled}a) --- and only then
+scored a \textbf{constant identity matrix} through the same evaluator. It gets
+$0.682$ AUROC / $0.353$ AUPRC, and paired system by system (Wilcoxon signed-rank,
+$n{=}100$) \textbf{not one of the nine testable methods beats it}. PCMCI$+$, the best
+of them, ties on AUROC ($p{=}0.21$) and is significantly \emph{worse} on AUPRC
+($p{=}5\times10^{-18}$), winning on $2\%$ of systems. The mechanism is arithmetic: the
+protocol keeps the diagonal, the coupled ground truth's diagonal is $63\%$ dense against
+a $10\%$ dense off-diagonal, so \textbf{$40.8\%$ of the entire positive class is
+self-loops}. Anything that fires on autocorrelation --- trivial in an ODE system ---
+banks $41\%$ of the positives before looking at a single cross-variable relation. On
+\texttt{simple} the same predictor scores $0.453$, below chance, so this is specific to
+\texttt{coupled}.
+
+\input{tables/coupled}
+
+\paragraph{The published AUPRC null is too low on both tiers.} The benchmark's own
+\texttt{Null} comes from an \emph{all-zeros} prediction, for which average precision
+collapses to the positive rate. Against a uniform-random \emph{ranker} --- 20 draws per
+system through the benchmark's own scorer --- the AUPRC floor is $0.188$ on
+\texttt{coupled} (theirs: $0.153$) and $0.759$ on \texttt{simple} (theirs: $0.687$).
+\textbf{Every published \texttt{simple} AUPRC, $.67$--$.70$, is below chance}; on
+\texttt{coupled}, NGC and CUTS$+$ are below it and VARLiNGAM is at it.
+
+\paragraph{Where the tier \emph{is} a real venue, and a third defect.} Two of the five
+published \texttt{coupled} rows are usable and we say which: on \textbf{Confounder} the
+diagonal carries only $19.0\%$ of the positives and on \textbf{Lag} $17.0\%$, the
+identity floor falls to $\approx0.545$, and methods separate from it
+(Table~\ref{tab:coupled}c). The sobering part is what clears the bar: a plain
+\textbf{OLS VAR(1) at $\sim$1\,ms}, ranked by $|t|$, scores $0.590/0.312$ on Confounder
+against PCMCI$+$'s $0.593/0.208$ --- level on AUROC, half again as good on AUPRC ---
+and ranked by $|\hat\beta|$ scores $0.607/0.300$ on Lag against $0.560/0.236$, clearing
+it on both. So the bar on the rows worth competing on is a linear VAR, not the
+leaderboard. Two corrections belong with
+this. First, the transposition defect is real on \texttt{coupled} too but hits the
+\emph{other} half of the suite, because the two subsets store opposite conventions:
+DYNOTEARS is correctly oriented there and VARLiNGAM and RCD are transposed --- so
+DYNOTEARS' published coupled $.66$ is not affected by the bug that produced its
+below-chance $.43$ on \texttt{simple}. Second, a defect not previously recorded:
+\texttt{grasp}'s wrapper feeds causal-learn's \textbf{endpoint} matrix
+($-1/0/+1$) straight into \texttt{roc\_auc\_score} \emph{as a score}, so a $-1$ tail
+endpoint ranks \emph{below} the $0$ that means ``no edge''. Measured on ten coupled
+systems, $18.6\%$ of the submitted matrix is $-1$ and taking \texttt{abs()} first moves
+AUROC from $0.442$ to $0.545$: the encoding alone costs $0.103$.
+
+\section{Where \texorpdfstring{\cd{}}{CAFE-CD} loses}\label{sec:losses}
+The same harness that earns the criticisms above scores us, and it is not kind.
+Table~\ref{tab:losses} is the head-to-head on both public single-series benchmarks.
+
+\input{tables/losses}
+
+On the published CausalRivers cell --- flood/Random-5, unrescaled, the exact protocol
+that produces the $0.85$ VAR number --- \cd{} is \textbf{$\CRFloodScaleRank$th of $\CRFloodScaleN$} on
+AUPRC, at $\CRFloodScaleCafe$ against \CRFloodScaleTop{}'s $\CRFloodScaleTopAP$ and
+VAR-OLS' $\CRFloodScaleVar$. Moving to the scale-free arm, where the var-sortability
+prior is removed and every method's score falls, lifts us to $\CRFloodFreeRank$th of
+$\CRFloodFreeN$ at $\CRFloodFreeCafe$ --- still behind \CRFloodFreeTop{}'s
+$\CRFloodFreeTopAP$. \textbf{Part of the gap between our own two arms is a located
+library defect rather than inference quality}: on unrescaled input \cafe{}'s factor
+adjustment is mis-scaled and the method's central mechanism is not doing what it claims
+(\S\ref{sec:diag}, Table~\ref{tab:scale}). On the \texttt{east} configurations we place mid-table and
+never first (Table~\ref{tab:losses}a). \textbf{\cd{} is beaten by
+\texttt{var\_ols} --- an OLS VAR at $\sim$1\,ms --- in \LossVarAll{}
+completed configurations}, and that is the fact to sit with rather than
+the arm in which we place best.
+
+On CausalDynamics \texttt{simple} we are $\DYrank$th of $\DYnmeth$ over the $\DYn$
+systems every method scored, at $\DYcafe$ AUPRC against \DYtop{}'s $\DYtopAP$. That
+tier's measured random-ranker floor is $\DYfloor$ (\S\ref{sec:forensics}), so
+$\DYnbelow$ of the $\DYnmeth$ entries including ours are \emph{below chance} and the
+ranking there means little either way.
+On \texttt{coupled} and \texttt{climate} the two boards overlap on only
+$\MatchCoupled{}$ and $\MatchClimate{}$ fully-scored systems --- the baseline board
+covers $\BaseCoupled{}$ of the $\CafeCoupled{}$ coupled systems \cd{} has run --- which
+is too few to rank, so no number is drawn from them.
+
+\section{Diagnosis: which design choice costs the ranking}\label{sec:diag}
+A loss is only useful if it localises. \cd{} differs from the baselines it loses to in
+exactly two ways, and both can be varied while holding the estimator and the moment
+tensor fixed: the \emph{representation} (raw panel vs \cafe{} residual) and the
+\emph{conditioning set} (for target $i$ and source $j$: $i$'s own past plus \emph{all}
+other sources, which is what the skeleton does, or plus exactly \emph{one} other, which
+is bivariate Granger). All four cells are the same $|t|$ statistic computed from the
+same moment tensor by \texttt{cafe.discovery.\_refit\_t} and
+\texttt{cafe.\_skeleton.bivariate\_granger}, so a difference between two rows is that
+one design choice and nothing else. Table~\ref{tab:diag} runs the $2\times2$ over $\DGn$
+flood/Random-5 subgraphs.
+
+\input{tables/diag}
+
+The decomposition is unambiguous, and the identity checks earn it: the raw-conditional
+row reproduces \texttt{var\_ols} and the raw-bivariate row reproduces
+\texttt{granger\_pairwise} to $0.0000$ mean absolute AUROC, on all $\DGn$ samples. Then:
+
+\begin{enumerate}
+\item \textbf{The representation costs $\DGrep$ AUROC} ---
+  $\DGrawCond\to\DGresCond$ at fixed conditioning, with $\DGwRep$ samples favouring
+  raw. This is the dominant term by a wide margin (see the caption of
+  Table~\ref{tab:diag} for the ratio).
+\item \textbf{The conditioning set costs a further $\DGcond$} ---
+  $\DGresCond\to\DGresBiv$ by dropping to one competitor at a time ($\DGwResBiv$ paired
+  samples), and $\DGcondRaw$ on the raw panel ($\DGwRawBiv$). On the raw panel
+  this is not in doubt: it reproduces \emph{exactly} the gap between \texttt{var\_ols}
+  and \texttt{granger\_pairwise}, which is why pairwise Granger is the best method in
+  the scale-free arm. \textbf{On the residual it does not replicate.} A separate
+  $\DGn$-sample measurement taken while building the scoring router found the ordering
+  \emph{reversed} there --- bivariate $0.578$ against conditional $0.660$ --- under a
+  different conditioning protocol. Enlarging our own sample from 30 to $\DGn$ shrank the
+  gap without flipping it, so the disagreement is protocol, not sampling. Two measurements of the same contrast disagree, so we bank nothing from
+  it: the bivariate ceiling is a property of the \emph{raw} panel and we do not claim it
+  survives residualisation. The shipped \texttt{\_scoring\_router} accordingly abstains
+  on our own panels --- the maximum change it makes to any of the 15 cached
+  head-to-head cells is $|\Delta|{=}0.0007$ --- and no gate was built on this.
+\item \textbf{Three explanations we ruled out.} It is not that our ranking is
+  uncalibrated but the support is fine: sweeping the threshold peaks at max-$F_1$
+  $\DGcafeFone$, no better than the AUROC suggests. It is not marginal-vs-conditional in
+  general: a naive marginal lagged $|\mathrm{corr}|$ with no conditioning at all scores
+  $\DGmarg$, which beats our whole pipeline's $\DGcafe$ but loses to both raw rows. And
+  it is not a router failure --- the scoring router \emph{does} fire here, measuring
+  source tolerance $\DGtol$ --- a generalised variance-inflation reciprocal in the
+  sense of Fox \& Monette~\cite{foxmonette} --- against a null of $1$, and blending in
+  $w_{\mathrm{biv}}{=}\DGwbiv$ of the bivariate branch, which is why \cd{} end-to-end
+  ($\DGcafe$) sits between the two residual rows. It cannot recover a loss whose larger half is upstream of it.
+\end{enumerate}
+
+\paragraph{Why the representation costs so much here: a located defect.} The panels are
+five discharge stations on one river network --- mean off-diagonal $|\mathrm{corr}|$
+$\DGmc$, max $\DGxc$, condition number $\DGcn$, leading eigenvalue $\DGle$ of the total
+--- so a confounding common component is exactly what \cafe{} is built to remove, and the
+$-\DGrep$ above is the opposite of what the design predicts. It is worth asking whether
+the factor adjustment is doing what the method says it does. It is not.
+
+\input{tables/scale}
+
+Table~\ref{tab:scale} varies one global multiplier on a panel of our own and measures
+the variance share the factor adjustment actually removes, from one fit, so every
+non-factor term cancels. A factor model must be equivariant under a global rescale ---
+rescaling the data rescales the loadings and nothing else. \textbf{\cafe{} is not.} The
+adjustment removes $\SConHi\%$ of the variance at unit scale, $\SCoffHi\%$ at a mean
+standard deviation of $\SCsdOff$, and \textbf{exactly nothing} below that. The cause is
+one line: \texttt{src/cafe/\_core.py} sets the ARD precision
+$\alpha_l = N/(\lVert W_{\cdot l}\rVert^2 + 1)$, and under $x\to cx$ the loadings scale
+as $W\to cW$ while the $+1$ does not. Below unit scale it dominates, every column's
+precision goes to its maximum, ARD kills every factor, and the ``factor-adjusted''
+residual has no factor removed from it.
+
+CausalRivers sits astride that floor. Within a single five-station panel the column
+standard deviations span $\SCsdLo$ to $\SCsdHi$ and \emph{every} sample of the $\SCn$ we
+measured has at least one sub-unit column, so the floor bites on part of the panel and
+not the rest. The result is worse than idleness: unrescaled, the share removed is
+\textbf{negative on $\SCnneg$ of $\SCn$ samples} --- the adjustment \emph{adds}
+idiosyncratic variance, subtracting a component fitted to the columns that survived ARD
+from the columns that did not. $z$-scoring puts every column on the same side of the
+floor and the share becomes small but mostly positive ($\SCshz$, negative on $\SCnnegz$
+of $\SCn$). \textbf{That is the same pair of arms as the benchmark result}: unrescaled
+$\SPcafeScale$ AUROC, $z$-scored $\SPcafeFree$.
+
+\paragraph{A trap, and a hypothesis this falsifies.} Two things follow that we would
+otherwise have got wrong. First, \textbf{\texttt{effective\_rank} is not a usable
+indicator of whether a factor was removed}: it reads $0$ in every row of
+Table~\ref{tab:scale}, including the rows removing $\SConHi\%$ of the variance. Every
+statement in this paper about whether the factor engaged is made from the
+adjusted-versus-kept residual comparison instead. (On the CausalRivers samples the same
+accessor reports a mean rank of $\DGrank$ while the adjustment is removing a
+\emph{negative} share --- the diagnostic and the measurement disagree in both
+directions.)
+
+Second, the obvious objection --- ``residualisation removes the scale prior, and that is
+why \cd{} loses the scale-exploiting arm'' --- is \textbf{falsified}. Over the same
+$\SCn$ subgraphs, varsortability is $\SCvsRaw$ on the raw series and $\SCvsRes$ on the
+\cafe{} residual, still far above the $0.5$ no-signal point ($R^2$-sortability $\SCrsRaw$
+against $\SCrsRes$). The variance ordering largely survives residualisation. The correct
+statement is that the information is still in the residual and \textbf{our estimator is
+built not to read it}: every component of the score --- the refit $|t|$, the path
+occupancy, the screening sign-statistic --- is scale-invariant by construction. That is
+precisely why \cd{} shares the exactly-$0.0000$ signature with Granger, PC, FCI and
+PCMCI in Table~\ref{tab:scaleprior}, and it is a design choice we would make again.
+
+\paragraph{What we are not claiming.} The defect is located, reproducible and costly,
+and it is still not a pending win. Correcting it would move the scale arm towards the
+free-arm number; it would not reach \texttt{var\_ols}' $0.8490$ there, and \textbf{no
+verdict in Table~\ref{tab:losses} changes}. Nor is the fix free. The offending line is in
+the production imputation path, so changing it changes \texttt{impute()} for every
+small-scale dataset and requires re-running the main \cafe{} benchmarks to their
+$10^{-12}$ tolerance. Standardising inside \texttt{discover()} instead is not free
+either: \texttt{mode="pit"} truncates and then runs the identical pipeline, so a scale
+estimated from the data would become prefix-dependent and could break the
+$\textsc{rev}{=}0$ certificate of \S\ref{sec:pit}. We report a located defect with a
+measured cost and a re-certification requirement, and we have shipped neither route.
+
+\paragraph{What remains after the defect.} Removing it does not dissolve the $-\DGrep$.
+On the $z$-scored arm, where the mechanism does engage, \cd{} still scores $\SPcafeFree$
+against \texttt{granger\_pairwise}'s $0.7089$, so a real gap remains and the
+conditioning-set contrast of Table~\ref{tab:diag} still applies to it. What the defect
+changes is the attribution: the difference between our own two arms is a library bug,
+and only what is left after that is a statement about discovery on near-collinear
+single-series data. A router at the skeleton stage, on the same structural discipline as
+the scoring router, is still the obvious next step --- but the first thing to fix is
+upstream of it.
+
+\paragraph{A second limit, measured on our own generator: the evidence blend needs
+cross-entity replication.} The result above is measured on a benchmark whose properties
+we have just spent two sections questioning, so the design question behind it is worth
+asking where we control the truth. \cd{}'s edge evidence is a rank-blend of three
+statistics: the conditional refit $|t|$, the group lasso's path occupancy, and the
+screening statistic. Table~\ref{tab:causalreplication} varies \emph{only} the number of
+entities $E$ and reads the \emph{premium} --- the blend's AUC minus that of its
+strongest single component --- with $ET$ held constant, so the contrast is entities and
+not rows.
+
+\input{tables/replication}
+
+\noindent
+The premium is \textbf{monotone in $E$ and crosses zero between $E{=}1$ and $E{=}2$}:
+$-0.0101$ at $E{=}1$ (winning on 1 of 8 seeds), then $+0.0015$, $+0.0037$, $+0.0057$,
+$+0.0086$. The mechanism is not subtle. The path and screening components are pooled
+across entities before they are ranked, so their variance falls like $1/E$ while their
+bias does not. At $E{=}1$ they carry the same bias with $E$ times the variance, and
+rank-averaging them into the refit is strictly worse than the refit alone.
+\textbf{Every public single-series benchmark in this paper --- CausalRivers,
+CausalDynamics, CauseMe --- is $E{=}1$}, and \texttt{SCORE\_WEIGHTS} was calibrated on a
+panel.
+
+We report this as a \emph{scope limit of the design}, and we deliberately did not ship a
+gate for it. The effect is $0.01$--$0.02$ AUC; it changes no rank in
+Table~\ref{tab:losses}, where we lose by $0.2$--$0.4$ AUPRC. A weight schedule fitted to
+recover it would be exactly the benchmark-fitting this paper criticises in
+\S\ref{sec:forensics}, bought for a hundredth of an AUC. The measurement is the
+deliverable.
+
+\paragraph{Two hypotheses we tested and falsified.} Neither produced a change to the
+library, and both are reported because a diagnosis section that only lists confirmations
+is not a diagnosis.
+
+\emph{(i) ``Residualisation removes the signal where the common component is generated
+by the graph rather than confounding it.''} This has a sharp testable consequence. An
+exogenous factor with diagonal AR dynamics contributes a \emph{symmetric} term
+$\Lambda\,\mathrm{diag}(a^k\sigma^2)\Lambda^\top$ to the lagged cross-covariance, while
+a directed edge contributes an \emph{asymmetric} one --- so removing a genuinely
+exogenous factor must \emph{raise} the antisymmetric share of $C_k$. On 25 CausalRivers
+samples the share does rise, on all 25, exactly as predicted --- and the AUC
+\emph{falls} on 12 of them. Correlation between the two is $+0.10$ and sign agreement is
+$0.40$, below chance. \textbf{Falsified.} The reason is measurable too: rivers discharge
+is near-unit-root, so $C_k \approx C_0$ and the antisymmetric share is $0.001$--$0.003$.
+The statistic saturates and carries no information at that scale, against $0.10$--$0.46$
+on our own panels. A diagnostic that cannot resolve the case it was built for is not a
+diagnostic.
+
+\emph{(ii) ``The path component is uninformative when it cannot adjudicate
+comparisons.''} Measured resolution --- $1 - \sum_v p_v^2$, the probability that two
+entries of the path statistic differ at all --- runs $0.477$ on our panels, where that
+component scores $0.957$--$0.991$ AUC, and $0.67$--$0.87$ on rivers, where it scores
+$0.398$--$0.750$. Resolution is \emph{anti}-correlated with informativeness, so the
+proposed gate would have fired in the wrong direction. \textbf{Falsified}, and no gate
+was built.
+
+\section{The point-in-time board}\label{sec:pit}
+Every published time-series discovery method we could install is \emph{batch}: it reads
+the whole series before emitting a graph, so a graph consumed at $t$ --- to build a
+feature, gate a monitor, seed a policy --- carries information from after $t$. Nobody
+reports this, so we measured it through one neutral standard: the same
+truncation-invariance certificate \cafe{} uses for imputation~\cite{position}, with each
+method's own binary support as the indicator. The twelve baselines span constraint-based (PC, FCI~\cite{spirtes2000}),
+constraint-based time-series (PCMCI~\cite{runge2019}, PCMCI$+$~\cite{runge2020}),
+continuous-optimisation (NOTEARS~\cite{notears}, DAGMA~\cite{dagma},
+DYNOTEARS~\cite{dynotears}) and LiNGAM-family
+(DirectLiNGAM~\cite{shimizu2006}, VARLiNGAM~\cite{hyvarinen2010}) methods; the board is
+now complete, eight tasks for every method including ours.
+
+Two traps need handling. First, a method that asserts \emph{no} edges passes the
+certificate vacuously; those rows carry a dagger, and FCI earns one on four of eight
+tasks. Second, the binary certificate is near-definitional for a batch method, so it is
+the least informative column on the board --- \cd{} scores $0/8$ revisions and $0.000$
+churn because the pipeline is truncation-invariant by construction, which is a
+statement about its design and not a contest it won. What is informative is the
+\emph{magnitude}: churn, orientation flips, and the leakage delta $\Delta$ measured on
+each rival's own metric, own threshold and own data. VARLiNGAM's published AUPRC of
+$0.919$ becomes $0.766$ refitted on each prefix and read at the right edge --- but its
+sample-size-matched delta is $-0.009$, which says that gap is almost entirely the
+\emph{loss of data}, not look-ahead. DirectLiNGAM churns a quarter of its graph and
+flips $14$ edges on average; DYNOTEARS is the most stable batch method here.
+
+\input{tables/pit}
+
+We are the ones who defined this test, so the honest framing is not that we win it.
+It is that this is a property of a discovery method nobody currently reports, it is
+cheap to report, and it costs different methods very different amounts.
+
+\section{Runtime, and proving the orientation}\label{sec:runtime}
+Runtime is the one place where the CPU-only, numpy-only design is unambiguously an
+advantage, and it is measurable without a leaderboard. On CauseMe's~\cite{causeme}
+only real-data
+experiment --- \texttt{river-runoff}, $N{=}12$, $T{=}4600$, one series, one process,
+same CPU --- \textbf{\cd{} takes $\RTcafe$\,s against PCMCI$+$'s $\RTpcmci$\,s, a
+$\RTspeed\times$ gap}, at the identical fully dense $\RTnz$ non-zero submission
+(Table~\ref{tab:runtime}a). The gap is smaller on toy sizes
+($\RTspeedSmall\times$ at $N{=}\RTsmallN$, $T{=}\RTsmallT$) because the tigramite
+methods pay a subprocess spawn per dataset for GPL
+isolation; the $N{=}12$ number is the one to carry. On the panels of
+\S\ref{sec:h2h} \cd{} averages $\HHrtCafe$\,s per cell (Table~\ref{tab:h2h}, last
+column), faster than every baseline there except VAR-OLS' $0.00$\,s --- which is the
+honest other side of it.
+
+\paragraph{Nothing was uploaded, and we say what that means.} CauseMe scores
+server-side and its experiment zips ship no ground truth, so \emph{no CauseMe
+leaderboard number appears in this paper}; $\RTnart$ submission artefacts are built
+and validated against the platform's stated contract and left on disk. What \emph{is}
+locally measurable is orientation, and it is the failure mode a server-scored benchmark
+cannot catch: a transposed submission does not score badly-but-plausibly, it scores
+inverted. We therefore write a known graph to disk in CauseMe's own format, read it back
+through the identical loader and adapter, and score it with CauseMe's own metric
+definitions. \textbf{All $\RTbeats$ methods beat their own transpose}
+(Table~\ref{tab:runtime}b); \cd{} scores $\RTrtAuc$ against $\RTrtTrans$ transposed. This is a format test, not a score.
+
+\input{tables/runtime}
+
+\section{Two engineering results}\label{sec:eng}
+\paragraph{The engine router.} On a panel, \cafe{} must decide whether one loading
+matrix can represent every entity's common component. The natural test --- align the
+entities' principal subspaces and threshold --- \textbf{fails}, because raw alignment is
+dominated by $P$, the rank and the sample size rather than by homogeneity: we measure
+raw between-entity alignments of $0.840$--$0.936$ on homogeneous panels and
+$0.857$--$0.942$ on heterogeneous ones, which interleave, so no absolute cutoff orders
+them. Dividing by each panel's \emph{own} within-entity split-half alignment --- the
+sampling-noise ceiling identical loadings would produce --- gives a statistic whose null
+is $1$ by construction, and it separates the families cleanly, picking the lower
+held-out-MAE engine on $8/8$ panels (Table~\ref{tab:eng}a). It is a property of the
+design matrix and never of an outcome, which is what keeps the routing
+causal-clean~\cite{position}. The scoring router of \S\ref{sec:diag} is the same
+discipline applied to a different decision.
+
+\paragraph{A null result on bit-packed screening.} The lag screener's statistic is one
+bit per observation per scale, so a packed-bit popcount backend ought to beat a dense
+float matmul; that is the mechanism behind ARROW's reported
+speed-ups~\cite{arrow2025}. We implemented it and it lost, at every size tested, by
+$8$--$21\times$, with the gap \emph{widening} in $P$ and no crossover anywhere
+(Table~\ref{tab:eng}b). The reason is that our baseline is not what ARROW accelerated:
+ARROW's headline speed-up is against a brute-force lag search dominated by histogram
+binning, whereas here the baseline is a BLAS-3 \texttt{sgemm} doing the same $P^2n$ work
+at hundreds of GFLOP/s, and the popcount path is a memory-bound lookup-table gather that
+numpy must drive from a Python loop over targets. Beating \texttt{sgemm} would need a
+SWAR \texttt{uint64} or a JIT/Rust kernel, which a numpy-only module does not have. The
+backend is kept --- scoring an arbitrary shortlist of $(i,j,k)$ triples cannot use a
+matmul at all --- but it is not the default, and the module documents the measurement
+rather than the aspiration. Separately: at the default $200$ permutations the null
+calibration is $98\%$ of the screener's wall clock. The statistic is nearly free; the
+calibration is the cost.
+
+\section{Limitations}\label{sec:limits}
+\begin{enumerate}
+\item \textbf{We lose on both public single-series benchmarks.}
+  Table~\ref{tab:losses} is the evidence and \S\ref{sec:diag} is the diagnosis: an OLS
+  VAR at $\sim$1\,ms beats us in \LossVarAll{} completed CausalRivers configurations,
+  and residualising costs $\DGrep$ AUROC there. A real gap remains once the defect
+  below is accounted for, and it is not fixed today.
+\item \textbf{\cafe{}'s ARD rank selection is not scale-equivariant.}
+  Table~\ref{tab:scale}: the factor adjustment removes $\SConHi\%$ of the variance at
+  unit scale and \emph{nothing} below it, because the $+1$ in
+  $\alpha_l = N/(\lVert W_{\cdot l}\rVert^2 + 1)$ does not rescale with the data. On
+  unrescaled CausalRivers it is mis-scaled rather than idle: the share removed is
+  negative on $\SCnneg$ of $\SCn$ samples. The line is in the production imputation
+  path and a fix needs the main \cafe{} benchmarks re-run to $10^{-12}$; standardising
+  inside \texttt{discover()} instead would make the scale prefix-dependent and could
+  break the $\textsc{rev}{=}0$ certificate. Neither route is shipped.
+\item \textbf{\texttt{effective\_rank} does not report factor activity.} It reads $0$
+  across the whole of Table~\ref{tab:scale}, including rows removing $\SConHi\%$ of the
+  variance. Any claim about whether the factor engaged must come from the
+  adjusted-versus-kept residual comparison.
+\item \textbf{The evidence blend is calibrated for $E>1$.}
+  Table~\ref{tab:causalreplication}: the blend's premium over its strongest component is
+  $-0.0101$ at $E{=}1$ and rises monotonically to $+0.0086$ at $E{=}20$. Every public
+  single-series benchmark here is $E{=}1$. We did not gate on it --- the effect is
+  $0.01$--$0.02$ AUC and changes no rank --- but it is a known miscalibration.
+\item \textbf{The head-to-head we win is a panel comparison.} In
+  Table~\ref{tab:h2h} the baselines are single-series methods run per entity. Pooling
+  the entity dimension is a large part of the margin. The claim that transfers is
+  ``\cd{} is the right tool for panels with a pervasive confounding factor'', not
+  ``\cd{} is a better discovery algorithm''.
+\item \textbf{Below the $\chi$ crossover the representation is worse than raw.} At
+  $\chi{=}0.40$ residualisation costs $0.059$--$0.072$ AUC depending on the estimator.
+\item \textbf{Most of the oracle headroom is unattainable.} At $\chi{=}0.95$ the oracle
+  residual scores $0.992$ under OLS while the best estimated residual reaches $0.790$.
+  That gap is not slack better downstream estimation can close: it is the cost of
+  \emph{estimating} the factor, and it is larger than the confound removal itself.
+\item \textbf{A linear model on chaotic ODEs is a structural mismatch.} The
+  CausalDynamics systems are deterministic chaotic flows whose Jacobian sparsity is the
+  truth; a lag-$K$ linear model is misspecified for them by construction.
+\item \textbf{\cd{}'s AUPRC on the point-in-time board is a lower bound.} Those rows
+  predate the change of \texttt{CausalGraph.scores()} from a two-tier step to continuous
+  evidence. The certificate columns read the support and are unaffected; the
+  CausalDynamics row of Table~\ref{tab:losses} was re-run after the change and the
+  support reproduced on $54/54$ systems, so the effect there was $+0.001$ AUPRC.
+\item \textbf{Self-loop and threshold conventions differ across benchmarks and move
+  scores materially.} CausalRivers removes the diagonal; CausalDynamics keeps it (a
+  Jacobian diagonal is a real self-dynamics edge), which is what lets a constant
+  identity matrix win there; CauseMe excludes self-links. Both benchmarks also report
+  best-hyperparameter AUROC and oracle-threshold max-$F_1$; we match them for everyone,
+  but they are upper bounds, not deployment numbers.
+\item \textbf{Some head-to-head cells are still running.} Every affected cell is
+  marked, listed in \S\ref{sec:repro}, and left empty rather than filled.
+\end{enumerate}
+
+\section{Reproduction and provenance}\label{sec:repro}
+Every number here comes from a cache produced by a run in this repository or from a
+script in \texttt{scripts/} that we executed; no figure is illustrative and no cell is
+hand-transcribed. The build itself emits the table-to-source map and the list of cells
+left empty:
+
+\input{tables/status}
+
+\noindent
+Rebuild with \texttt{scripts/make\_tables.py} then \texttt{tectonic causal.tex}; the
+six live probes regenerate their own JSON first. Baseline installation, licence
+isolation (\texttt{tigramite} is GPL and runs out-of-process) and the self-test proving
+all $14$ wrapper index conventions are in \texttt{docs/causal\_baselines.md}.
+
+\begin{thebibliography}{99}\scriptsize\setlength{\itemsep}{-2.5pt}
+\setlength{\parsep}{0pt}
+\bibitem{cafe} D.~Snow, M.~Lyberg, E.~Asodekar. \cafe{}: Causal Adaptive Factor
+  Estimation. Sovai Research, 2026.
+\bibitem{position} D.~Snow, M.~Lyberg, E.~Asodekar. The $\epsilon$ of imputation:
+  look-ahead leakage is measurable, pervasive and unnecessary. Sovai Research, 2026.
+\bibitem{fnets} M.~Barigozzi, H.~Cho, D.~Owens. FNETS: factor-adjusted network
+  estimation and forecasting for high-dimensional time series. \emph{JBES}, 2024.
+\bibitem{krampe} J.~Krampe. Factor-adjusted estimation of sparse vector
+  autoregressions. \emph{Oxford Bull.\ Econ.\ Stat.}, 2025.
+\bibitem{causalrivers} G.~Stein et al. CausalRivers: scaling up benchmarking of causal
+  discovery for real-world time-series. \emph{ICLR}, 2025.
+\bibitem{causaldynamics} CausalDynamics: a benchmark for structural discovery of
+  dynamical causal models. \emph{NeurIPS D\&B}, 2025.
+\bibitem{causeme} J.~Runge et al. CauseMe: an online platform for benchmarking causal
+  discovery methods in time series. \url{https://causeme.uv.es}, 2019.
+\bibitem{reisach2021} A.~G.~Reisach, C.~Seiler, S.~Weichwald. Beware of the simulated
+  DAG! \emph{NeurIPS}, 2021.
+\bibitem{reisach2023} A.~G.~Reisach et al. A scale-invariant sorting criterion for
+  additive noise models. \emph{NeurIPS}, 2023.
+\bibitem{lohse2024} C.~Lohse, J.~Wahl. Sortability of time series data. \emph{TMLR},
+  2024.
+\bibitem{foxmonette} J.~Fox, G.~Monette. Generalized collinearity diagnostics.
+  \emph{JASA}, 87(417), 1992.
+\bibitem{dynotears} R.~Pamfil et al. DYNOTEARS: structure learning from time-series
+  data. \emph{AISTATS}, 2020.
+\bibitem{notears} X.~Zheng, B.~Aragam, P.~Ravikumar, E.~P.~Xing. DAGs with NO TEARS.
+  \emph{NeurIPS}, 2018.
+\bibitem{dagma} K.~Bello, B.~Aragam, P.~Ravikumar. DAGMA: learning DAGs via M-matrices.
+  \emph{NeurIPS}, 2022.
+\bibitem{shimizu2006} S.~Shimizu et al. A linear non-Gaussian acyclic model for causal
+  discovery. \emph{JMLR}, 7, 2006.
+\bibitem{hyvarinen2010} A.~Hyv\"arinen et al. Estimation of a structural VAR model using
+  non-Gaussianity. \emph{JMLR}, 11, 2010.
+\bibitem{runge2019} J.~Runge et al. Detecting and quantifying causal associations in
+  large nonlinear time series. \emph{Sci.\ Adv.}, 5(11), 2019.
+\bibitem{runge2020} J.~Runge. Discovering contemporaneous and lagged causal relations in
+  autocorrelated nonlinear time series. \emph{UAI}, 2020.
+\bibitem{spirtes2000} P.~Spirtes, C.~Glymour, R.~Scheines. \emph{Causation, Prediction,
+  and Search}. MIT Press, 2000.
+\bibitem{arrow2025} Y.~Zhang et al. ARROW: accelerator for time-series causal discovery
+  with time weaving. \emph{ICML}, 2025.
+\end{thebibliography}
+
+\end{document}

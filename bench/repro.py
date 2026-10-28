@@ -159,6 +159,78 @@ MANIFEST = {
         "tex_label": ["tab:calibcrps"],
         "what": "CRPS + coverage + sharpness uncertainty scoring (NLL dropped).",
     },
+    # ---- CAFE-CD causal discovery (src/cafe/discovery.py) --------------------
+    # These eight need `.venv-bench` (tigramite / causal-learn / lingam / dagma) and,
+    # for the three public-benchmark runners, the downloaded corpora under data/causal.
+    # Under the plain venv they fail fast rather than emitting a partial table.  Each
+    # caches to JSON and has a `--tables-only` path, so a table can be rebuilt without
+    # re-running the estimators.
+    "exp_causal_residualization.py": {
+        "tables":  [],
+        "figures": [],
+        "tex_label": [],
+        "what": "Foundational head-to-head: does CAFE's factor-adjusted residual beat "
+                "the raw panel as the INPUT to a fixed downstream VAR? Five arms "
+                "(raw/cafe/cafe_contam/pca/oracle), all two-way FWL demeaned. Emits a "
+                "CACHE only -- its chi-crossover table was superseded by "
+                "exp_causal_sparse_gate.py, which re-measures the same crossover under "
+                "a downstream estimator that actually pays for density.",
+    },
+    "exp_causal_sparse_gate.py": {
+        "tables":  ["paper/tables/causal_sparse_gate.tex"],
+        "figures": ["paper/figures/causal_sparse_gate.pdf"],
+        "tex_label": ["tab:causalsparsegate", "tab:causalsparsegatecross",
+                      "fig:causalsparsegate"],
+        "what": "Does a genuinely SPARSE downstream estimator move the chi crossover? "
+                "OLS 0.83 -> group lasso 0.68 -> L1 VAR 0.72.",
+    },
+    "exp_causal_synthetic_h2h.py": {
+        "tables":  ["experimental/papers/causal/tables/h2h.tex"],
+        "figures": [],
+        "tex_label": ["tab:h2h"],
+        "what": "CAFE-CD vs 7 baselines x {raw, +resid} on audited ground truth. The "
+                "+resid arm hands every baseline the identical CAFE residual, so a win "
+                "there is the discovery machinery and not the preprocessing.",
+    },
+    "exp_causal_replication.py": {
+        "tables":  ["experimental/papers/causal/tables/replication.tex"],
+        "figures": [],
+        "tex_label": ["tab:causalreplication"],
+        "what": "When does blending three evidence statistics beat the best one? "
+                "Varies ONLY E, with E*T held fixed: the premium is monotone in E and "
+                "negative at E=1 -- which is what every single-series benchmark is.",
+    },
+    "exp_pit_board.py": {
+        "tables":  ["paper/tables/pit_board.tex"],
+        "figures": ["paper/figures/pit_board.pdf"],
+        "tex_label": ["tab:pitboard", "fig:pitboard"],
+        "what": "The point-in-time board: max_edge_revision / churn for CAFE-CD and "
+                "every rival. The second board -- never ranked against the batch one.",
+    },
+    "exp_bench_rivers.py": {
+        "tables":  ["paper/tables/bench_rivers.tex"],
+        "figures": ["paper/figures/bench_rivers.pdf"],
+        "tex_label": ["tab:benchrivers"],
+        "what": "CausalRivers (ICLR 2025): published-cell reproduction, measured "
+                "var-sortability of the true graphs, and a head-to-head under both the "
+                "published scale-exploiting protocol and a scale-free arm.",
+    },
+    "exp_bench_dynamics.py": {
+        "tables":  ["paper/tables/bench_dynamics.tex"],
+        "figures": ["paper/figures/bench_dynamics.pdf"],
+        "tex_label": ["tab:benchdynamics"],
+        "what": "CausalDynamics (NeurIPS 2025 D&B): matched-subset head-to-head plus "
+                "the forensics -- chance floors, the constant-identity baseline, and "
+                "the endpoint-matrix scoring defect.",
+    },
+    "exp_bench_causeme.py": {
+        "tables":  [],
+        "figures": [],
+        "tex_label": [],
+        "what": "CauseMe: submission artefacts + runtime and cross-method agreement. "
+                "Writes validated submissions under data/causal/causeme/submissions/, "
+                "not a paper table; NOTHING is uploaded.",
+    },
     # ---- gap-closing experiments added by the related-work review (2026) ----
     "exp_causal_rivals.py": {
         "tables":  ["paper/tables/causal_rivals.tex"],
